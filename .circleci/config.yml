@@ -5,7 +5,7 @@ jobs:
     machine: true
     environment:
       PYTHON: "3.7"
-      ENV_NAME: "dask-csp-test"
+      ENV_NAME: "dask-cloud-test"
 
     steps:
       - checkout
@@ -26,7 +26,7 @@ jobs:
           name: configure conda
           command: |
               export PATH="$HOME/miniconda/bin:$PATH"
-              if [ ! -d "/home/circleci/miniconda/envs/dask-csp-test" ]; then
+              if [ ! -d "/home/circleci/miniconda/envs/dask-cloud-test" ]; then
                 conda update -q conda
                 conda env create -f ci/environment-${PYTHON}.yml --name=${ENV_NAME}
                 source activate ${ENV_NAME}
@@ -40,8 +40,8 @@ jobs:
             - "/home/circleci/miniconda"
       - run:
           command: |
-            /home/circleci/miniconda/envs/dask-csp-test/bin/py.test dask_csp
+            /home/circleci/miniconda/envs/dask-cloud-test/bin/py.test dask_cloud
       - run:
           command: |
-            /home/circleci/miniconda/envs/dask-csp-test/bin/flake8 dask-csp
-            /home/circleci/miniconda/envs/dask-csp-test/bin/black --check dask_csp setup.py
+            /home/circleci/miniconda/envs/dask-cloud-test/bin/flake8 dask-cloud
+            /home/circleci/miniconda/envs/dask-cloud-test/bin/black --check dask_cloud setup.py

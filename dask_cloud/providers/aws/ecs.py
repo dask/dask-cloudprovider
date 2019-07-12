@@ -249,7 +249,7 @@ class ECSCluster(SpecCluster):
         security_groups=None,
         **kwargs
     ):
-        self.config = dask.config.get("csp.ecs", {})
+        self.config = dask.config.get("cloud.ecs", {})
 
         self.image = image or self.config.get("image") or "daskdev/dask:1.2.0"
         self.scheduler_cpu = scheduler_cpu or self.config.get("scheduler_cpu") or 1024
@@ -481,6 +481,7 @@ class ECSCluster(SpecCluster):
         return [response["GroupId"]]
 
     def delete_security_groups(self):
+        # TODO Add retries
         ec2.delete_security_group(GroupName=self.cluster_name, DryRun=False)
 
     def create_scheduler_task_definition_arn(self):

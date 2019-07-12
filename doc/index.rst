@@ -1,9 +1,9 @@
-.. dask-csp documentation master file, created by
+.. dask-cloud documentation master file, created by
    sphinx-quickstart on Thu Jul 11 06:12:45 2019.
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-Welcome to dask-csp's documentation!
+Welcome to dask-cloud's documentation!
 ====================================
 
 .. toctree::

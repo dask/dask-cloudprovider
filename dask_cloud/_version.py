@@ -41,8 +41,8 @@ def get_config():
     cfg.VCS = "git"
     cfg.style = "pep440"
     cfg.tag_prefix = ""
-    cfg.parentdir_prefix = "dask-csp-"
-    cfg.versionfile_source = "dask_csp/_version.py"
+    cfg.parentdir_prefix = "dask-cloud-"
+    cfg.versionfile_source = "dask_cloud/_version.py"
     cfg.verbose = False
     return cfg
 

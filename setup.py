@@ -6,11 +6,11 @@ from setuptools import setup, find_packages
 import versioneer
 
 setup(
-    name="dask-csp",
+    name="dask-cloud",
     cmdclass=versioneer.get_cmdclass(),
     version=versioneer.get_version(),
     description="Native Cloud integration for Dask",
-    url="https://github.com/jacobtomlinson/dask-csp",
+    url="https://github.com/jacobtomlinson/dask-cloud",
     keywords="dask,cloud,distributed",
     license="BSD",
     packages=find_packages(),

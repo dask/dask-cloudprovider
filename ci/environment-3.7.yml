@@ -1,4 +1,4 @@
-name: dask-csp-test
+name: dask-cloud-test
 channels:
   - defaults
   - conda-forge

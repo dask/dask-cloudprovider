@@ -1,4 +1,4 @@
-Dask CSP
+Dask cloud
 ===============
 
 Native Cloud integration for Dask.

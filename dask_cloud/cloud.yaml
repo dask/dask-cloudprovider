@@ -1,4 +1,4 @@
-csp: {}
+cloud: {}
 
   # ecs: {}
   #   scheduler_cpu: 1024  # Millicpu (1024ths of a CPU core)

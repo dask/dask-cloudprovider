@@ -1,5 +1,5 @@
 from . import config
-from .csp.ecs import ECSCluster
+from .providers.aws.ecs import ECSCluster
 
 __all__ = ["ECSCluster"]
 

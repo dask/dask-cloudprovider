@@ -17,7 +17,7 @@
 
 # -- Project information -----------------------------------------------------
 
-project = "dask-csp"
+project = "dask-cloud"
 copyright = "2019, NVIDIA Corporation"
 author = "Jacob Tomlinson"
 
