@@ -15,7 +15,7 @@ setup(
     license="BSD",
     packages=find_packages(),
     include_package_data=True,
-    long_description=(open("README.rst").read() if exists("README.rst") else ""),
+    long_description=(open("README.md").read() if exists("README.md") else ""),
     zip_safe=False,
     install_requires=list(open("requirements.txt").read().strip().split("\n")),
     python_requires=">=3.5",
