@@ -46,7 +46,7 @@ all the IAM roles, security groups, etc that it needs to function.
    collection. If the process is killed harshly this will not happen.
 
 .. toctree::
-   :maxdepth: 1
+   :maxdepth: 3
    :hidden:
 
    api
