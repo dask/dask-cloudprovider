@@ -226,25 +226,25 @@ class ECSCluster(SpecCluster):
     ----------
     image: str (optional)
         The docker image to use for the scheduler and worker tasks.
-        Defaults to daskdev/dask:1.2.0.
+        Defaults to ``daskdev/dask:1.2.0``.
     scheduler_cpu: int (optional)
         The amount of CPU to request for the scheduler in milli-cpu (1/1024).
-        Defaults to 1024 (one vCPU).
+        Defaults to ``1024`` (one vCPU).
     scheduler_mem: int (optional)
         The amount of memory to request for the scheduler in MB.
-        Defaults to 4096 (4GB).
+        Defaults to ``4096`` (4GB).
     worker_cpu: int (optional)
         The amount of CPU to request for worker tasks in milli-cpu (1/1024).
-        Defaults to 4096 (four vCPUs).
+        Defaults to ``4096`` (four vCPUs).
     worker_mem: int (optional)
         The amount of memory to request for worker tasks in MB.
-        Defaults to 16384 (16GB).
+        Defaults to ``16384`` (16GB).
     n_workers: int (optional)
         Number of workers to start on cluster creation.
-        Defaults to None.
+        Defaults to ``None``.
     cluster_arn: str (optional)
         The ARN of an existing ECS cluster to use for launching tasks.
-        Defaults to None which results in a new cluster being created for you.
+        Defaults to ``None`` which results in a new cluster being created for you.
     cluster_name_template: str (optional)
         A template to use for the cluster name if ``cluster_arn`` is set to
         None.
@@ -253,6 +253,7 @@ class ECSCluster(SpecCluster):
         The ARN of an existing IAM role to use for ECS execution.
         This ARN must have ``sts:AssumeRole`` allowed for
         ``ecs-tasks.amazonaws.com`` and allow the following permissions:
+
         - ``ecr:GetAuthorizationToken``
         - ``ecr:BatchCheckLayerAvailability``
         - ``ecr:GetDownloadUrlForLayer``
@@ -269,16 +270,17 @@ class ECSCluster(SpecCluster):
         - ``elasticloadbalancing:Describe*``
         - ``elasticloadbalancing:RegisterInstancesWithLoadBalancer``
         - ``elasticloadbalancing:RegisterTargets``
-        Defaults to None (one will be created for you).
+
+        Defaults to ``None`` (one will be created for you).
     task_role_arn: str (optional)
         The ARN for an existing IAM role for tasks to assume. This defines
         which AWS resources the dask workers can access directly. Useful if
         you need to read from S3 or a database without passing credentials
         around.
-        Defaults to None (one will be created with S3 read permission only)
+        Defaults to ``None`` (one will be created with S3 read permission only).
     cloudwatch_logs_group: str (optional)
         The name of an existing cloudwatch log group to place logs into.
-        Default None (one will be created called ``dask-ecs``)
+        Default ``None`` (one will be created called ``dask-ecs``)
     cloudwatch_logs_stream_prefix: str (optional)
         Prefix for log streams.
         Defaults to the cluster name.
@@ -287,13 +289,13 @@ class ECSCluster(SpecCluster):
         Defaults to ``30``.
     vpc: str (optional)
         The ID of the VPC you with to launch your cluster in.
-        Defaults to None (your default VPC will be used).
+        Defaults to ``None`` (your default VPC will be used).
     security_groups: list (optional)
         A list of security group IDs to use when launching tasks.
-        Defaults to None (one will be created which allows all traffic
+        Defaults to ``None`` (one will be created which allows all traffic
         between tasks and access to ports 8786 and 8787 from anywhere).
     **kwargs: dict
-        Additional keyword arguments to pass to LocalCluster
+        Additional keyword arguments to pass to ``SpecCluster``.
 
     Examples
     --------
