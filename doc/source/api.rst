@@ -5,12 +5,10 @@ API
 
 .. autosummary::
    ECSCluster
+   FargateCluster
 
 .. autoclass:: ECSCluster
    :members:
-
-.. autosummary::
-   FargateCluster
 
 .. autoclass:: FargateCluster
    :members:

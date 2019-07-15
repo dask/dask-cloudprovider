@@ -700,7 +700,7 @@ class FargateCluster(ECSCluster):
     If you do not configure a cluster one will be created for you with sensible
     defaults.
 
-    For info see ECSCluster.
+    For info see :class:`ECSCluster`.
 
     """
 
