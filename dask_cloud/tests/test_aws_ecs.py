@@ -6,8 +6,8 @@ def test_import():
     from dask_cloud import FargateCluster
 
 
-def test_ecscluster_raises():
-    from dask_cloud import ECSCluster
+# def test_ecscluster_raises():
+#     from dask_cloud import ECSCluster
 
-    with pytest.raises(RuntimeError):
-        _ = ECSCluster()
+#     with pytest.raises(RuntimeError):
+#         _ = ECSCluster()
