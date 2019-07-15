@@ -8,9 +8,14 @@ import weakref
 import boto3  # TODO use async boto
 import dask
 
+from dask_cloud.providers.aws.helper import dict_to_aws
+
 from distributed.deploy.spec import SpecCluster
 
 logger = logging.getLogger(__name__)
+
+
+DEFAULT_TAGS = {"createdBy": "dask-cloud"}  # Package tags to apply to all resources
 
 
 class Task:
@@ -31,6 +36,7 @@ class Task:
         log_group,
         log_stream_prefix,
         fargate,
+        tags,
         **kwargs
     ):
         self.lock = asyncio.Lock()
@@ -48,6 +54,7 @@ class Task:
         self.vpc_subnets = vpc_subnets
         self.security_groups = security_groups
         self.fargate = fargate
+        self.tags = tags
         self.kwargs = kwargs
         self.status = "created"
 
@@ -61,11 +68,23 @@ class Task:
 
         return _().__await__()
 
+    @property
+    def _long_arn_format_enabled(self):
+        [response] = self.clients["ecs"].list_account_settings(
+            name="taskLongArnFormat", effectiveSettings=True
+        )["settings"]
+        return response["value"] == "enabled"
+
     async def start(self):
         attempts = 60
         while True:
             attempts -= 1
             try:
+                kwargs = (
+                    {"tags": dict_to_aws(self.tags)}
+                    if self._long_arn_format_enabled
+                    else {}
+                )  # Tags are only supported if you opt into long arn format so we need to check for that
                 [self.task] = self.clients["ecs"].run_task(
                     cluster=self.cluster_arn,
                     taskDefinition=self.task_definition_arn,
@@ -79,6 +98,7 @@ class Task:
                             "assignPublicIp": "ENABLED",  # TODO allow private clusters
                         }
                     },
+                    **kwargs
                 )["tasks"]
                 break
             except Exception as e:
@@ -315,6 +335,10 @@ class ECSCluster(SpecCluster):
 
         Defaults to ``None`` (one will be created which allows all traffic
         between tasks and access to ports ``8786`` and ``8787`` from anywhere).
+    tags: dict (optional)
+        Tags to apply to all resources created automatically.
+
+        Defaults to ``None``. Tags will always include ``{"createdBy": "dask-cloud"}``
     **kwargs: dict
         Additional keyword arguments to pass to ``SpecCluster``.
 
@@ -343,11 +367,13 @@ class ECSCluster(SpecCluster):
         cloudwatch_logs_default_retention=None,
         vpc=None,
         security_groups=None,
+        tags=None,
         **kwargs
     ):
         self.config = dask.config.get("cloud.ecs", {})
         self.clients = self.get_clients()
         self.fargate = fargate
+        self._tags = tags or {}
 
         self.image = image or self.config.get("image") or "daskdev/dask:1.2.0"
         self.scheduler_cpu = scheduler_cpu or self.config.get("scheduler_cpu") or 1024
@@ -414,6 +440,7 @@ class ECSCluster(SpecCluster):
             "log_group": self.cloudwatch_logs_group,
             "log_stream_prefix": self.cloudwatch_logs_stream_prefix,
             "fargate": self.fargate,
+            "tags": self.tags,
         }
         scheduler_options = {
             "task_definition_arn": self.scheduler_task_definition_arn,
@@ -428,6 +455,10 @@ class ECSCluster(SpecCluster):
         worker_template = {"cls": Worker, "options": worker_options}
         workers = {i: worker_template for i in range(self.n_workers)}
         super().__init__(workers, scheduler, worker_template, **kwargs)
+
+    @property
+    def tags(self):
+        return {**self._tags, **DEFAULT_TAGS}
 
     def get_clients(self):
         return {
@@ -444,7 +475,9 @@ class ECSCluster(SpecCluster):
             self.cluster_name_template
         )
         self.cluster_name = self.cluster_name.format(uuid=str(uuid.uuid4())[:10])
-        response = self.clients["ecs"].create_cluster(clusterName=self.cluster_name)
+        response = self.clients["ecs"].create_cluster(
+            clusterName=self.cluster_name, tags=dict_to_aws(self.tags)
+        )
         weakref.finalize(self, self.delete_cluster)
         return response["cluster"]["clusterArn"]
 
@@ -471,6 +504,7 @@ class ECSCluster(SpecCluster):
                 ]
                 }""",
             Description="A role for ECS to use when executing",
+            Tags=dict_to_aws(self.tags, upper=True),
         )
         self.clients["iam"].attach_role_policy(
             RoleName=self.execution_role_name,
@@ -516,6 +550,7 @@ class ECSCluster(SpecCluster):
             ]
             }""",
             Description="A role for dask tasks to use when executing",
+            Tags=dict_to_aws(self.tags, upper=True),
         )
 
         # TODO allow customisation of policies
@@ -542,7 +577,9 @@ class ECSCluster(SpecCluster):
             group["logGroupName"]
             for group in self.clients["logs"].describe_log_groups()["logGroups"]
         ]:
-            self.clients["logs"].create_log_group(logGroupName=log_group_name)
+            self.clients["logs"].create_log_group(
+                logGroupName=log_group_name, tags=dict_to_aws(self.tags)
+            )
             self.clients["logs"].put_retention_policy(
                 logGroupName=log_group_name,
                 retentionInDays=self.cloudwatch_logs_default_retention,
@@ -596,6 +633,9 @@ class ECSCluster(SpecCluster):
             ],
             DryRun=False,
         )
+        self.clients["ec2"].create_tags(
+            Resources=[response["GroupId"]], Tags=dict_to_aws(self.tags, upper=True)
+        )
         weakref.finalize(self, self.delete_security_groups)
         return [response["GroupId"]]
 
@@ -619,7 +659,7 @@ class ECSCluster(SpecCluster):
                     "memory": self.scheduler_mem,
                     "memoryReservation": self.scheduler_mem,
                     "essential": True,
-                    "command": ["dask-scheduler"],
+                    "command": ["dask-scheduler"],  # TODO add scheduler timeout
                     "logConfiguration": {
                         "logDriver": "awslogs",
                         "options": {
@@ -635,12 +675,13 @@ class ECSCluster(SpecCluster):
             requiresCompatibilities=["FARGATE"] if self.fargate else [],
             cpu=str(self.scheduler_cpu),
             memory=str(self.scheduler_mem),
+            tags=dict_to_aws(self.tags),
         )
         weakref.finalize(self, self.delete_scheduler_task_definition_arn)
         return response["taskDefinition"]["taskDefinitionArn"]
 
     def delete_scheduler_task_definition_arn(self):
-        ecs.deregister_task_definition(
+        self.clients["ecs"].deregister_task_definition(
             taskDefinition=self.scheduler_task_definition_arn
         )
 
@@ -683,6 +724,7 @@ class ECSCluster(SpecCluster):
             requiresCompatibilities=["FARGATE"] if self.fargate else [],
             cpu=str(self.worker_cpu),
             memory=str(self.worker_mem),
+            tags=dict_to_aws(self.tags),
         )
         weakref.finalize(self, self.delete_worker_task_definition_arn)
         return response["taskDefinition"]["taskDefinitionArn"]
