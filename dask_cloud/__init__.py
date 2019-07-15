@@ -1,7 +1,7 @@
 from . import config
-from .providers.aws.ecs import ECSCluster
+from .providers.aws.ecs import ECSCluster, FargateCluster
 
-__all__ = ["ECSCluster"]
+__all__ = ["ECSCluster", "FargateCluster"]
 
 from ._version import get_versions
 

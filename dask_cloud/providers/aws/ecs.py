@@ -30,6 +30,7 @@ class Task:
         security_groups,
         log_group,
         log_stream_prefix,
+        fargate,
         **kwargs
     ):
         self.lock = asyncio.Lock()
@@ -46,6 +47,7 @@ class Task:
         self.overrides = {}
         self.vpc_subnets = vpc_subnets
         self.security_groups = security_groups
+        self.fargate = fargate
         self.kwargs = kwargs
         self.status = "created"
 
@@ -69,7 +71,7 @@ class Task:
                     taskDefinition=self.task_definition_arn,
                     overrides=self.overrides,
                     count=1,
-                    launchType="FARGATE",  # TODO allow non fargate
+                    launchType="FARGATE" if self.fargate else "EC2",
                     networkConfiguration={
                         "awsvpcConfiguration": {
                             "subnets": self.vpc_subnets,
@@ -224,6 +226,10 @@ class ECSCluster(SpecCluster):
 
     Parameters
     ----------
+    fargate: bool (optional)
+        Select whether or not to use fargate.
+
+        Defaults to ``False``. You must provide an existing cluster.
     image: str (optional)
         The docker image to use for the scheduler and worker tasks.
 
@@ -248,7 +254,7 @@ class ECSCluster(SpecCluster):
         Number of workers to start on cluster creation.
 
         Defaults to ``None``.
-    cluster_arn: str (optional)
+    cluster_arn: str (optional if fargate is true)
         The ARN of an existing ECS cluster to use for launching tasks.
 
         Defaults to ``None`` which results in a new cluster being created for you.
@@ -297,30 +303,31 @@ class ECSCluster(SpecCluster):
 
         Defaults to the cluster name.
     cloudwatch_logs_default_retention: int (optional)
-        Retention for .ogs in days. For use when log group is auto created.
+        Retention for logs in days. For use when log group is auto created.
 
         Defaults to ``30``.
     vpc: str (optional)
-        The ID of the VPC you with to launch your cluster in.
+        The ID of the VPC you wish to launch your cluster in.
 
         Defaults to ``None`` (your default VPC will be used).
     security_groups: List[str] (optional)
         A list of security group IDs to use when launching tasks.
 
         Defaults to ``None`` (one will be created which allows all traffic
-        between tasks and access to ports 8786 and 8787 from anywhere).
+        between tasks and access to ports ``8786`` and ``8787`` from anywhere).
     **kwargs: dict
         Additional keyword arguments to pass to ``SpecCluster``.
 
     Examples
     --------
-    TODO write examples docs
+    TODO write ECSCluster examples docs
     """
 
     # TODO clean up API, aka make private methods private
 
     def __init__(
         self,
+        fargate=False,
         image=None,
         scheduler_cpu=None,
         scheduler_mem=None,
@@ -340,6 +347,7 @@ class ECSCluster(SpecCluster):
     ):
         self.config = dask.config.get("cloud.ecs", {})
         self.clients = self.get_clients()
+        self.fargate = fargate
 
         self.image = image or self.config.get("image") or "daskdev/dask:1.2.0"
         self.scheduler_cpu = scheduler_cpu or self.config.get("scheduler_cpu") or 1024
@@ -405,6 +413,7 @@ class ECSCluster(SpecCluster):
             "security_groups": self.security_groups,
             "log_group": self.cloudwatch_logs_group,
             "log_stream_prefix": self.cloudwatch_logs_stream_prefix,
+            "fargate": self.fargate,
         }
         scheduler_options = {
             "task_definition_arn": self.scheduler_task_definition_arn,
@@ -429,6 +438,8 @@ class ECSCluster(SpecCluster):
         }
 
     def create_cluster(self):
+        if not self.fargate:
+            raise RuntimeError("You must specify a cluster when not using Fargate.")
         self.cluster_name = dask.config.expand_environment_variables(
             self.cluster_name_template
         )
@@ -621,7 +632,7 @@ class ECSCluster(SpecCluster):
                 }
             ],
             volumes=[],
-            requiresCompatibilities=["FARGATE"],  # TODO allow non fargate
+            requiresCompatibilities=["FARGATE"] if self.fargate else [],
             cpu=str(self.scheduler_cpu),
             memory=str(self.scheduler_mem),
         )
@@ -669,7 +680,7 @@ class ECSCluster(SpecCluster):
                 }
             ],
             volumes=[],
-            requiresCompatibilities=["FARGATE"],  # TODO allow non fargate
+            requiresCompatibilities=["FARGATE"] if self.fargate else [],
             cpu=str(self.worker_cpu),
             memory=str(self.worker_mem),
         )
@@ -680,6 +691,21 @@ class ECSCluster(SpecCluster):
         self.clients["ecs"].deregister_task_definition(
             taskDefinition=self.worker_task_definition_arn
         )
+
+
+class FargateCluster(ECSCluster):
+    """Deploy a Dask cluster using Fargate on ECS
+
+    This creates a dask scheduler and workers on a Fargate powered ECS cluster.
+    If you do not configure a cluster one will be created for you with sensible
+    defaults.
+
+    For info see ECSCluster.
+
+    """
+
+    def __init__(self, fargate=True, **kwargs):
+        super().__init__(fargate, **kwargs)
 
 
 # TODO add cleanup function which can be used to remove stray resources from

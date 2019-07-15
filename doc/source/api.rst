@@ -8,3 +8,9 @@ API
 
 .. autoclass:: ECSCluster
    :members:
+
+.. autosummary::
+   FargateCluster
+
+.. autoclass:: FargateCluster
+   :members:
