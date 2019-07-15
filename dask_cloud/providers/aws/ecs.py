@@ -224,7 +224,6 @@ class ECSCluster(SpecCluster):
 
     Parameters
     ----------
-    pod_template:
     image: str (optional)
         The docker image to use for the scheduler and worker tasks.
         Defaults to daskdev/dask:1.2.0.
