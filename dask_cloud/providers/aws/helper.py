@@ -1,9 +1,9 @@
 """Helper functions for working with AWS services."""
 
 
-def dict_to_aws(py_dict, upper=False):
-    key_string = "Key" if upper else "key"
-    value_string = "Value" if upper else "value"
+def dict_to_aws(py_dict, upper=False, key_string=None, value_string=None):
+    key_string = key_string or ("Key" if upper else "key")
+    value_string = value_string or ("Value" if upper else "value")
     return [{key_string: key, value_string: value} for key, value in py_dict.items()]
 
 

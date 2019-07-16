@@ -75,6 +75,15 @@ class Task:
         )["settings"]
         return response["value"] == "enabled"
 
+    async def _update_task(self):
+        [self.task] = self.clients["ecs"].describe_tasks(
+            cluster=self.cluster_arn, tasks=[self.task_arn]
+        )["tasks"]
+
+    async def is_running(self):
+        await self._update_task()
+        return self.task["lastStatus"] == "RUNNING"
+
     async def start(self):
         attempts = 60
         while True:
@@ -103,16 +112,14 @@ class Task:
                 break
             except Exception as e:
                 if attempts > 0:
-                    time.sleep(1)
+                    await asyncio.sleep(1)
                 else:
                     raise e
         self.task_arn = self.task["taskArn"]
         while self.task["lastStatus"] in ["PENDING", "PROVISIONING"]:
-            time.sleep(1)
-            [self.task] = self.clients["ecs"].describe_tasks(
-                cluster=self.cluster_arn, tasks=[self.task_arn]
-            )["tasks"]
-        if self.task["lastStatus"] != "RUNNING":
+            await asyncio.sleep(1)
+            await self._update_task()
+        if not await self.is_running():
             raise RuntimeError("%s failed to start" % type(self).__name__)
         [eni] = [
             attachment
@@ -153,6 +160,8 @@ class Task:
                     self.status = "running"
                     break
             else:
+                if not await self.is_running():
+                    raise RuntimeError("%s exited unexpectedly!" % type(self).__name__)
                 continue
             break
         logger.debug("%s", line)
@@ -163,7 +172,7 @@ class Task:
                 cluster=self.cluster_arn, task=self.task_arn
             )["task"]
             while self.task["lastStatus"] in ["RUNNING"]:
-                time.sleep(1)
+                await asyncio.sleep(1)
                 [self.task] = self.clients["ecs"].describe_tasks(
                     cluster=self.cluster_arn, tasks=[self.task_arn]
                 )["tasks"]
@@ -253,7 +262,7 @@ class ECSCluster(SpecCluster):
     image: str (optional)
         The docker image to use for the scheduler and worker tasks.
 
-        Defaults to ``daskdev/dask:1.2.0``.
+        Defaults to ``daskdev/dask:latest``.
     scheduler_cpu: int (optional)
         The amount of CPU to request for the scheduler in milli-cpu (1/1024).
 
@@ -262,6 +271,10 @@ class ECSCluster(SpecCluster):
         The amount of memory to request for the scheduler in MB.
 
         Defaults to ``4096`` (4GB).
+    scheduler_timeout: str (optional)
+        The scheduler task will exit after this amount of time if there are no clients connected.
+
+        Defaults to ``5 minutes``.
     worker_cpu: int (optional)
         The amount of CPU to request for worker tasks in milli-cpu (1/1024).
 
@@ -355,6 +368,7 @@ class ECSCluster(SpecCluster):
         image=None,
         scheduler_cpu=None,
         scheduler_mem=None,
+        scheduler_timeout=None,
         worker_cpu=None,
         worker_mem=None,
         n_workers=None,
@@ -372,27 +386,36 @@ class ECSCluster(SpecCluster):
     ):
         self.config = dask.config.get("cloud.ecs", {})
         self.clients = self.get_clients()
-        self.fargate = fargate
-        self._tags = tags or {}
+        self.fargate = fargate or self.config.get("fargate") or False
+        self._tags = tags or self.config.get("tags") or {}
 
-        self.image = image or self.config.get("image") or "daskdev/dask:1.2.0"
+        self.image = image or self.config.get("image") or "daskdev/dask:latest"
         self.scheduler_cpu = scheduler_cpu or self.config.get("scheduler_cpu") or 1024
         self.scheduler_mem = scheduler_mem or self.config.get("scheduler_mem") or 4096
+        self.scheduler_timeout = (
+            scheduler_timeout or self.config.get("scheduler_timeout") or "5 minutes"
+        )
         self.worker_cpu = worker_cpu or self.config.get("worker_cpu") or 4096
         self.worker_mem = worker_mem or self.config.get("worker_mem") or 16384
         self.n_workers = n_workers or self.config.get("n_workers") or 0
+        self.environment = {
+            "DASK_DISTRIBUTED__SCHEDULER__IDLE_TIMEOUT": self.scheduler_timeout
+        }
 
         self.cluster_name = None
         self.cluster_name_template = cluster_name_template or self.config.get(
             "cluster_name", "dask-{uuid}"
         )
-        if self.cluster_name is None:
-            # TODO get cluster name from API for cases where user has supplied arn
-            pass
 
         self.cluster_arn = (
             cluster_arn or self.config.get("cluster_arn") or self.create_cluster()
         )
+        if self.cluster_name is None:
+            [cluster_info] = self.clients["ecs"].describe_clusters(
+                clusters=[self.cluster_arn]
+            )["clusters"]
+            self.cluster_name = cluster_info["clusterName"]
+
         self.execution_role_arn = (
             execution_role_arn
             or self.config.get("execution_role_arn")
@@ -659,7 +682,8 @@ class ECSCluster(SpecCluster):
                     "memory": self.scheduler_mem,
                     "memoryReservation": self.scheduler_mem,
                     "essential": True,
-                    "command": ["dask-scheduler"],  # TODO add scheduler timeout
+                    "environment": dict_to_aws(self.environment, key_string="name"),
+                    "command": ["dask-scheduler"],
                     "logConfiguration": {
                         "logDriver": "awslogs",
                         "options": {
@@ -699,6 +723,7 @@ class ECSCluster(SpecCluster):
                     "memory": self.worker_mem,
                     "memoryReservation": self.worker_mem,
                     "essential": True,
+                    "environment": dict_to_aws(self.environment, key_string="name"),
                     "command": [
                         "dask-worker",
                         "--nthreads",
@@ -742,12 +767,15 @@ class FargateCluster(ECSCluster):
     If you do not configure a cluster one will be created for you with sensible
     defaults.
 
-    For info see :class:`ECSCluster`.
+    Parameters
+    ----------
+    kwargs: dict
+        Keyword arguments to be passed to :class:`ECSCluster`.
 
     """
 
-    def __init__(self, fargate=True, **kwargs):
-        super().__init__(fargate, **kwargs)
+    def __init__(self, **kwargs):
+        super().__init__(fargate=True, **kwargs)
 
 
 # TODO add cleanup function which can be used to remove stray resources from
