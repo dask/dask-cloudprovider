@@ -5,7 +5,7 @@ import time
 import uuid
 import weakref
 
-import boto3  # TODO use async boto
+import aiobotocore  # TODO use async boto everywhere
 import dask
 
 from dask_cloud.providers.aws.helper import dict_to_aws
@@ -68,15 +68,16 @@ class Task:
 
         return _().__await__()
 
-    @property
-    def _long_arn_format_enabled(self):
-        [response] = self.clients["ecs"].list_account_settings(
-            name="taskLongArnFormat", effectiveSettings=True
+    async def _is_long_arn_format_enabled(self):
+        [response] = (
+            await self.clients["ecs"].list_account_settings(
+                name="taskLongArnFormat", effectiveSettings=True
+            )
         )["settings"]
         return response["value"] == "enabled"
 
     async def _update_task(self):
-        [self.task] = self.clients["ecs"].describe_tasks(
+        [self.task] = await self.clients["ecs"].describe_tasks(
             cluster=self.cluster_arn, tasks=[self.task_arn]
         )["tasks"]
 
@@ -91,23 +92,25 @@ class Task:
             try:
                 kwargs = (
                     {"tags": dict_to_aws(self.tags)}
-                    if self._long_arn_format_enabled
+                    if await self._is_long_arn_format_enabled()
                     else {}
                 )  # Tags are only supported if you opt into long arn format so we need to check for that
-                [self.task] = self.clients["ecs"].run_task(
-                    cluster=self.cluster_arn,
-                    taskDefinition=self.task_definition_arn,
-                    overrides=self.overrides,
-                    count=1,
-                    launchType="FARGATE" if self.fargate else "EC2",
-                    networkConfiguration={
-                        "awsvpcConfiguration": {
-                            "subnets": self.vpc_subnets,
-                            "securityGroups": self.security_groups,
-                            "assignPublicIp": "ENABLED",  # TODO allow private clusters
-                        }
-                    },
-                    **kwargs
+                [self.task] = (
+                    await self.clients["ecs"].run_task(
+                        cluster=self.cluster_arn,
+                        taskDefinition=self.task_definition_arn,
+                        overrides=self.overrides,
+                        count=1,
+                        launchType="FARGATE" if self.fargate else "EC2",
+                        networkConfiguration={
+                            "awsvpcConfiguration": {
+                                "subnets": self.vpc_subnets,
+                                "securityGroups": self.security_groups,
+                                "assignPublicIp": "ENABLED",  # TODO allow private clusters
+                            }
+                        },
+                        **kwargs
+                    )
                 )["tasks"]
                 break
             except Exception as e:
@@ -131,14 +134,14 @@ class Task:
             for detail in eni["details"]
             if detail["name"] == "networkInterfaceId"
         ]
-        eni = self.clients["ec2"].describe_network_interfaces(
+        eni = await self.clients["ec2"].describe_network_interfaces(
             NetworkInterfaceIds=[network_interface_id]
         )
         [interface] = eni["NetworkInterfaces"]
         self.public_ip = interface["Association"]["PublicIp"]
         self.private_ip = interface["PrivateIpAddresses"][0]["PrivateIpAddress"]
         while True:
-            for line in self.logs():
+            async for line in self.logs():
                 if "worker at" in line:
                     self.address = (
                         line.split("worker at:")[1]
@@ -168,13 +171,15 @@ class Task:
 
     async def close(self, **kwargs):
         if self.task:
-            self.task = self.clients["ecs"].stop_task(
+            self.task = await self.clients["ecs"].stop_task(
                 cluster=self.cluster_arn, task=self.task_arn
             )["task"]
             while self.task["lastStatus"] in ["RUNNING"]:
                 await asyncio.sleep(1)
-                [self.task] = self.clients["ecs"].describe_tasks(
-                    cluster=self.cluster_arn, tasks=[self.task_arn]
+                [self.task] = (
+                    await self.clients["ecs"].describe_tasks(
+                        cluster=self.cluster_arn, tasks=[self.task_arn]
+                    )
                 )["tasks"]
         self.status = "closed"
 
@@ -190,17 +195,17 @@ class Task:
             task_id=self.task_id,
         )
 
-    def logs(self):
+    async def logs(self):
         next_token = None
         while True:
             if next_token:
-                l = self.clients["logs"].get_log_events(
+                l = await self.clients["logs"].get_log_events(
                     logGroupName=self.log_group,
                     logStreamName=self.log_stream_name,
                     nextToken=next_token,
                 )
             else:
-                l = self.clients["logs"].get_log_events(
+                l = await self.clients["logs"].get_log_events(
                     logGroupName=self.log_group, logStreamName=self.log_stream_name
                 )
             next_token = l["nextForwardToken"]
@@ -385,7 +390,7 @@ class ECSCluster(SpecCluster):
         **kwargs
     ):
         self.config = dask.config.get("cloud.ecs", {})
-        self.clients = self.get_clients()
+        self.clients = self.sync(self.get_clients())
         self.fargate = fargate or self.config.get("fargate") or False
         self._tags = tags or self.config.get("tags") or {}
 
@@ -411,7 +416,7 @@ class ECSCluster(SpecCluster):
             cluster_arn or self.config.get("cluster_arn") or self.create_cluster()
         )
         if self.cluster_name is None:
-            [cluster_info] = self.clients["ecs"].describe_clusters(
+            [cluster_info] = self.clients["ecs"].describe_clusters(  # TODO Async
                 clusters=[self.cluster_arn]
             )["clusters"]
             self.cluster_name = cluster_info["clusterName"]
@@ -483,12 +488,13 @@ class ECSCluster(SpecCluster):
     def tags(self):
         return {**self._tags, **DEFAULT_TAGS}
 
-    def get_clients(self):
+    async def get_clients(self):
+        session = aiobotocore.get_session()
         return {
-            "ec2": boto3.client("ec2"),
-            "ecs": boto3.client("ecs"),
-            "iam": boto3.client("iam"),
-            "logs": boto3.client("logs"),
+            "ec2": await session.create_client("ec2"),
+            "ecs": await session.create_client("ecs"),
+            "iam": await session.create_client("iam"),
+            "logs": await session.create_client("logs"),
         }
 
     def create_cluster(self):
@@ -498,21 +504,21 @@ class ECSCluster(SpecCluster):
             self.cluster_name_template
         )
         self.cluster_name = self.cluster_name.format(uuid=str(uuid.uuid4())[:10])
-        response = self.clients["ecs"].create_cluster(
+        response = self.clients["ecs"].create_cluster(  # TODO Async
             clusterName=self.cluster_name, tags=dict_to_aws(self.tags)
         )
         weakref.finalize(self, self.delete_cluster)
         return response["cluster"]["clusterArn"]
 
     def delete_cluster(self):
-        self.clients["ecs"].delete_cluster(cluster=self.cluster_arn)
+        self.clients["ecs"].delete_cluster(cluster=self.cluster_arn)  # TODO Async
 
     @property
     def execution_role_name(self):
         return "{}-{}".format(self.cluster_name, "execution-role")
 
     def create_execution_role(self):
-        response = self.clients["iam"].create_role(
+        response = self.clients["iam"].create_role(  # TODO Async
             RoleName=self.execution_role_name,
             AssumeRolePolicyDocument="""{
                 "Version": "2012-10-17",
@@ -529,15 +535,15 @@ class ECSCluster(SpecCluster):
             Description="A role for ECS to use when executing",
             Tags=dict_to_aws(self.tags, upper=True),
         )
-        self.clients["iam"].attach_role_policy(
+        self.clients["iam"].attach_role_policy(  # TODO Async
             RoleName=self.execution_role_name,
             PolicyArn="arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly",
         )
-        self.clients["iam"].attach_role_policy(
+        self.clients["iam"].attach_role_policy(  # TODO Async
             RoleName=self.execution_role_name,
             PolicyArn="arn:aws:iam::aws:policy/CloudWatchLogsFullAccess",
         )
-        self.clients["iam"].attach_role_policy(
+        self.clients["iam"].attach_role_policy(  # TODO Async
             RoleName=self.execution_role_name,
             PolicyArn="arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceRole",
         )
@@ -545,20 +551,20 @@ class ECSCluster(SpecCluster):
         return response["Role"]["Arn"]
 
     def delete_execution_role(self):
-        for policy in self.clients["iam"].list_attached_role_policies(
+        for policy in self.clients["iam"].list_attached_role_policies(  # TODO Async
             RoleName=self.execution_role_name
         )["AttachedPolicies"]:
-            self.clients["iam"].detach_role_policy(
+            self.clients["iam"].detach_role_policy(  # TODO Async
                 RoleName=self.execution_role_name, PolicyArn=policy["PolicyArn"]
             )
-        self.clients["iam"].delete_role(RoleName=self.execution_role_name)
+        self.clients["iam"].delete_role(RoleName=self.execution_role_name)  # TODO Async
 
     @property
     def task_role_name(self):
         return "{}-{}".format(self.cluster_name, "task-role")
 
     def create_task_role(self):
-        response = self.clients["iam"].create_role(
+        response = self.clients["iam"].create_role(  # TODO Async
             RoleName=self.task_role_name,
             AssumeRolePolicyDocument="""{
             "Version": "2012-10-17",
@@ -577,7 +583,7 @@ class ECSCluster(SpecCluster):
         )
 
         # TODO allow customisation of policies
-        self.clients["iam"].attach_role_policy(
+        self.clients["iam"].attach_role_policy(  # TODO Async
             RoleName=self.task_role_name,
             PolicyArn="arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess",
         )
@@ -585,25 +591,27 @@ class ECSCluster(SpecCluster):
         weakref.finalize(self, self.delete_task_role)
         return response["Role"]["Arn"]
 
-    def delete_task_role(self):
-        for policy in self.clients["iam"].list_attached_role_policies(
+    def delete_task_role(self):  # TODO combine with delete execution role
+        for policy in self.clients["iam"].list_attached_role_policies(  # TODO Async
             RoleName=self.task_role_name
         )["AttachedPolicies"]:
-            self.clients["iam"].detach_role_policy(
+            self.clients["iam"].detach_role_policy(  # TODO Async
                 RoleName=self.task_role_name, PolicyArn=policy["PolicyArn"]
             )
-        self.clients["iam"].delete_role(RoleName=self.task_role_name)
+        self.clients["iam"].delete_role(RoleName=self.task_role_name)  # TODO Async
 
     def create_cloudwatch_logs_group(self):
         log_group_name = "dask-ecs"
         if log_group_name not in [
             group["logGroupName"]
-            for group in self.clients["logs"].describe_log_groups()["logGroups"]
+            for group in self.clients["logs"].describe_log_groups()[
+                "logGroups"
+            ]  # TODO Async
         ]:
-            self.clients["logs"].create_log_group(
+            self.clients["logs"].create_log_group(  # TODO Async
                 logGroupName=log_group_name, tags=dict_to_aws(self.tags)
             )
-            self.clients["logs"].put_retention_policy(
+            self.clients["logs"].put_retention_policy(  # TODO Async
                 logGroupName=log_group_name,
                 retentionInDays=self.cloudwatch_logs_default_retention,
             )
@@ -613,7 +621,7 @@ class ECSCluster(SpecCluster):
     def get_default_vpc(self):
         [vpc] = [
             vpc
-            for vpc in self.clients["ec2"].describe_vpcs()["Vpcs"]
+            for vpc in self.clients["ec2"].describe_vpcs()["Vpcs"]  # TODO Async
             if vpc["IsDefault"]
         ]
         return vpc["VpcId"]
@@ -621,23 +629,25 @@ class ECSCluster(SpecCluster):
     def get_vpc_subnets(self):
         [vpc] = [
             vpc
-            for vpc in self.clients["ec2"].describe_vpcs()["Vpcs"]
+            for vpc in self.clients["ec2"].describe_vpcs()["Vpcs"]  # TODO Async
             if vpc["VpcId"] == self.vpc
         ]
         return [
             subnet["SubnetId"]
-            for subnet in self.clients["ec2"].describe_subnets()["Subnets"]
+            for subnet in self.clients["ec2"].describe_subnets()[
+                "Subnets"
+            ]  # TODO Async
             if subnet["VpcId"] == vpc["VpcId"]
         ]
 
     def create_security_groups(self):
-        response = self.clients["ec2"].create_security_group(
+        response = self.clients["ec2"].create_security_group(  # TODO Async
             Description="A security group for dask-ecs",
             GroupName=self.cluster_name,
             VpcId=self.vpc,
             DryRun=False,
         )
-        self.clients["ec2"].authorize_security_group_ingress(
+        self.clients["ec2"].authorize_security_group_ingress(  # TODO Async
             GroupId=response["GroupId"],
             IpPermissions=[
                 {
@@ -656,7 +666,7 @@ class ECSCluster(SpecCluster):
             ],
             DryRun=False,
         )
-        self.clients["ec2"].create_tags(
+        self.clients["ec2"].create_tags(  # TODO Async
             Resources=[response["GroupId"]], Tags=dict_to_aws(self.tags, upper=True)
         )
         weakref.finalize(self, self.delete_security_groups)
@@ -664,12 +674,12 @@ class ECSCluster(SpecCluster):
 
     def delete_security_groups(self):
         # TODO Add retries
-        self.clients["ec2"].delete_security_group(
+        self.clients["ec2"].delete_security_group(  # TODO Async
             GroupName=self.cluster_name, DryRun=False
         )
 
     def create_scheduler_task_definition_arn(self):
-        response = self.clients["ecs"].register_task_definition(
+        response = self.clients["ecs"].register_task_definition(  # TODO Async
             family="{}-{}".format(self.cluster_name, "scheduler"),
             taskRoleArn=self.task_role_arn,
             executionRoleArn=self.execution_role_arn,
@@ -687,7 +697,9 @@ class ECSCluster(SpecCluster):
                     "logConfiguration": {
                         "logDriver": "awslogs",
                         "options": {
-                            "awslogs-region": self.clients["ecs"].meta.region_name,
+                            "awslogs-region": self.clients[
+                                "ecs"
+                            ].meta.region_name,  # TODO Async??
                             "awslogs-group": self.cloudwatch_logs_group,
                             "awslogs-stream-prefix": self.cloudwatch_logs_stream_prefix,
                             "awslogs-create-group": "true",
@@ -705,12 +717,12 @@ class ECSCluster(SpecCluster):
         return response["taskDefinition"]["taskDefinitionArn"]
 
     def delete_scheduler_task_definition_arn(self):
-        self.clients["ecs"].deregister_task_definition(
+        self.clients["ecs"].deregister_task_definition(  # TODO Async
             taskDefinition=self.scheduler_task_definition_arn
         )
 
     def create_worker_task_definition_arn(self):
-        response = self.clients["ecs"].register_task_definition(
+        response = self.clients["ecs"].register_task_definition(  # TODO Async
             family="{}-{}".format(self.cluster_name, "worker"),
             taskRoleArn=self.task_role_arn,
             executionRoleArn=self.execution_role_arn,
@@ -737,7 +749,9 @@ class ECSCluster(SpecCluster):
                     "logConfiguration": {
                         "logDriver": "awslogs",
                         "options": {
-                            "awslogs-region": self.clients["ecs"].meta.region_name,
+                            "awslogs-region": self.clients[
+                                "ecs"
+                            ].meta.region_name,  # TODO Async??
                             "awslogs-group": self.cloudwatch_logs_group,
                             "awslogs-stream-prefix": self.cloudwatch_logs_stream_prefix,
                             "awslogs-create-group": "true",
@@ -755,7 +769,7 @@ class ECSCluster(SpecCluster):
         return response["taskDefinition"]["taskDefinitionArn"]
 
     def delete_worker_task_definition_arn(self):
-        self.clients["ecs"].deregister_task_definition(
+        self.clients["ecs"].deregister_task_definition(  # TODO Async
             taskDefinition=self.worker_task_definition_arn
         )
 
