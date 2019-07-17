@@ -601,7 +601,7 @@ class ECSCluster(SpecCluster):
             for group in self.clients["logs"].describe_log_groups()["logGroups"]
         ]:
             self.clients["logs"].create_log_group(
-                logGroupName=log_group_name, tags=dict_to_aws(self.tags)
+                logGroupName=log_group_name, tags=self.tags
             )
             self.clients["logs"].put_retention_policy(
                 logGroupName=log_group_name,
