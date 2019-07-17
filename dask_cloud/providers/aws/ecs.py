@@ -5,7 +5,8 @@ import time
 import uuid
 import weakref
 
-import aiobotocore  # TODO use async boto everywhere
+from botocore.exceptions import ClientError
+import aiobotocore
 import dask
 
 from dask_cloud.providers.aws.helper import dict_to_aws
@@ -173,6 +174,9 @@ class Task:
 
     async def close(self, **kwargs):
         if self.task:
+            await self.clients["ecs"].stop_task(
+                cluster=self.cluster_arn, task=self.task_arn
+            )
             await self._update_task()
             while self.task["lastStatus"] in ["RUNNING"]:
                 await asyncio.sleep(1)
@@ -406,6 +410,13 @@ class ECSCluster(SpecCluster):
         super().__init__(**kwargs)
 
     async def _start(self,):
+        while self.status == "starting":
+            await asyncio.sleep(0.01)
+        if self.status == "running":
+            return
+        if self.status == "closed":
+            raise ValueError("Cluster is closed")
+
         self.config = dask.config.get("cloud.ecs", {})
         self.clients = await self.get_clients()
         self.fargate = (
@@ -464,8 +475,8 @@ class ECSCluster(SpecCluster):
             else self.cluster_arn
         )
         if self.cluster_name is None:
-            [cluster_info] = await (
-                self.clients["ecs"].describe_clusters(clusters=[self.cluster_arn])
+            [cluster_info] = (
+                await self.clients["ecs"].describe_clusters(clusters=[self.cluster_arn])
             )["clusters"]
             self.cluster_name = cluster_info["clusterName"]
 
@@ -565,7 +576,11 @@ class ECSCluster(SpecCluster):
         return response["cluster"]["clusterArn"]
 
     async def delete_cluster(self):
-        # TODO stop all tasks first
+        async for page in self.clients["ecs"].get_paginator("list_tasks").paginate(
+            cluster=self.cluster_arn, desiredStatus="RUNNING"
+        ):
+            for task in page["taskArns"]:
+                await self.clients["ecs"].stop_task(cluster=self.cluster_arn, task=task)
         await self.clients["ecs"].delete_cluster(cluster=self.cluster_arn)
 
     @property
@@ -606,7 +621,7 @@ class ECSCluster(SpecCluster):
         return response["Role"]["Arn"]
 
     async def delete_execution_role(self):
-        [attached_policies] = (
+        attached_policies = (
             await self.clients["iam"].list_attached_role_policies(
                 RoleName=self.execution_role_name
             )
@@ -650,7 +665,7 @@ class ECSCluster(SpecCluster):
         return response["Role"]["Arn"]
 
     async def delete_task_role(self):  # TODO combine with delete execution role
-        [attached_policies] = (
+        attached_policies = (
             await self.clients["iam"].list_attached_role_policies(
                 RoleName=self.task_role_name
             )
@@ -723,10 +738,21 @@ class ECSCluster(SpecCluster):
         return [response["GroupId"]]
 
     async def delete_security_groups(self):
-        # TODO Add retries
-        await self.clients["ec2"].delete_security_group(
-            GroupName=self.cluster_name, DryRun=False
-        )
+        # TODO fix this deletion. Still doesn't seem to work.
+        retries = 15
+        while True:
+            try:
+                await self.clients["ec2"].delete_security_group(
+                    GroupName=self.cluster_name, DryRun=False
+                )
+            except Exception as e:
+                retries -= 1
+                if retries > 0:
+                    await asyncio.sleep(2)
+                    continue
+                else:
+                    raise e
+            break
 
     async def create_scheduler_task_definition_arn(self):
         response = await self.clients["ecs"].register_task_definition(
@@ -788,7 +814,6 @@ class ECSCluster(SpecCluster):
                         "dask-worker",
                         "--nthreads",
                         "{}".format(int(self.worker_cpu / 1024)),
-                        "--no-bokeh",
                         "--memory-limit",
                         "{}GB".format(int(self.worker_mem / 1024)),
                         "--death-timeout",
