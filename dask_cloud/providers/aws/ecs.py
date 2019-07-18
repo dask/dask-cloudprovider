@@ -3,6 +3,7 @@ import logging
 import sys
 import time
 import uuid
+import warnings
 import weakref
 
 from botocore.exceptions import ClientError
@@ -791,20 +792,21 @@ class ECSCluster(SpecCluster):
         return [response["GroupId"]]
 
     async def delete_security_groups(self):
-        # TODO fix this deletion. Still doesn't seem to work.
         retries = 15
         while True:
             try:
                 await self.clients["ec2"].delete_security_group(
                     GroupName=self.cluster_name, DryRun=False
                 )
-            except Exception as e:
+            except Exception:
                 retries -= 1
                 if retries > 0:
                     await asyncio.sleep(2)
                     continue
                 else:
-                    raise e
+                    warnings.warn(
+                        "Unable to delete AWS security group " + self.cluster_name
+                    )
             break
 
     async def create_scheduler_task_definition_arn(self):
