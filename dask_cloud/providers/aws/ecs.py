@@ -20,7 +20,44 @@ DEFAULT_TAGS = {"createdBy": "dask-cloud"}  # Package tags to apply to all resou
 
 
 class Task:
-    """ A superclass for ECS Tasks
+    """ A superclass for managing ECS Tasks
+    Parameters
+    ----------
+    clients: Dict[str, aiobotocore.client.Client]
+        References to the boto clients created by the cluster. These will be
+        used to interact with the AWS API.
+
+    cluster_arn: str
+        The ARN of the ECS cluster to launch the task in.
+
+    task_definition_arn: str
+        The ARN of the task definition that this object should use to launch
+        itself.
+
+    vpc_subnets: List[str]
+        The VPC subnets to use for the ENI that will be created when launching
+        this task.
+
+    security_groups: List[str]
+        The security groups to attach to the ENI that will be created when
+        launching this task.
+
+    log_group: str
+        The log group to send all task logs to.
+
+    log_stream_prefix: str
+        A prefix for the log stream that will be created automatically in the
+        log group when launching this task.
+
+    fargate: bool
+        Whether or not to launch with the Fargate launch type.
+
+    tags: str
+        AWS resource tags to be applied to any resources that are created.
+
+    kwargs:
+        Any additional kwargs which may need to be stored for later use.
+
     See Also
     --------
     Worker
@@ -220,10 +257,8 @@ class Task:
 
 class Scheduler(Task):
     """ A Remote Dask Scheduler controled by ECS
-    Parameters
-    ----------
-    kwargs:
-        TODO document Scheduler kwargs
+
+    See :class:`Task` for parameter info.
     """
 
 
@@ -233,8 +268,9 @@ class Worker(Task):
     ----------
     scheduler: str
         The address of the scheduler
+
     kwargs:
-        TODO document worker kwargs
+        Other kwargs to be passed to :class:`Task`.
     """
 
     def __init__(self, scheduler: str, **kwargs):
