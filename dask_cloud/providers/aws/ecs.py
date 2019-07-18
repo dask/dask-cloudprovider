@@ -10,6 +10,7 @@ from botocore.exceptions import ClientError
 import aiobotocore
 import dask
 
+from dask_cloud.utils.timeout import Timeout
 from dask_cloud.providers.aws.helper import dict_to_aws
 
 from distributed.deploy.spec import SpecCluster
@@ -84,6 +85,7 @@ class Task:
         self.task_definition_arn = task_definition_arn
         self.task = None
         self.task_arn = None
+        self.task_type = None
         self.public_ip = None
         self.private_ip = None
         self.log_group = log_group
@@ -107,6 +109,10 @@ class Task:
 
         return _().__await__()
 
+    @property
+    def use_public_ip(self):
+        return True  # TODO allow private only (needs NAT for image pull)
+
     async def _is_long_arn_format_enabled(self):
         [response] = (
             await self.clients["ecs"].list_account_settings(
@@ -122,14 +128,32 @@ class Task:
             )
         )["tasks"]
 
+    async def _get_address_from_logs(self):
+        timeout = Timeout(
+            30, "Failed to find %s ip address after 30 seconds." % self.task_type
+        )
+        while timeout.run():
+            async for line in self.logs():
+                for query_string in ["worker at:", "Scheduler at:"]:
+                    if query_string in line:
+                        address = line.split(query_string)[1].strip()
+                        if self.use_public_ip:
+                            address = address.replace(self.private_ip, self.public_ip)
+                        logger.debug("%s", line)
+                        return address
+            else:
+                if not await self.is_running():
+                    raise RuntimeError("%s exited unexpectedly!" % type(self).__name__)
+                continue
+            break
+
     async def is_running(self):
         await self._update_task()
         return self.task["lastStatus"] == "RUNNING"
 
     async def start(self):
-        attempts = 60
-        while True:
-            attempts -= 1
+        timeout = Timeout(60, "Unable to start %s after 60 seconds" % self.task_type)
+        while timeout.run():
             try:
                 kwargs = (
                     {"tags": dict_to_aws(self.tags)}
@@ -147,7 +171,9 @@ class Task:
                             "awsvpcConfiguration": {
                                 "subnets": self.vpc_subnets,
                                 "securityGroups": self.security_groups,
-                                "assignPublicIp": "ENABLED",  # TODO allow private clusters
+                                "assignPublicIp": "ENABLED"
+                                if self.use_public_ip
+                                else "DISABLED",
                             }
                         },
                         **kwargs
@@ -155,10 +181,9 @@ class Task:
                 )["tasks"]
                 break
             except Exception as e:
-                if attempts > 0:
-                    await asyncio.sleep(1)
-                else:
-                    raise e
+                timeout.set_exception(e)
+                await asyncio.sleep(1)
+
         self.task_arn = self.task["taskArn"]
         while self.task["lastStatus"] in ["PENDING", "PROVISIONING"]:
             await asyncio.sleep(1)
@@ -181,34 +206,8 @@ class Task:
         [interface] = eni["NetworkInterfaces"]
         self.public_ip = interface["Association"]["PublicIp"]
         self.private_ip = interface["PrivateIpAddresses"][0]["PrivateIpAddress"]
-        while True:
-            async for line in self.logs():
-                if "worker at" in line:
-                    self.address = (
-                        line.split("worker at:")[1]
-                        .strip()
-                        .replace(
-                            self.private_ip, self.public_ip
-                        )  # TODO allow private clusters
-                    )
-                    self.status = "running"
-                    break
-                if "Scheduler at" in line:
-                    self.address = (
-                        line.split("Scheduler at:")[1]
-                        .strip()
-                        .replace(
-                            self.private_ip, self.public_ip
-                        )  # TODO allow private clusters
-                    )
-                    self.status = "running"
-                    break
-            else:
-                if not await self.is_running():
-                    raise RuntimeError("%s exited unexpectedly!" % type(self).__name__)
-                continue
-            break
-        logger.debug("%s", line)
+        self.address = await self._get_address_from_logs()
+        self.status = "running"
 
     async def close(self, **kwargs):
         if self.task:
@@ -262,6 +261,10 @@ class Scheduler(Task):
     See :class:`Task` for parameter info.
     """
 
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.task_type = "scheduler"
+
 
 class Worker(Task):
     """ A Remote Dask Worker controled by ECS
@@ -276,6 +279,7 @@ class Worker(Task):
 
     def __init__(self, scheduler: str, **kwargs):
         super().__init__(**kwargs)
+        self.task_type = "worker"
         self.scheduler = scheduler
         self.overrides = {
             "containerOverrides": [
@@ -792,21 +796,16 @@ class ECSCluster(SpecCluster):
         return [response["GroupId"]]
 
     async def delete_security_groups(self):
-        retries = 15
-        while True:
+        timeout = Timeout(
+            30, "Unable to delete AWS security group " + self.cluster_name, warn=True
+        )
+        while timeout.run():
             try:
                 await self.clients["ec2"].delete_security_group(
                     GroupName=self.cluster_name, DryRun=False
                 )
             except Exception:
-                retries -= 1
-                if retries > 0:
-                    await asyncio.sleep(2)
-                    continue
-                else:
-                    warnings.warn(
-                        "Unable to delete AWS security group " + self.cluster_name
-                    )
+                await asyncio.sleep(2)
             break
 
     async def create_scheduler_task_definition_arn(self):
