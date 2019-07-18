@@ -332,6 +332,14 @@ class ECSCluster(SpecCluster):
         around.
 
         Defaults to ``None`` (one will be created with S3 read permission only).
+    task_role_policies: List[str] (optional)
+        If you do not specify a ``task_role_arn`` you may want to list some
+        IAM Policy ARNs to be attached to the role that will be created for you.
+
+        E.g if you need your workers to read from S3 you could add
+        ``arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess``.
+
+        Default ``None`` (no policies will be attached to the role)
     cloudwatch_logs_group: str (optional)
         The name of an existing cloudwatch log group to place logs into.
 
@@ -381,6 +389,7 @@ class ECSCluster(SpecCluster):
         cluster_name_template=None,
         execution_role_arn=None,
         task_role_arn=None,
+        task_role_policies=None,
         cloudwatch_logs_group=None,
         cloudwatch_logs_stream_prefix=None,
         cloudwatch_logs_default_retention=None,
@@ -401,6 +410,7 @@ class ECSCluster(SpecCluster):
         self.cluster_name_template = cluster_name_template
         self.execution_role_arn = execution_role_arn
         self.task_role_arn = task_role_arn
+        self.task_role_policies = task_role_policies
         self.cloudwatch_logs_group = cloudwatch_logs_group
         self.cloudwatch_logs_stream_prefix = cloudwatch_logs_stream_prefix
         self.cloudwatch_logs_default_retention = cloudwatch_logs_default_retention
@@ -485,6 +495,11 @@ class ECSCluster(SpecCluster):
             if self.execution_role_arn is None
             else self.execution_role_arn
         )
+        self.task_role_policies = (
+            self.config.get("task_role_policies", [])
+            if self.task_role_policies is None
+            else self.task_role_policies
+        )
         self.task_role_arn = (
             self.config.get("task_role_arn", await self.create_task_role())
             if self.task_role_arn is None
@@ -561,6 +576,9 @@ class ECSCluster(SpecCluster):
             "iam": session.create_client("iam"),
             "logs": session.create_client("logs"),
         }
+
+    async def _close_clients(self):
+        pass
 
     async def create_cluster(self):
         if not self.fargate:
@@ -655,11 +673,10 @@ class ECSCluster(SpecCluster):
             Tags=dict_to_aws(self.tags, upper=True),
         )
 
-        # TODO allow customisation of policies
-        await self.clients["iam"].attach_role_policy(
-            RoleName=self.task_role_name,
-            PolicyArn="arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess",
-        )
+        for policy in self.task_role_policies:
+            await self.clients["iam"].attach_role_policy(
+                RoleName=self.task_role_name, PolicyArn=policy
+            )
 
         weakref.finalize(self, self.sync, self.delete_task_role)
         return response["Role"]["Arn"]
@@ -867,3 +884,9 @@ class FargateCluster(ECSCluster):
 # stale clusters.
 
 # TODO awaiting the cluster class seems to hang forever
+
+# TODO consolidate finalization tasks and also close the clients
+
+# TODO catch all credential errors.
+#      Not all users will be able to create all the resources necessary for a default cluster.
+#      We should catch any permissions errors that come back from AWS and cleanly tear everything back down and raise.
