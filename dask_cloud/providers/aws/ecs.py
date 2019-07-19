@@ -684,20 +684,8 @@ class ECSCluster(SpecCluster):
             RoleName=self._execution_role_name,
             PolicyArn="arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceRole",
         )
-        weakref.finalize(self, self.sync, self._delete_execution_role)
+        weakref.finalize(self, self.sync, self._delete_role, self._execution_role_name)
         return response["Role"]["Arn"]
-
-    async def _delete_execution_role(self):
-        attached_policies = (
-            await self._clients["iam"].list_attached_role_policies(
-                RoleName=self._execution_role_name
-            )
-        )["AttachedPolicies"]
-        for policy in attached_policies:
-            await self._clients["iam"].detach_role_policy(
-                RoleName=self._execution_role_name, PolicyArn=policy["PolicyArn"]
-            )
-        await self._clients["iam"].delete_role(RoleName=self._execution_role_name)
 
     @property
     def _task_role_name(self):
@@ -727,20 +715,18 @@ class ECSCluster(SpecCluster):
                 RoleName=self._task_role_name, PolicyArn=policy
             )
 
-        weakref.finalize(self, self.sync, self._delete_task_role)
+        weakref.finalize(self, self.sync, self._delete_role, self._task_role_name)
         return response["Role"]["Arn"]
 
-    async def _delete_task_role(self):  # TODO combine with delete execution role
+    async def _delete_role(self, role):
         attached_policies = (
-            await self._clients["iam"].list_attached_role_policies(
-                RoleName=self._task_role_name
-            )
+            await self._clients["iam"].list_attached_role_policies(RoleName=role)
         )["AttachedPolicies"]
         for policy in attached_policies:
             await self._clients["iam"].detach_role_policy(
-                RoleName=self._task_role_name, PolicyArn=policy["PolicyArn"]
+                RoleName=role, PolicyArn=policy["PolicyArn"]
             )
-        await self._clients["iam"].delete_role(RoleName=self._task_role_name)
+        await self._clients["iam"].delete_role(RoleName=role)
 
     async def _create_cloudwatch_logs_group(self):
         log_group_name = "dask-ecs"
