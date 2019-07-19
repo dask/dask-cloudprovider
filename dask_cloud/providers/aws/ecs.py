@@ -11,7 +11,7 @@ import aiobotocore
 import dask
 
 from dask_cloud.utils.timeout import Timeout
-from dask_cloud.providers.aws.helper import dict_to_aws
+from dask_cloud.providers.aws.helper import dict_to_aws, aws_to_dict
 
 from distributed.deploy.spec import SpecCluster
 
@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 
 DEFAULT_TAGS = {"createdBy": "dask-cloud"}  # Package tags to apply to all resources
+DEFAULT_CLUSTER_NAME_TEMPLATE = "dask-{uuid}"
 
 
 class Task:
@@ -273,7 +274,7 @@ class Worker(Task):
     scheduler: str
         The address of the scheduler
 
-    kwargs:
+    kwargs: Dict()
         Other kwargs to be passed to :class:`Task`.
     """
 
@@ -467,6 +468,9 @@ class ECSCluster(SpecCluster):
         if self.status == "closed":
             raise ValueError("Cluster is closed")
 
+        # Cleanup any stale resources before we start
+        await _cleanup_stale_resources()
+
         self.config = dask.config.get("cloud.ecs", {})
         self._clients = await self._get_clients()
         self._fargate = (
@@ -516,7 +520,7 @@ class ECSCluster(SpecCluster):
 
         self.cluster_name = None
         self._cluster_name_template = (
-            self.config.get("cluster_name", "dask-{uuid}")
+            self.config.get("cluster_name", DEFAULT_CLUSTER_NAME_TEMPLATE)
             if self._cluster_name_template is None
             else self._cluster_name_template
         )
@@ -614,7 +618,7 @@ class ECSCluster(SpecCluster):
 
     @property
     def tags(self):
-        return {**self._tags, **DEFAULT_TAGS}
+        return {**self._tags, **DEFAULT_TAGS, "cluster": self.cluster_name}
 
     async def _get_clients(self):
         session = aiobotocore.get_session()
@@ -919,12 +923,101 @@ class FargateCluster(ECSCluster):
         super().__init__(fargate=True, **kwargs)
 
 
-# TODO add cleanup function which can be used to remove stray resources from
-# stale clusters.
+async def _cleanup_stale_resources():
+    """ Clean up any stale resources which are tagged with 'createdBy': 'dask-cloud'.
 
-# TODO awaiting the cluster class seems to hang forever
+    This function will scan through AWS looking for resources that were created
+    by the ``ECSCluster`` class. Any ECS clusters which do not have any running
+    tasks will be deleted and then any supporting resources such as task definitions
+    security groups and IAM roles that are not associated with an active cluster
+    will also be deleted.
 
-# TODO consolidate finalization tasks and also close the clients
+    The ``ECSCluster`` should clean up after itself when it is garbage collected
+    however if the Python process is terminated without notice this may not happen.
+    Therefore this is useful to remove shrapnel from past failures.
+
+    """
+    # Clean up clusters (clusters with no running tasks)
+    session = aiobotocore.get_session()
+    async with session.create_client("ecs") as ecs:
+        active_clusters = []
+        clusters_to_delete = []
+        async for page in ecs.get_paginator("list_clusters").paginate():
+            clusters = (
+                await ecs.describe_clusters(
+                    clusters=page["clusterArns"], include=["TAGS"]
+                )
+            )["clusters"]
+            for cluster in clusters:
+                if DEFAULT_TAGS.items() <= aws_to_dict(cluster["tags"]).items():
+                    if cluster["runningTasksCount"] == 0:
+                        clusters_to_delete.append(cluster["clusterArn"])
+                    else:
+                        active_clusters.append(cluster["clusterName"])
+        for cluster_arn in clusters_to_delete:
+            await ecs.delete_cluster(cluster=cluster_arn)
+
+        # Clean up task definitions (with no active clusters)
+        async for page in ecs.get_paginator("list_task_definitions").paginate():
+            for task_definition_arn in page["taskDefinitionArns"]:
+                response = await ecs.describe_task_definition(
+                    taskDefinition=task_definition_arn, include=["TAGS"]
+                )
+                task_definition = response["taskDefinition"]
+                task_definition["tags"] = response["tags"]
+                task_definition_cluster = aws_to_dict(task_definition["tags"]).get(
+                    "cluster"
+                )
+                if (
+                    task_definition_cluster is None
+                    or task_definition_cluster not in active_clusters
+                ):
+                    await ecs.deregister_task_definition(
+                        taskDefinition=task_definition_arn
+                    )
+
+    # Clean up security groups (with no active clusters)
+    async with session.create_client("ec2") as ec2:
+        async for page in ec2.get_paginator("describe_security_groups").paginate(
+            Filters=[{"Name": "tag:createdBy", "Values": ["dask-cloud"]}]
+        ):
+            for group in page["SecurityGroups"]:
+                sg_cluster = aws_to_dict(group["Tags"]).get("cluster")
+                if sg_cluster is None or sg_cluster not in active_clusters:
+                    await ec2.delete_security_group(
+                        GroupName=group["GroupName"], DryRun=False
+                    )
+
+    # Clean up roles (with no active clusters)
+    async with session.create_client("iam") as iam:
+        async for page in iam.get_paginator("list_roles").paginate():
+            for role in page["Roles"]:
+                role["Tags"] = (
+                    await iam.list_role_tags(RoleName=role["RoleName"])
+                ).get("Tags")
+                if DEFAULT_TAGS.items() <= aws_to_dict(role["Tags"]).items():
+                    role_cluster = aws_to_dict(role["Tags"]).get("cluster")
+                    if role_cluster is None or role_cluster not in active_clusters:
+                        attached_policies = (
+                            await iam.list_attached_role_policies(
+                                RoleName=role["RoleName"]
+                            )
+                        )["AttachedPolicies"]
+                        for policy in attached_policies:
+                            await iam.detach_role_policy(
+                                RoleName=role["RoleName"], PolicyArn=policy["PolicyArn"]
+                            )
+                        await iam.delete_role(RoleName=role["RoleName"])
+
+
+# TODO Add CLI option for running ``$ dask-ecs [--flags]``
+
+# TODO Awaiting the cluster class seems to hang forever
+#      This seems to be related to ``await self.scheduler_comm.identity()`` hanging every other time you call it.
+
+# TODO Consolidate finalization tasks
+#      To be certain that we are finalizing in the correct order we could have a clean up method which
+#      finalizes everything in one place. We could weakref it from ``_start``.
 
 # TODO catch all credential errors.
 #      Not all users will be able to create all the resources necessary for a default cluster.
