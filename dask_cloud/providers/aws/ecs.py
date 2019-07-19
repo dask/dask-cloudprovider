@@ -81,7 +81,7 @@ class Task:
         log_stream_prefix,
         fargate,
         tags,
-        loop,
+        loop=None,
         **kwargs
     ):
         self.lock = asyncio.Lock()
