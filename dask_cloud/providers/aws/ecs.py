@@ -437,6 +437,7 @@ class ECSCluster(SpecCluster):
         tags=None,
         **kwargs
     ):
+        self._clients = None
         self._fargate = fargate
         self.image = image
         self._scheduler_cpu = scheduler_cpu
@@ -617,12 +618,17 @@ class ECSCluster(SpecCluster):
 
     async def _get_clients(self):
         session = aiobotocore.get_session()
+        weakref.finalize(self, self.sync, self._close_clients)
         return {
             "ec2": session.create_client("ec2"),
             "ecs": session.create_client("ecs"),
             "iam": session.create_client("iam"),
             "logs": session.create_client("logs"),
         }
+
+    async def _close_clients(self):
+        for client in self._clients.values():
+            await client.close()
 
     async def _close_clients(self):
         pass
