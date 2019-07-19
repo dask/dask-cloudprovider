@@ -58,6 +58,9 @@ class Task:
     tags: str
         AWS resource tags to be applied to any resources that are created.
 
+    loop: asyncio.EventLoop
+        A pointer to the asyncio event loop.
+
     kwargs:
         Any additional kwargs which may need to be stored for later use.
 
@@ -78,9 +81,11 @@ class Task:
         log_stream_prefix,
         fargate,
         tags,
+        loop,
         **kwargs
     ):
         self.lock = asyncio.Lock()
+        self.loop = loop
         self._clients = clients
         self.cluster_arn = cluster_arn
         self.task_definition_arn = task_definition_arn
@@ -112,7 +117,7 @@ class Task:
 
     @property
     def _use_public_ip(self):
-        return True  # TODO allow private only (needs NAT for image pull)
+        return True  # TODO Allow private only (needs NAT for image pull)
 
     async def _is_long_arn_format_enabled(self):
         [response] = (
@@ -412,7 +417,7 @@ class ECSCluster(SpecCluster):
 
     Examples
     --------
-    TODO write ECSCluster examples docs
+    TODO Write ECSCluster examples docs
     """
 
     def __init__(
@@ -633,9 +638,6 @@ class ECSCluster(SpecCluster):
     async def _close_clients(self):
         for client in self._clients.values():
             await client.close()
-
-    async def _close_clients(self):
-        pass
 
     async def _create_cluster(self):
         if not self._fargate:
@@ -1019,6 +1021,9 @@ async def _cleanup_stale_resources():
 #      To be certain that we are finalizing in the correct order we could have a clean up method which
 #      finalizes everything in one place. We could weakref it from ``_start``.
 
-# TODO catch all credential errors.
+# TODO Catch all credential errors.
 #      Not all users will be able to create all the resources necessary for a default cluster.
 #      We should catch any permissions errors that come back from AWS and cleanly tear everything back down and raise.
+
+# TODO Get adaptive working.
+#      Currently there is an issue with the ``Adaptive`` class not being able to speak to the ``scheduler_comm`` from ``SpecCluster``
