@@ -409,6 +409,10 @@ class ECSCluster(SpecCluster):
         The ID of the VPC you wish to launch your cluster in.
 
         Defaults to ``None`` (your default VPC will be used).
+    subnets: List[str] (optional)
+        A list of subnets to use when running your task.
+
+        Defaults to ``None``. (all subnets available in your VPC will be used)
     security_groups: List[str] (optional)
         A list of security group IDs to use when launching tasks.
 
@@ -452,6 +456,7 @@ class ECSCluster(SpecCluster):
         cloudwatch_logs_stream_prefix=None,
         cloudwatch_logs_default_retention=None,
         vpc=None,
+        subnets=None,
         security_groups=None,
         environment=None,
         tags=None,
@@ -475,6 +480,7 @@ class ECSCluster(SpecCluster):
         self._cloudwatch_logs_stream_prefix = cloudwatch_logs_stream_prefix
         self._cloudwatch_logs_default_retention = cloudwatch_logs_default_retention
         self._vpc = vpc
+        self._vpc_subnets = subnets
         self._security_groups = security_groups
         self._environment = environment
         self._tags = tags
@@ -594,7 +600,12 @@ class ECSCluster(SpecCluster):
         )
         if self._vpc == "default":
             self._vpc = await self._get_default_vpc()
-        self._vpc_subnets = await self._get_vpc_subnets()
+
+        self._vpc_subnets = (
+            self.config.get("subnets", await self._get_vpc_subnets())
+            if self._vpc_subnets is None
+            else self._vpc_subnets
+        )
 
         self._security_groups = (
             self.config.get("security_groups", await self._create_security_groups())
