@@ -55,6 +55,9 @@ class Task:
     fargate: bool
         Whether or not to launch with the Fargate launch type.
 
+    environment: dict
+        Environment variables to set when launching the task.
+
     tags: str
         AWS resource tags to be applied to any resources that are created.
 
@@ -80,6 +83,7 @@ class Task:
         log_group,
         log_stream_prefix,
         fargate,
+        environment,
         tags,
         loop=None,
         **kwargs
@@ -101,6 +105,7 @@ class Task:
         self._vpc_subnets = vpc_subnets
         self._security_groups = security_groups
         self.fargate = fargate
+        self.environment = environment or {}
         self.tags = tags
         self.kwargs = kwargs
         self.status = "created"
@@ -170,7 +175,16 @@ class Task:
                     await self._clients["ecs"].run_task(
                         cluster=self.cluster_arn,
                         taskDefinition=self.task_definition_arn,
-                        overrides=self.overrides,
+                        overrides={
+                            "containerOverrides": [
+                                {
+                                    "name": "dask-{}".format(self.task_type),
+                                    "environment": dict_to_aws(
+                                        self.environment, key_string="name"
+                                    ),
+                                }
+                            ]
+                        },
                         count=1,
                         launchType="FARGATE" if self.fargate else "EC2",
                         networkConfiguration={
@@ -287,16 +301,7 @@ class Worker(Task):
         super().__init__(**kwargs)
         self.task_type = "worker"
         self.scheduler = scheduler
-        self.overrides = {
-            "containerOverrides": [
-                {
-                    "name": "dask-worker",
-                    "environment": [
-                        {"name": "DASK_SCHEDULER_ADDRESS", "value": self.scheduler}
-                    ],
-                }
-            ]
-        }
+        self.environment["DASK_SCHEDULER_ADDRESS"] = self.scheduler
 
 
 class ECSCluster(SpecCluster):
@@ -408,6 +413,13 @@ class ECSCluster(SpecCluster):
 
         Defaults to ``None`` (one will be created which allows all traffic
         between tasks and access to ports ``8786`` and ``8787`` from anywhere).
+    environment: dict (optional)
+        Extra environment variables to pass to the scheduler and worker tasks.
+
+        Useful for setting ``EXTRA_APT_PACKAGES``, ``EXTRA_CONDA_PACKAGES`` and
+        ```EXTRA_PIP_PACKAGES`` if you'ree using the default image.
+
+        Defaults to ``None``.
     tags: dict (optional)
         Tags to apply to all resources created automatically.
 
@@ -440,6 +452,7 @@ class ECSCluster(SpecCluster):
         cloudwatch_logs_default_retention=None,
         vpc=None,
         security_groups=None,
+        environment=None,
         tags=None,
         **kwargs
     ):
@@ -462,6 +475,7 @@ class ECSCluster(SpecCluster):
         self._cloudwatch_logs_default_retention = cloudwatch_logs_default_retention
         self._vpc = vpc
         self._security_groups = security_groups
+        self._environment = environment
         self._tags = tags
         super().__init__(**kwargs)
 
@@ -519,9 +533,6 @@ class ECSCluster(SpecCluster):
             if self._n_workers is None
             else self._n_workers
         )
-        self.environment = {
-            "DASK_DISTRIBUTED__SCHEDULER__IDLE_TIMEOUT": self._scheduler_timeout
-        }
 
         self.cluster_name = None
         self._cluster_name_template = (
@@ -605,6 +616,7 @@ class ECSCluster(SpecCluster):
             "log_group": self.cloudwatch_logs_group,
             "log_stream_prefix": self._cloudwatch_logs_stream_prefix,
             "fargate": self._fargate,
+            "environment": self._environment,
             "tags": self.tags,
         }
         scheduler_options = {
@@ -830,8 +842,11 @@ class ECSCluster(SpecCluster):
                     "memory": self._scheduler_mem,
                     "memoryReservation": self._scheduler_mem,
                     "essential": True,
-                    "environment": dict_to_aws(self.environment, key_string="name"),
-                    "command": ["dask-scheduler"],
+                    "command": [
+                        "dask-scheduler",
+                        "--idle-timeout",
+                        self._scheduler_timeout,
+                    ],
                     "logConfiguration": {
                         "logDriver": "awslogs",
                         "options": {
@@ -871,7 +886,6 @@ class ECSCluster(SpecCluster):
                     "memory": self._worker_mem,
                     "memoryReservation": self._worker_mem,
                     "essential": True,
-                    "environment": dict_to_aws(self.environment, key_string="name"),
                     "command": [
                         "dask-worker",
                         "--nthreads",
