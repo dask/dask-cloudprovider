@@ -1038,6 +1038,3 @@ async def _cleanup_stale_resources():
 # TODO Catch all credential errors.
 #      Not all users will be able to create all the resources necessary for a default cluster.
 #      We should catch any permissions errors that come back from AWS and cleanly tear everything back down and raise.
-
-# TODO Get adaptive working.
-#      Currently there is an issue with the ``Adaptive`` class not being able to speak to the ``scheduler_comm`` from ``SpecCluster``
