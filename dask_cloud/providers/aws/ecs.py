@@ -429,6 +429,11 @@ class ECSCluster(SpecCluster):
         Tags to apply to all resources created automatically.
 
         Defaults to ``None``. Tags will always include ``{"createdBy": "dask-cloud"}``
+    skip_cleanup: bool (optional)
+        Skip cleaning up of stale resources. Useful if you have lots of resources
+        and this operation takes a while.
+
+        Default ``False``.
     **kwargs: dict
         Additional keyword arguments to pass to ``SpecCluster``.
 
@@ -460,6 +465,7 @@ class ECSCluster(SpecCluster):
         security_groups=None,
         environment=None,
         tags=None,
+        skip_cleanup=None,
         **kwargs
     ):
         self._clients = None
@@ -484,6 +490,7 @@ class ECSCluster(SpecCluster):
         self._security_groups = security_groups
         self._environment = environment
         self._tags = tags
+        self._skip_cleanup = skip_cleanup
         super().__init__(**kwargs)
 
     async def _start(self,):
@@ -494,10 +501,17 @@ class ECSCluster(SpecCluster):
         if self.status == "closed":
             raise ValueError("Cluster is closed")
 
-        # Cleanup any stale resources before we start
-        await _cleanup_stale_resources()
-
         self.config = dask.config.get("cloud.ecs", {})
+
+        # Cleanup any stale resources before we start
+        self._skip_cleanup = (
+            self.config.get("skip_cleanup", False)
+            if self._skip_cleanup is None
+            else self._skip_cleanup
+        )
+        if not self._skip_cleanup:
+            await _cleanup_stale_resources()
+
         self._clients = await self._get_clients()
         self._fargate = (
             self.config.get("fargate", False)
