@@ -10,6 +10,7 @@ from botocore.exceptions import ClientError
 import aiobotocore
 import dask
 
+from dask_cloud.utils.logs import Log, Logs
 from dask_cloud.utils.timeout import Timeout
 from dask_cloud.providers.aws.helper import dict_to_aws, aws_to_dict
 
@@ -919,6 +920,24 @@ class ECSCluster(SpecCluster):
         await self._clients["ecs"].deregister_task_definition(
             taskDefinition=self.worker_task_definition_arn
         )
+
+    def logs(self):  # TODO Push upstream into distributed.SpecCluster
+        async def get_logs(task):
+            log = ""
+            async for line in task.logs():
+                log += "{}\n".format(line)
+            return Log(log)
+
+        scheduler_logs = {
+            "scheduler - {}".format(self.scheduler.address): self.sync(
+                get_logs, self.scheduler
+            )
+        }
+        worker_logs = {
+            "worker {} - {}".format(key, worker.address): self.sync(get_logs, worker)
+            for key, worker in self.workers.items()
+        }
+        return Logs({**scheduler_logs, **worker_logs})
 
 
 class FargateCluster(ECSCluster):
