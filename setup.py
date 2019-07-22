@@ -18,5 +18,9 @@ setup(
     long_description=(open("README.md").read() if exists("README.md") else ""),
     zip_safe=False,
     install_requires=list(open("requirements.txt").read().strip().split("\n")),
+    entry_points="""
+    [console_scripts]
+    dask-ecs=dask_cloud.cli.ecs:go
+    """,
     python_requires=">=3.5",
 )
