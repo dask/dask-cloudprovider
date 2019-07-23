@@ -15,6 +15,7 @@ from dask_cloud.utils.timeout import Timeout
 from dask_cloud.providers.aws.helper import dict_to_aws, aws_to_dict
 
 from distributed.deploy.spec import SpecCluster
+from distributed.utils import warn_on_duration
 
 logger = logging.getLogger(__name__)
 
@@ -253,8 +254,9 @@ class Task:
             task_id=self.task_id,
         )
 
-    async def logs(self):
+    async def logs(self, follow=False):
         next_token = None
+        read_from = 0
         while True:
             if next_token:
                 l = await self._clients["logs"].get_log_events(
@@ -264,12 +266,21 @@ class Task:
                 )
             else:
                 l = await self._clients["logs"].get_log_events(
-                    logGroupName=self.log_group, logStreamName=self._log_stream_name
+                    logGroupName=self.log_group,
+                    logStreamName=self._log_stream_name,
+                    startTime=read_from,
                 )
-            next_token = l["nextForwardToken"]
+            if next_token != l["nextForwardToken"]:
+                next_token = l["nextForwardToken"]
+            else:
+                next_token = None
             if not l["events"]:
-                break
+                if follow:
+                    await asyncio.sleep(1)
+                else:
+                    break
             for event in l["events"]:
+                read_from = event["timestamp"]
                 yield event["message"]
 
     def __repr__(self):
@@ -491,6 +502,7 @@ class ECSCluster(SpecCluster):
         self._environment = environment
         self._tags = tags
         self._skip_cleanup = skip_cleanup
+        self._lock = asyncio.Lock()
         super().__init__(**kwargs)
 
     async def _start(self,):
@@ -657,7 +669,14 @@ class ECSCluster(SpecCluster):
         self.scheduler_spec = {"cls": Scheduler, "options": scheduler_options}
         self.new_spec = {"cls": Worker, "options": worker_options}
         self.worker_spec = {i: self.new_spec for i in range(self._n_workers)}
-        await super()._start()
+
+        with warn_on_duration(
+            "10s",
+            "Creating your cluster is taking a surprisingly long time. "
+            "This is likely due to pending resources on AWS. "
+            "Hang tight! ",
+        ):
+            await super()._start()
 
     @property
     def tags(self):
