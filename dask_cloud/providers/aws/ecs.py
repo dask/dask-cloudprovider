@@ -1089,8 +1089,6 @@ async def _cleanup_stale_resources():
                         await iam.delete_role(RoleName=role["RoleName"])
 
 
-# TODO Add CLI option for running ``$ dask-ecs [--flags]``
-
 # TODO Awaiting the cluster class seems to hang forever
 #      This seems to be related to ``await self.scheduler_comm.identity()`` hanging every other time you call it.
 
