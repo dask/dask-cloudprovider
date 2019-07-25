@@ -28,6 +28,7 @@ class Task:
     """ A superclass for managing ECS Tasks
     Parameters
     ----------
+
     clients: Dict[str, aiobotocore.client.Client]
         References to the boto clients created by the cluster. These will be
         used to interact with the AWS API.
@@ -63,9 +64,6 @@ class Task:
     tags: str
         AWS resource tags to be applied to any resources that are created.
 
-    loop: asyncio.EventLoop
-        A pointer to the asyncio event loop.
-
     kwargs:
         Any additional kwargs which may need to be stored for later use.
 
@@ -87,11 +85,11 @@ class Task:
         fargate,
         environment,
         tags,
-        loop=None,
+        name=None,
         **kwargs
     ):
         self.lock = asyncio.Lock()
-        self.loop = loop
+        self.name = name
         self._clients = clients
         self.cluster_arn = cluster_arn
         self.task_definition_arn = task_definition_arn
@@ -103,7 +101,7 @@ class Task:
         self.log_group = log_group
         self.log_stream_prefix = log_stream_prefix
         self.connection = None
-        self.overrides = {}
+        self._overrides = {}
         self._vpc_subnets = vpc_subnets
         self._security_groups = security_groups
         self.fargate = fargate
@@ -184,6 +182,7 @@ class Task:
                                     "environment": dict_to_aws(
                                         self.environment, key_string="name"
                                     ),
+                                    **self._overrides,
                                 }
                             ]
                         },
@@ -309,10 +308,25 @@ class Worker(Task):
         Other kwargs to be passed to :class:`Task`.
     """
 
-    def __init__(self, scheduler: str, **kwargs):
+    def __init__(self, scheduler: str, cpu: int, mem: int, **kwargs):
         super().__init__(**kwargs)
         self.task_type = "worker"
         self.scheduler = scheduler
+        self._cpu = cpu
+        self._mem = mem
+        self._overrides = {
+            "command": [
+                "dask-worker",
+                "--name",
+                str(self.name),
+                "--nthreads",
+                "{}".format(int(self._cpu / 1024)),
+                "--memory-limit",
+                "{}GB".format(int(self._mem / 1024)),
+                "--death-timeout",
+                "60",
+            ]
+        }
         self.environment["DASK_SCHEDULER_ADDRESS"] = self.scheduler
 
 
@@ -663,6 +677,8 @@ class ECSCluster(SpecCluster):
         }
         worker_options = {
             "task_definition_arn": self.worker_task_definition_arn,
+            "cpu": self._worker_cpu,
+            "mem": self._worker_mem,
             **options,
         }
 
@@ -931,15 +947,7 @@ class ECSCluster(SpecCluster):
                     "memory": self._worker_mem,
                     "memoryReservation": self._worker_mem,
                     "essential": True,
-                    "command": [
-                        "dask-worker",
-                        "--nthreads",
-                        "{}".format(int(self._worker_cpu / 1024)),
-                        "--memory-limit",
-                        "{}GB".format(int(self._worker_mem / 1024)),
-                        "--death-timeout",
-                        "60",
-                    ],
+                    "command": ["dask-worker"],
                     "logConfiguration": {
                         "logDriver": "awslogs",
                         "options": {
