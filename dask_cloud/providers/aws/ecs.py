@@ -57,6 +57,9 @@ class Task:
     fargate: bool
         Whether or not to launch with the Fargate launch type.
 
+    use_public_ip: bool
+        Whether or not to request a public IP.
+
     environment: dict
         Environment variables to set when launching the task.
 
@@ -85,6 +88,7 @@ class Task:
         log_group,
         log_stream_prefix,
         fargate,
+        use_public_ip,
         environment,
         tags,
         loop=None,
@@ -107,6 +111,7 @@ class Task:
         self._vpc_subnets = vpc_subnets
         self._security_groups = security_groups
         self.fargate = fargate
+        self._use_public_ip = use_public_ip
         self.environment = environment or {}
         self.tags = tags
         self.kwargs = kwargs
@@ -123,8 +128,9 @@ class Task:
         return _().__await__()
 
     @property
-    def _use_public_ip(self):
-        return True  # TODO Allow private only (needs NAT for image pull)
+    def use_public_ip(self):
+        return self._use_public_ip
+        # Fargate needs NAT for image pull not False
 
     async def _is_long_arn_format_enabled(self):
         [response] = (
@@ -150,7 +156,7 @@ class Task:
                 for query_string in ["worker at:", "Scheduler at:"]:
                     if query_string in line:
                         address = line.split(query_string)[1].strip()
-                        if self._use_public_ip:
+                        if self.use_public_ip:
                             address = address.replace(self.private_ip, self.public_ip)
                         logger.debug("%s", line)
                         return address
@@ -194,7 +200,7 @@ class Task:
                                 "subnets": self._vpc_subnets,
                                 "securityGroups": self._security_groups,
                                 "assignPublicIp": "ENABLED"
-                                if self._use_public_ip
+                                if self.use_public_ip
                                 else "DISABLED",
                             }
                         },
@@ -226,7 +232,8 @@ class Task:
             NetworkInterfaceIds=[network_interface_id]
         )
         [interface] = eni["NetworkInterfaces"]
-        self.public_ip = interface["Association"]["PublicIp"]
+        if self.use_public_ip:
+            self.public_ip = interface["Association"]["PublicIp"]
         self.private_ip = interface["PrivateIpAddresses"][0]["PrivateIpAddress"]
         self.address = await self._get_address_from_logs()
         self.status = "running"
@@ -331,7 +338,7 @@ class ECSCluster(SpecCluster):
     image: str (optional)
         The docker image to use for the scheduler and worker tasks.
 
-        Defaults to ``daskdev/dask:latest``.
+        Defaults to ``daskdev/dask:latest`` or ``rapidsai/rapidsai:latest`` if ``worker_gpu`` is set.
     scheduler_cpu: int (optional)
         The amount of CPU to request for the scheduler in milli-cpu (1/1024).
 
@@ -352,6 +359,14 @@ class ECSCluster(SpecCluster):
         The amount of memory to request for worker tasks in MB.
 
         Defaults to ``16384`` (16GB).
+    worker_gpu: int (optional)
+        The number of GPUs to expose to the worker.
+
+        To provide GPUs to workers you need to use a GPU ready docker image
+        that has ``dask-cuda`` installed and GPU nodes available in your ECS
+        cluster. Fargate is not supported at this time.
+
+        Defaults to `None`, no GPUs.
     n_workers: int (optional)
         Number of workers to start on cluster creation.
 
@@ -429,6 +444,11 @@ class ECSCluster(SpecCluster):
 
         Defaults to ``None`` (one will be created which allows all traffic
         between tasks and access to ports ``8786`` and ``8787`` from anywhere).
+    use_public_ip: bool (optional)
+        Whether or not to request public IP addresses for resources. This only
+        works in Fargate mode.
+
+        Default ``False``.
     environment: dict (optional)
         Extra environment variables to pass to the scheduler and worker tasks.
 
@@ -462,6 +482,7 @@ class ECSCluster(SpecCluster):
         scheduler_timeout=None,
         worker_cpu=None,
         worker_mem=None,
+        worker_gpu=None,
         n_workers=None,
         cluster_arn=None,
         cluster_name_template=None,
@@ -474,6 +495,7 @@ class ECSCluster(SpecCluster):
         vpc=None,
         subnets=None,
         security_groups=None,
+        use_public_ip=None,
         environment=None,
         tags=None,
         skip_cleanup=None,
@@ -487,6 +509,7 @@ class ECSCluster(SpecCluster):
         self._scheduler_timeout = scheduler_timeout
         self._worker_cpu = worker_cpu
         self._worker_mem = worker_mem
+        self._worker_gpu = worker_gpu
         self._n_workers = n_workers
         self.cluster_arn = cluster_arn
         self._cluster_name_template = cluster_name_template
@@ -499,6 +522,7 @@ class ECSCluster(SpecCluster):
         self._vpc = vpc
         self._vpc_subnets = subnets
         self._security_groups = security_groups
+        self._use_public_ip = use_public_ip
         self._environment = environment
         self._tags = tags
         self._skip_cleanup = skip_cleanup
@@ -531,8 +555,18 @@ class ECSCluster(SpecCluster):
             else self._fargate
         )
         self._tags = self.config.get("tags", {}) if self._tags is None else self._tags
+        self._worker_gpu = (
+            self.config.get("worker_gpu")
+            if self._worker_gpu is None
+            else self._worker_gpu
+        )  # TODO Detect whether cluster is GPU capable
         self.image = (
-            self.config.get("image", "daskdev/dask:latest")
+            self.config.get(
+                "image",
+                "rapidsai/rapidsai:latest"
+                if self._worker_gpu
+                else "daskdev/dask:latest",
+            )
             if self.image is None
             else self.image
         )
@@ -639,6 +673,18 @@ class ECSCluster(SpecCluster):
             else self._security_groups
         )
 
+        self._use_public_ip = (
+            self.config.get("use_public_ip", False)
+            if self._use_public_ip is None
+            else self._use_public_ip
+        )
+        if not self._fargate and self._use_public_ip:
+            raise RuntimeError("You cannot use EC2 mode and public IPs together")
+        if self._fargate and not self._use_public_ip:
+            warnings.warn(
+                "If you are using private networking with Fargate you must set up a NAT gateway in your default VPC."
+            )
+
         self.scheduler_task_definition_arn = (
             await self._create_scheduler_task_definition_arn()
         )
@@ -654,6 +700,7 @@ class ECSCluster(SpecCluster):
             "log_group": self.cloudwatch_logs_group,
             "log_stream_prefix": self._cloudwatch_logs_stream_prefix,
             "fargate": self._fargate,
+            "use_public_ip": self._use_public_ip,
             "environment": self._environment,
             "tags": self.tags,
         }
@@ -699,6 +746,11 @@ class ECSCluster(SpecCluster):
     async def _create_cluster(self):
         if not self._fargate:
             raise RuntimeError("You must specify a cluster when not using Fargate.")
+        if self._worker_gpu:
+            raise RuntimeError(
+                "It is not possible to use GPUs with Fargate. "
+                "Please provide an existing cluster with GPU instances available. "
+            )
         self.cluster_name = dask.config.expand_environment_variables(
             self._cluster_name_template
         )
@@ -918,6 +970,11 @@ class ECSCluster(SpecCluster):
         )
 
     async def _create_worker_task_definition_arn(self):
+        resource_requirements = []
+        if self._worker_gpu:
+            resource_requirements.append(
+                {"type": "GPU", "value": str(self._worker_gpu)}
+            )
         response = await self._clients["ecs"].register_task_definition(
             family="{}-{}".format(self.cluster_name, "worker"),
             taskRoleArn=self._task_role_arn,
@@ -930,9 +987,10 @@ class ECSCluster(SpecCluster):
                     "cpu": self._worker_cpu,
                     "memory": self._worker_mem,
                     "memoryReservation": self._worker_mem,
+                    "resourceRequirements": resource_requirements,
                     "essential": True,
                     "command": [
-                        "dask-worker",
+                        "dask-cuda-worker" if self._worker_gpu else "dask-worker",
                         "--nthreads",
                         "{}".format(int(self._worker_cpu / 1024)),
                         "--memory-limit",
@@ -999,7 +1057,8 @@ class FargateCluster(ECSCluster):
     """
 
     def __init__(self, **kwargs):
-        super().__init__(fargate=True, **kwargs)
+        use_public_ip = kwargs.get("use_public_ip", True)
+        super().__init__(fargate=True, use_public_ip=use_public_ip, **kwargs)
 
 
 async def _cleanup_stale_resources():

@@ -114,6 +114,9 @@ logger = logging.getLogger(__name__)
     help="Security group to use for task communication (can be used multiple times, will be created if not specified)",
 )
 @click.option(
+    "--use-public-ip", is_flag=True, help="Request public IPs for tasks (default off)"
+)
+@click.option(
     "--environment",
     type=str,
     default=None,
@@ -149,6 +152,7 @@ def main(
     vpc,
     subnet,
     security_group,
+    use_public_ip,
     environment,
     tag,
     skip_cleanup,
@@ -182,6 +186,7 @@ def main(
             vpc=vpc,
             subnets=subnet,
             security_groups=security_group,
+            use_public_ip=use_public_ip,
             environment=environment,
             tags=tag,
             skip_cleanup=skip_cleanup,
