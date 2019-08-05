@@ -1,1 +1,1 @@
-dask_cloud/_version.py export-subst
+dask_cloudprovider/_version.py export-subst

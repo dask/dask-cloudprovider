@@ -6,11 +6,11 @@ from setuptools import setup, find_packages
 import versioneer
 
 setup(
-    name="dask-cloud",
+    name="dask-cloudprovider",
     cmdclass=versioneer.get_cmdclass(),
     version=versioneer.get_version(),
-    description="Native Cloud integration for Dask",
-    url="https://github.com/jacobtomlinson/dask-cloud",
+    description="Native Cloud Provider integration for Dask",
+    url="https://github.com/jacobtomlinson/dask-cloudprovider",
     keywords="dask,cloud,distributed",
     license="BSD",
     packages=find_packages(),
@@ -20,7 +20,7 @@ setup(
     install_requires=list(open("requirements.txt").read().strip().split("\n")),
     entry_points="""
     [console_scripts]
-    dask-ecs=dask_cloud.cli.ecs:go
+    dask-ecs=dask_cloudprovider.cli.ecs:go
     """,
     python_requires=">=3.5",
 )

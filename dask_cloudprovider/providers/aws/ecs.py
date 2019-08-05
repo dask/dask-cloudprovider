@@ -10,9 +10,9 @@ from botocore.exceptions import ClientError
 import aiobotocore
 import dask
 
-from dask_cloud.utils.logs import Log, Logs
-from dask_cloud.utils.timeout import Timeout
-from dask_cloud.providers.aws.helper import dict_to_aws, aws_to_dict
+from dask_cloudprovider.utils.logs import Log, Logs
+from dask_cloudprovider.utils.timeout import Timeout
+from dask_cloudprovider.providers.aws.helper import dict_to_aws, aws_to_dict
 
 from distributed.deploy.spec import SpecCluster
 from distributed.utils import warn_on_duration
@@ -20,7 +20,9 @@ from distributed.utils import warn_on_duration
 logger = logging.getLogger(__name__)
 
 
-DEFAULT_TAGS = {"createdBy": "dask-cloud"}  # Package tags to apply to all resources
+DEFAULT_TAGS = {
+    "createdBy": "dask-cloudprovider"
+}  # Package tags to apply to all resources
 DEFAULT_CLUSTER_NAME_TEMPLATE = "dask-{uuid}"
 
 
@@ -453,7 +455,7 @@ class ECSCluster(SpecCluster):
     tags: dict (optional)
         Tags to apply to all resources created automatically.
 
-        Defaults to ``None``. Tags will always include ``{"createdBy": "dask-cloud"}``
+        Defaults to ``None``. Tags will always include ``{"createdBy": "dask-cloudprovider"}``
     skip_cleanup: bool (optional)
         Skip cleaning up of stale resources. Useful if you have lots of resources
         and this operation takes a while.
@@ -527,7 +529,7 @@ class ECSCluster(SpecCluster):
         if self.status == "closed":
             raise ValueError("Cluster is closed")
 
-        self.config = dask.config.get("cloud.ecs", {})
+        self.config = dask.config.get("cloudprovider.ecs", {})
 
         # Cleanup any stale resources before we start
         self._skip_cleanup = (
@@ -1011,7 +1013,7 @@ class FargateCluster(ECSCluster):
 
 
 async def _cleanup_stale_resources():
-    """ Clean up any stale resources which are tagged with 'createdBy': 'dask-cloud'.
+    """ Clean up any stale resources which are tagged with 'createdBy': 'dask-cloudprovider'.
 
     This function will scan through AWS looking for resources that were created
     by the ``ECSCluster`` class. Any ECS clusters which do not have any running
@@ -1066,7 +1068,7 @@ async def _cleanup_stale_resources():
     # Clean up security groups (with no active clusters)
     async with session.create_client("ec2") as ec2:
         async for page in ec2.get_paginator("describe_security_groups").paginate(
-            Filters=[{"Name": "tag:createdBy", "Values": ["dask-cloud"]}]
+            Filters=[{"Name": "tag:createdBy", "Values": ["dask-cloudprovider"]}]
         ):
             for group in page["SecurityGroups"]:
                 sg_cluster = aws_to_dict(group["Tags"]).get("cluster")
