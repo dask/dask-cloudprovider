@@ -1,6 +1,3 @@
-# TODO Push upstream into distributed
-
-
 class Log(str):
     """A container for logs."""
 
