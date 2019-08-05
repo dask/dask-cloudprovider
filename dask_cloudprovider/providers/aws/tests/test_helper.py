@@ -1,5 +1,5 @@
 def test_aws_to_dict_and_back():
-    from dask_cloud.providers.aws.helper import aws_to_dict, dict_to_aws
+    from dask_cloudprovider.providers.aws.helper import aws_to_dict, dict_to_aws
 
     aws_dict = [{"key": "hello", "value": "world"}]
     aws_upper_dict = [{"Key": "hello", "Value": "world"}]

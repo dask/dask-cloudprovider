@@ -1,4 +1,4 @@
-Welcome to dask-cloud's documentation!
+Welcome to dask-cloudprovider's documentation!
 ======================================
 
 ..
@@ -37,7 +37,7 @@ all the IAM roles, security groups, etc that it needs to function.
 
 .. code-block:: python
 
-   from dask_cloud import ECSCluster
+   from dask_cloudprovider import ECSCluster
    cluster = ECSCluster()
 
 ..

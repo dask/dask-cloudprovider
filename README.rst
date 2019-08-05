@@ -1,10 +1,10 @@
 
-Dask cloud
+Dask Cloud Provider
 ==========
 
 
-.. image:: https://circleci.com/gh/jacobtomlinson/dask-cloud.svg?style=svg
-   :target: https://circleci.com/gh/jacobtomlinson/dask-cloud
+.. image:: https://circleci.com/gh/jacobtomlinson/dask-cloudprovider.svg?style=svg
+   :target: https://circleci.com/gh/jacobtomlinson/dask-cloudprovider
    :alt: CircleCI
 
 ..

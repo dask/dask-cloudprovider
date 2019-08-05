@@ -1,7 +1,7 @@
 API
 ===
 
-.. currentmodule:: dask_cloud
+.. currentmodule:: dask_cloudprovider
 
 .. autosummary::
    ECSCluster
