@@ -10,7 +10,7 @@ setup(
     cmdclass=versioneer.get_cmdclass(),
     version=versioneer.get_version(),
     description="Native Cloud Provider integration for Dask",
-    url="https://github.com/jacobtomlinson/dask-cloudprovider",
+    url="https://github.com/dask/dask-cloudprovider",
     keywords="dask,cloud,distributed",
     license="BSD",
     packages=find_packages(),

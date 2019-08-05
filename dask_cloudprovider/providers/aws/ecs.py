@@ -124,7 +124,7 @@ class Task:
 
     @property
     def _use_public_ip(self):
-        return True  # TODO Allow private only (needs NAT for image pull)
+        return True
 
     async def _is_long_arn_format_enabled(self):
         [response] = (
@@ -466,7 +466,7 @@ class ECSCluster(SpecCluster):
 
     Examples
     --------
-    TODO Write ECSCluster examples docs
+
     """
 
     def __init__(
@@ -975,7 +975,7 @@ class ECSCluster(SpecCluster):
             taskDefinition=self.worker_task_definition_arn
         )
 
-    def logs(self):  # TODO Push upstream into distributed.SpecCluster
+    def logs(self):
         async def get_logs(task):
             log = ""
             async for line in task.logs():
@@ -1097,15 +1097,3 @@ async def _cleanup_stale_resources():
                                 RoleName=role["RoleName"], PolicyArn=policy["PolicyArn"]
                             )
                         await iam.delete_role(RoleName=role["RoleName"])
-
-
-# TODO Awaiting the cluster class seems to hang forever
-#      This seems to be related to ``await self.scheduler_comm.identity()`` hanging every other time you call it.
-
-# TODO Consolidate finalization tasks
-#      To be certain that we are finalizing in the correct order we could have a clean up method which
-#      finalizes everything in one place. We could weakref it from ``_start``.
-
-# TODO Catch all credential errors.
-#      Not all users will be able to create all the resources necessary for a default cluster.
-#      We should catch any permissions errors that come back from AWS and cleanly tear everything back down and raise.

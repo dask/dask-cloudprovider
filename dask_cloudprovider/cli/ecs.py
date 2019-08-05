@@ -196,7 +196,6 @@ def main(
         logger.info("Ready")
         while cluster.status != "closed":
             await sleep(0.2)
-            # TODO Print out logs from scheduler and workers
 
     def on_signal(signum):
         logger.info("Exiting on signal %d", signum)
