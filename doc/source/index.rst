@@ -1,12 +1,6 @@
 Welcome to dask-cloudprovider's documentation!
 ======================================
 
-..
-
-   ⚠ This library is in early alpha. Development is currently iterating on
-   master. Will switch to regular GitHub flow once things stabalize.
-   Use at own risk.
-
 
 Native Cloud integration for Dask. This library intends to allow people to
 create dask clusters on a given cloud provider with no set up other than having
