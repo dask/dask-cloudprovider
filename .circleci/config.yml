@@ -5,7 +5,7 @@ jobs:
     machine: true
     environment:
       PYTHON: "3.7"
-      ENV_NAME: "dask-cloud-test"
+      ENV_NAME: "dask-cloudprovider-test"
 
     steps:
       - checkout
@@ -26,7 +26,7 @@ jobs:
           name: configure conda
           command: |
               export PATH="$HOME/miniconda/bin:$PATH"
-              if [ ! -d "/home/circleci/miniconda/envs/dask-cloud-test" ]; then
+              if [ ! -d "/home/circleci/miniconda/envs/dask-cloudprovider-test" ]; then
                 conda update -q conda
                 conda env create -f ci/environment-${PYTHON}.yml --name=${ENV_NAME}
                 source activate ${ENV_NAME}
@@ -40,8 +40,8 @@ jobs:
             - "/home/circleci/miniconda"
       - run:
           command: |
-            /home/circleci/miniconda/envs/dask-cloud-test/bin/py.test dask_cloud
+            /home/circleci/miniconda/envs/dask-cloudprovider-test/bin/py.test dask_cloudprovider
       - run:
           command: |
-            /home/circleci/miniconda/envs/dask-cloud-test/bin/flake8 dask-cloud
-            /home/circleci/miniconda/envs/dask-cloud-test/bin/black --check dask_cloud setup.py
+            /home/circleci/miniconda/envs/dask-cloudprovider-test/bin/flake8 dask-cloudprovider
+            /home/circleci/miniconda/envs/dask-cloudprovider-test/bin/black --check dask_cloudprovider setup.py

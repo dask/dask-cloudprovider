@@ -6,7 +6,7 @@ import click
 from distributed.cli.utils import check_python_3, install_signal_handlers
 from tornado.ioloop import IOLoop, TimeoutError
 
-from dask_cloud import ECSCluster
+from dask_cloudprovider import ECSCluster
 
 
 logger = logging.getLogger(__name__)
@@ -201,7 +201,6 @@ def main(
         logger.info("Ready")
         while cluster.status != "closed":
             await sleep(0.2)
-            # TODO Print out logs from scheduler and workers
 
     def on_signal(signum):
         logger.info("Exiting on signal %d", signum)

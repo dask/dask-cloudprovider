@@ -56,16 +56,16 @@ source_suffix = ".rst"
 master_doc = "index"
 
 # General information about the project.
-project = "Dask Cloud"
-copyright = "2018, Dask Cloud Developers"
-author = "Dask Cloud Developers"
+project = "Dask Cloud Provider"
+copyright = "2018, Dask Cloud Provider Developers"
+author = "Dask Cloud Provider Developers"
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
 # built documents.
 #
 # The short X.Y version.
-from dask_cloud import __version__
+from dask_cloudprovider import __version__
 
 version = __version__
 # The full version, including alpha/beta/rc tags.
@@ -128,7 +128,7 @@ html_sidebars = {
 # -- Options for HTMLHelp output ------------------------------------------
 
 # Output file base name for HTML help builder.
-htmlhelp_basename = "dask-cloud-doc"
+htmlhelp_basename = "dask-cloudprovider-doc"
 
 
 # -- Options for LaTeX output ---------------------------------------------
@@ -154,9 +154,9 @@ latex_elements = {
 latex_documents = [
     (
         master_doc,
-        "dask-cloud.tex",
-        "Dask Cloud Documentation",
-        "Dask Cloud Developers",
+        "dask-cloudprovider.tex",
+        "Dask Cloud Provider Documentation",
+        "Dask Cloud Provider Developers",
         "manual",
     )
 ]
@@ -166,7 +166,9 @@ latex_documents = [
 
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
-man_pages = [(master_doc, "dask-cloud", "Dask Cloud Documentation", [author], 1)]
+man_pages = [
+    (master_doc, "dask-cloudprovider", "Dask Cloud Provider Documentation", [author], 1)
+]
 
 
 # -- Options for Texinfo output -------------------------------------------
@@ -177,10 +179,10 @@ man_pages = [(master_doc, "dask-cloud", "Dask Cloud Documentation", [author], 1)
 texinfo_documents = [
     (
         master_doc,
-        "Dask Cloud",
-        "Dask Cloud Documentation",
+        "Dask Cloud Provider",
+        "Dask Cloud Provider Documentation",
         author,
-        "Dask-Cloud",
+        "Dask-CloudProvider",
         "One line description of project.",
         "Miscellaneous",
     )

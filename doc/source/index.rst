@@ -1,11 +1,5 @@
-Welcome to dask-cloud's documentation!
+Welcome to dask-cloudprovider's documentation!
 ======================================
-
-..
-
-   ⚠ This library is in early alpha. Development is currently iterating on
-   master. Will switch to regular GitHub flow once things stabalize.
-   Use at own risk.
 
 
 Native Cloud integration for Dask. This library intends to allow people to
@@ -37,7 +31,7 @@ all the IAM roles, security groups, etc that it needs to function.
 
 .. code-block:: python
 
-   from dask_cloud import ECSCluster
+   from dask_cloudprovider import ECSCluster
    cluster = ECSCluster()
 
 ..

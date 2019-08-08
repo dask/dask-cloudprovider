@@ -10,9 +10,9 @@ from botocore.exceptions import ClientError
 import aiobotocore
 import dask
 
-from dask_cloud.utils.logs import Log, Logs
-from dask_cloud.utils.timeout import Timeout
-from dask_cloud.providers.aws.helper import dict_to_aws, aws_to_dict
+from dask_cloudprovider.utils.logs import Log, Logs
+from dask_cloudprovider.utils.timeout import Timeout
+from dask_cloudprovider.providers.aws.helper import dict_to_aws, aws_to_dict
 
 from distributed.deploy.spec import SpecCluster
 from distributed.utils import warn_on_duration
@@ -20,7 +20,9 @@ from distributed.utils import warn_on_duration
 logger = logging.getLogger(__name__)
 
 
-DEFAULT_TAGS = {"createdBy": "dask-cloud"}  # Package tags to apply to all resources
+DEFAULT_TAGS = {
+    "createdBy": "dask-cloudprovider"
+}  # Package tags to apply to all resources
 DEFAULT_CLUSTER_NAME_TEMPLATE = "dask-{uuid}"
 
 
@@ -28,6 +30,7 @@ class Task:
     """ A superclass for managing ECS Tasks
     Parameters
     ----------
+
     clients: Dict[str, aiobotocore.client.Client]
         References to the boto clients created by the cluster. These will be
         used to interact with the AWS API.
@@ -66,9 +69,6 @@ class Task:
     tags: str
         AWS resource tags to be applied to any resources that are created.
 
-    loop: asyncio.EventLoop
-        A pointer to the asyncio event loop.
-
     kwargs:
         Any additional kwargs which may need to be stored for later use.
 
@@ -91,11 +91,11 @@ class Task:
         use_public_ip,
         environment,
         tags,
-        loop=None,
+        name=None,
         **kwargs
     ):
         self.lock = asyncio.Lock()
-        self.loop = loop
+        self.name = name
         self._clients = clients
         self.cluster_arn = cluster_arn
         self.task_definition_arn = task_definition_arn
@@ -107,7 +107,7 @@ class Task:
         self.log_group = log_group
         self.log_stream_prefix = log_stream_prefix
         self.connection = None
-        self.overrides = {}
+        self._overrides = {}
         self._vpc_subnets = vpc_subnets
         self._security_groups = security_groups
         self.fargate = fargate
@@ -190,6 +190,7 @@ class Task:
                                     "environment": dict_to_aws(
                                         self.environment, key_string="name"
                                     ),
+                                    **self._overrides,
                                 }
                             ]
                         },
@@ -316,10 +317,25 @@ class Worker(Task):
         Other kwargs to be passed to :class:`Task`.
     """
 
-    def __init__(self, scheduler: str, **kwargs):
+    def __init__(self, scheduler: str, cpu: int, mem: int, **kwargs):
         super().__init__(**kwargs)
         self.task_type = "worker"
         self.scheduler = scheduler
+        self._cpu = cpu
+        self._mem = mem
+        self._overrides = {
+            "command": [
+                "dask-worker",
+                "--name",
+                str(self.name),
+                "--nthreads",
+                "{}".format(int(self._cpu / 1024)),
+                "--memory-limit",
+                "{}GB".format(int(self._mem / 1024)),
+                "--death-timeout",
+                "60",
+            ]
+        }
         self.environment["DASK_SCHEDULER_ADDRESS"] = self.scheduler
 
 
@@ -459,7 +475,7 @@ class ECSCluster(SpecCluster):
     tags: dict (optional)
         Tags to apply to all resources created automatically.
 
-        Defaults to ``None``. Tags will always include ``{"createdBy": "dask-cloud"}``
+        Defaults to ``None``. Tags will always include ``{"createdBy": "dask-cloudprovider"}``
     skip_cleanup: bool (optional)
         Skip cleaning up of stale resources. Useful if you have lots of resources
         and this operation takes a while.
@@ -470,7 +486,7 @@ class ECSCluster(SpecCluster):
 
     Examples
     --------
-    TODO Write ECSCluster examples docs
+
     """
 
     def __init__(
@@ -537,7 +553,7 @@ class ECSCluster(SpecCluster):
         if self.status == "closed":
             raise ValueError("Cluster is closed")
 
-        self.config = dask.config.get("cloud.ecs", {})
+        self.config = dask.config.get("cloudprovider.ecs", {})
 
         # Cleanup any stale resources before we start
         self._skip_cleanup = (
@@ -710,6 +726,8 @@ class ECSCluster(SpecCluster):
         }
         worker_options = {
             "task_definition_arn": self.worker_task_definition_arn,
+            "cpu": self._worker_cpu,
+            "mem": self._worker_mem,
             **options,
         }
 
@@ -1023,7 +1041,7 @@ class ECSCluster(SpecCluster):
             taskDefinition=self.worker_task_definition_arn
         )
 
-    def logs(self):  # TODO Push upstream into distributed.SpecCluster
+    def logs(self):
         async def get_logs(task):
             log = ""
             async for line in task.logs():
@@ -1062,7 +1080,7 @@ class FargateCluster(ECSCluster):
 
 
 async def _cleanup_stale_resources():
-    """ Clean up any stale resources which are tagged with 'createdBy': 'dask-cloud'.
+    """ Clean up any stale resources which are tagged with 'createdBy': 'dask-cloudprovider'.
 
     This function will scan through AWS looking for resources that were created
     by the ``ECSCluster`` class. Any ECS clusters which do not have any running
@@ -1117,7 +1135,7 @@ async def _cleanup_stale_resources():
     # Clean up security groups (with no active clusters)
     async with session.create_client("ec2") as ec2:
         async for page in ec2.get_paginator("describe_security_groups").paginate(
-            Filters=[{"Name": "tag:createdBy", "Values": ["dask-cloud"]}]
+            Filters=[{"Name": "tag:createdBy", "Values": ["dask-cloudprovider"]}]
         ):
             for group in page["SecurityGroups"]:
                 sg_cluster = aws_to_dict(group["Tags"]).get("cluster")
@@ -1146,15 +1164,3 @@ async def _cleanup_stale_resources():
                                 RoleName=role["RoleName"], PolicyArn=policy["PolicyArn"]
                             )
                         await iam.delete_role(RoleName=role["RoleName"])
-
-
-# TODO Awaiting the cluster class seems to hang forever
-#      This seems to be related to ``await self.scheduler_comm.identity()`` hanging every other time you call it.
-
-# TODO Consolidate finalization tasks
-#      To be certain that we are finalizing in the correct order we could have a clean up method which
-#      finalizes everything in one place. We could weakref it from ``_start``.
-
-# TODO Catch all credential errors.
-#      Not all users will be able to create all the resources necessary for a default cluster.
-#      We should catch any permissions errors that come back from AWS and cleanly tear everything back down and raise.

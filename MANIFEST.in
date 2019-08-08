@@ -1,5 +1,5 @@
-recursive-include dask_cloud *.py
-recursive-include dask_cloud *.yaml
+recursive-include dask_cloudprovider *.py
+recursive-include dask_cloudprovider *.yaml
 
 include setup.py
 include setup.cfg
@@ -10,4 +10,4 @@ include MANIFEST.in
 include versioneer.py
 
 recursive-exclude * __pycache__
-recursive-exclude * *.py[co]include dask_cloud/_version.py
+recursive-exclude * *.py[co]include dask_cloudprovider/_version.py
