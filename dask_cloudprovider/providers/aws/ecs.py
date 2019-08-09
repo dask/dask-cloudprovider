@@ -60,9 +60,6 @@ class Task:
     fargate: bool
         Whether or not to launch with the Fargate launch type.
 
-    use_public_ip: bool
-        Whether or not to request a public IP.
-
     environment: dict
         Environment variables to set when launching the task.
 
@@ -88,7 +85,6 @@ class Task:
         log_group,
         log_stream_prefix,
         fargate,
-        use_public_ip,
         environment,
         tags,
         name=None,
@@ -111,7 +107,6 @@ class Task:
         self._vpc_subnets = vpc_subnets
         self._security_groups = security_groups
         self.fargate = fargate
-        self._use_public_ip = use_public_ip
         self.environment = environment or {}
         self.tags = tags
         self.kwargs = kwargs
@@ -129,8 +124,9 @@ class Task:
 
     @property
     def use_public_ip(self):
-        return self._use_public_ip
-        # Fargate needs NAT for image pull not False
+        return self.fargate
+        # Fargate needs public IP for image pull, EC2 doesn't support public IP
+        # Fargate can also use NAT and private IP, we should allow this at some point
 
     async def _is_long_arn_format_enabled(self):
         [response] = (
@@ -347,8 +343,12 @@ class ECSCluster(SpecCluster):
 
     Parameters
     ----------
-    fargate: bool (optional)
-        Select whether or not to use fargate.
+    fargate_scheduler: bool (optional)
+        Select whether or not to use fargate for the scheduler.
+
+        Defaults to ``False``. You must provide an existing cluster.
+    fargate_workers: bool (optional)
+        Select whether or not to use fargate for the workers.
 
         Defaults to ``False``. You must provide an existing cluster.
     image: str (optional)
@@ -460,11 +460,6 @@ class ECSCluster(SpecCluster):
 
         Defaults to ``None`` (one will be created which allows all traffic
         between tasks and access to ports ``8786`` and ``8787`` from anywhere).
-    use_public_ip: bool (optional)
-        Whether or not to request public IP addresses for resources. This only
-        works in Fargate mode.
-
-        Default ``False``.
     environment: dict (optional)
         Extra environment variables to pass to the scheduler and worker tasks.
 
@@ -491,7 +486,8 @@ class ECSCluster(SpecCluster):
 
     def __init__(
         self,
-        fargate=False,
+        fargate_scheduler=False,
+        fargate_workers=False,
         image=None,
         scheduler_cpu=None,
         scheduler_mem=None,
@@ -511,14 +507,14 @@ class ECSCluster(SpecCluster):
         vpc=None,
         subnets=None,
         security_groups=None,
-        use_public_ip=None,
         environment=None,
         tags=None,
         skip_cleanup=None,
         **kwargs
     ):
         self._clients = None
-        self._fargate = fargate
+        self._fargate_scheduler = fargate_scheduler
+        self._fargate_workers = fargate_workers
         self.image = image
         self._scheduler_cpu = scheduler_cpu
         self._scheduler_mem = scheduler_mem
@@ -538,7 +534,6 @@ class ECSCluster(SpecCluster):
         self._vpc = vpc
         self._vpc_subnets = subnets
         self._security_groups = security_groups
-        self._use_public_ip = use_public_ip
         self._environment = environment
         self._tags = tags
         self._skip_cleanup = skip_cleanup
@@ -565,10 +560,15 @@ class ECSCluster(SpecCluster):
             await _cleanup_stale_resources()
 
         self._clients = await self._get_clients()
-        self._fargate = (
-            self.config.get("fargate", False)
-            if self._fargate is None
-            else self._fargate
+        self._fargate_scheduler = (
+            self.config.get("fargate_scheduler", False)
+            if self._fargate_scheduler is None
+            else self._fargate_scheduler
+        )
+        self._fargate_workers = (
+            self.config.get("fargate_workers", False)
+            if self._fargate_workers is None
+            else self._fargate_workers
         )
         self._tags = self.config.get("tags", {}) if self._tags is None else self._tags
         self._worker_gpu = (
@@ -689,18 +689,6 @@ class ECSCluster(SpecCluster):
             else self._security_groups
         )
 
-        self._use_public_ip = (
-            self.config.get("use_public_ip", False)
-            if self._use_public_ip is None
-            else self._use_public_ip
-        )
-        if not self._fargate and self._use_public_ip:
-            raise RuntimeError("You cannot use EC2 mode and public IPs together")
-        if self._fargate and not self._use_public_ip:
-            warnings.warn(
-                "If you are using private networking with Fargate you must set up a NAT gateway in your default VPC."
-            )
-
         self.scheduler_task_definition_arn = (
             await self._create_scheduler_task_definition_arn()
         )
@@ -715,17 +703,17 @@ class ECSCluster(SpecCluster):
             "security_groups": self._security_groups,
             "log_group": self.cloudwatch_logs_group,
             "log_stream_prefix": self._cloudwatch_logs_stream_prefix,
-            "fargate": self._fargate,
-            "use_public_ip": self._use_public_ip,
             "environment": self._environment,
             "tags": self.tags,
         }
         scheduler_options = {
             "task_definition_arn": self.scheduler_task_definition_arn,
+            "fargate": self._fargate_scheduler,
             **options,
         }
         worker_options = {
             "task_definition_arn": self.worker_task_definition_arn,
+            "fargate": self._fargate_workers,
             "cpu": self._worker_cpu,
             "mem": self._worker_mem,
             **options,
@@ -762,7 +750,7 @@ class ECSCluster(SpecCluster):
             await client.close()
 
     async def _create_cluster(self):
-        if not self._fargate:
+        if not self._fargate_scheduler or not self._fargate_workers:
             raise RuntimeError("You must specify a cluster when not using Fargate.")
         if self._worker_gpu:
             raise RuntimeError(
@@ -974,7 +962,7 @@ class ECSCluster(SpecCluster):
                 }
             ],
             volumes=[],
-            requiresCompatibilities=["FARGATE"] if self._fargate else [],
+            requiresCompatibilities=["FARGATE"] if self._fargate_scheduler else [],
             cpu=str(self._scheduler_cpu),
             memory=str(self._scheduler_mem),
             tags=dict_to_aws(self.tags),
@@ -1028,7 +1016,7 @@ class ECSCluster(SpecCluster):
                 }
             ],
             volumes=[],
-            requiresCompatibilities=["FARGATE"] if self._fargate else [],
+            requiresCompatibilities=["FARGATE"] if self._fargate_workers else [],
             cpu=str(self._worker_cpu),
             memory=str(self._worker_mem),
             tags=dict_to_aws(self.tags),
@@ -1075,8 +1063,7 @@ class FargateCluster(ECSCluster):
     """
 
     def __init__(self, **kwargs):
-        use_public_ip = kwargs.get("use_public_ip", True)
-        super().__init__(fargate=True, use_public_ip=use_public_ip, **kwargs)
+        super().__init__(fargate_scheduler=True, fargate_workers=True, **kwargs)
 
 
 async def _cleanup_stale_resources():

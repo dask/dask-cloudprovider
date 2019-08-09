@@ -13,7 +13,16 @@ logger = logging.getLogger(__name__)
 
 
 @click.command()
-@click.option("--fargate", is_flag=True, help="Turn on fargate mode (default off)")
+@click.option(
+    "--fargate-scheduler",
+    is_flag=True,
+    help="Turn on fargate mode for scheduler (default off)",
+)
+@click.option(
+    "--fargate-workers",
+    is_flag=True,
+    help="Turn on fargate mode for workers (default off)",
+)
 @click.option(
     "--image",
     type=str,
@@ -114,9 +123,6 @@ logger = logging.getLogger(__name__)
     help="Security group to use for task communication (can be used multiple times, will be created if not specified)",
 )
 @click.option(
-    "--use-public-ip", is_flag=True, help="Request public IPs for tasks (default off)"
-)
-@click.option(
     "--environment",
     type=str,
     default=None,
@@ -133,7 +139,8 @@ logger = logging.getLogger(__name__)
 @click.option("--skip_cleanup", is_flag=True, help="Skip cleanup of stale resources")
 @click.version_option()
 def main(
-    fargate,
+    fargate_scheduler,
+    fargate_workers,
     image,
     scheduler_cpu,
     scheduler_mem,
@@ -152,7 +159,6 @@ def main(
     vpc,
     subnet,
     security_group,
-    use_public_ip,
     environment,
     tag,
     skip_cleanup,
@@ -167,7 +173,8 @@ def main(
     logger.info("Starting ECS cluster")
     try:
         cluster = ECSCluster(
-            fargate=fargate,
+            fargate_scheduler=fargate_scheduler,
+            fargate_workers=fargate_workers,
             image=image,
             scheduler_cpu=scheduler_cpu,
             scheduler_mem=scheduler_mem,
@@ -186,7 +193,6 @@ def main(
             vpc=vpc,
             subnets=subnet,
             security_groups=security_group,
-            use_public_ip=use_public_ip,
             environment=environment,
             tags=tag,
             skip_cleanup=skip_cleanup,
