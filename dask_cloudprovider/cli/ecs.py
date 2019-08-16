@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 @click.command()
+@click.option("--fargate", is_flag=True, help="Turn on fargate mode (default off)")
 @click.option(
     "--fargate-scheduler",
     is_flag=True,
@@ -139,6 +140,7 @@ logger = logging.getLogger(__name__)
 @click.option("--skip_cleanup", is_flag=True, help="Skip cleanup of stale resources")
 @click.version_option()
 def main(
+    fargate,
     fargate_scheduler,
     fargate_workers,
     image,
@@ -173,8 +175,8 @@ def main(
     logger.info("Starting ECS cluster")
     try:
         cluster = ECSCluster(
-            fargate_scheduler=fargate_scheduler,
-            fargate_workers=fargate_workers,
+            fargate_scheduler=fargate_scheduler or fargate,
+            fargate_workers=fargate_workers or fargate,
             image=image,
             scheduler_cpu=scheduler_cpu,
             scheduler_mem=scheduler_mem,
