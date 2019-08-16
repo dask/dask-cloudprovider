@@ -124,9 +124,14 @@ class Task:
 
     @property
     def _use_public_ip(self):
+        # Fargate needs public IP for image pull, EC2 doesn't support public IP, therefore
+        # we will assume for now that we will use a public IP when in Fargate mode and not
+        # when in EC2 mode.
+
+        # TODO Fargate can also use a NAT to pull the image so we could allow this to be false
+        # when in Fargate provided there is a NAT
+
         return self.fargate
-        # Fargate needs public IP for image pull, EC2 doesn't support public IP
-        # Fargate can also use NAT and private IP, we should allow this at some point
 
     async def _is_long_arn_format_enabled(self):
         [response] = (
