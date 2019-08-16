@@ -123,7 +123,7 @@ class Task:
         return _().__await__()
 
     @property
-    def use_public_ip(self):
+    def _use_public_ip(self):
         return self.fargate
         # Fargate needs public IP for image pull, EC2 doesn't support public IP
         # Fargate can also use NAT and private IP, we should allow this at some point
@@ -152,7 +152,7 @@ class Task:
                 for query_string in ["worker at:", "Scheduler at:"]:
                     if query_string in line:
                         address = line.split(query_string)[1].strip()
-                        if self.use_public_ip:
+                        if self._use_public_ip:
                             address = address.replace(self.private_ip, self.public_ip)
                         logger.debug("%s", line)
                         return address
@@ -197,7 +197,7 @@ class Task:
                                 "subnets": self._vpc_subnets,
                                 "securityGroups": self._security_groups,
                                 "assignPublicIp": "ENABLED"
-                                if self.use_public_ip
+                                if self._use_public_ip
                                 else "DISABLED",
                             }
                         },
@@ -229,7 +229,7 @@ class Task:
             NetworkInterfaceIds=[network_interface_id]
         )
         [interface] = eni["NetworkInterfaces"]
-        if self.use_public_ip:
+        if self._use_public_ip:
             self.public_ip = interface["Association"]["PublicIp"]
         self.private_ip = interface["PrivateIpAddresses"][0]["PrivateIpAddress"]
         self.address = await self._get_address_from_logs()
