@@ -1005,7 +1005,7 @@ class ECSCluster(SpecCluster):
                         "--nthreads",
                         "{}".format(int(self._worker_cpu / 1024)),
                         "--memory-limit",
-                        "{}GB".format(int(self._worker_mem / 1024)),
+                        "{}MB".format(int(self._worker_mem)),
                         "--death-timeout",
                         "60",
                     ],
