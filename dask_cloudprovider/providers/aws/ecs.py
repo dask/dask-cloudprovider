@@ -124,7 +124,14 @@ class Task:
 
     @property
     def _use_public_ip(self):
-        return True
+        # Fargate needs public IP for image pull, EC2 doesn't support public IP, therefore
+        # we will assume for now that we will use a public IP when in Fargate mode and not
+        # when in EC2 mode.
+
+        # TODO Fargate can also use a NAT to pull the image so we could allow this to be false
+        # when in Fargate provided there is a NAT
+
+        return self.fargate
 
     async def _is_long_arn_format_enabled(self):
         [response] = (
@@ -227,7 +234,8 @@ class Task:
             NetworkInterfaceIds=[network_interface_id]
         )
         [interface] = eni["NetworkInterfaces"]
-        self.public_ip = interface["Association"]["PublicIp"]
+        if self._use_public_ip:
+            self.public_ip = interface["Association"]["PublicIp"]
         self.private_ip = interface["PrivateIpAddresses"][0]["PrivateIpAddress"]
         self.address = await self._get_address_from_logs()
         self.status = "running"
@@ -340,14 +348,18 @@ class ECSCluster(SpecCluster):
 
     Parameters
     ----------
-    fargate: bool (optional)
-        Select whether or not to use fargate.
+    fargate_scheduler: bool (optional)
+        Select whether or not to use fargate for the scheduler.
+
+        Defaults to ``False``. You must provide an existing cluster.
+    fargate_workers: bool (optional)
+        Select whether or not to use fargate for the workers.
 
         Defaults to ``False``. You must provide an existing cluster.
     image: str (optional)
         The docker image to use for the scheduler and worker tasks.
 
-        Defaults to ``daskdev/dask:latest``.
+        Defaults to ``daskdev/dask:latest`` or ``rapidsai/rapidsai:latest`` if ``worker_gpu`` is set.
     scheduler_cpu: int (optional)
         The amount of CPU to request for the scheduler in milli-cpu (1/1024).
 
@@ -368,6 +380,14 @@ class ECSCluster(SpecCluster):
         The amount of memory to request for worker tasks in MB.
 
         Defaults to ``16384`` (16GB).
+    worker_gpu: int (optional)
+        The number of GPUs to expose to the worker.
+
+        To provide GPUs to workers you need to use a GPU ready docker image
+        that has ``dask-cuda`` installed and GPU nodes available in your ECS
+        cluster. Fargate is not supported at this time.
+
+        Defaults to `None`, no GPUs.
     n_workers: int (optional)
         Number of workers to start on cluster creation.
 
@@ -471,13 +491,15 @@ class ECSCluster(SpecCluster):
 
     def __init__(
         self,
-        fargate=False,
+        fargate_scheduler=False,
+        fargate_workers=False,
         image=None,
         scheduler_cpu=None,
         scheduler_mem=None,
         scheduler_timeout=None,
         worker_cpu=None,
         worker_mem=None,
+        worker_gpu=None,
         n_workers=None,
         cluster_arn=None,
         cluster_name_template=None,
@@ -496,13 +518,15 @@ class ECSCluster(SpecCluster):
         **kwargs
     ):
         self._clients = None
-        self._fargate = fargate
+        self._fargate_scheduler = fargate_scheduler
+        self._fargate_workers = fargate_workers
         self.image = image
         self._scheduler_cpu = scheduler_cpu
         self._scheduler_mem = scheduler_mem
         self._scheduler_timeout = scheduler_timeout
         self._worker_cpu = worker_cpu
         self._worker_mem = worker_mem
+        self._worker_gpu = worker_gpu
         self._n_workers = n_workers
         self.cluster_arn = cluster_arn
         self._cluster_name_template = cluster_name_template
@@ -541,14 +565,29 @@ class ECSCluster(SpecCluster):
             await _cleanup_stale_resources()
 
         self._clients = await self._get_clients()
-        self._fargate = (
-            self.config.get("fargate", False)
-            if self._fargate is None
-            else self._fargate
+        self._fargate_scheduler = (
+            self.config.get("fargate_scheduler", False)
+            if self._fargate_scheduler is None
+            else self._fargate_scheduler
+        )
+        self._fargate_workers = (
+            self.config.get("fargate_workers", False)
+            if self._fargate_workers is None
+            else self._fargate_workers
         )
         self._tags = self.config.get("tags", {}) if self._tags is None else self._tags
+        self._worker_gpu = (
+            self.config.get("worker_gpu")
+            if self._worker_gpu is None
+            else self._worker_gpu
+        )  # TODO Detect whether cluster is GPU capable
         self.image = (
-            self.config.get("image", "daskdev/dask:latest")
+            self.config.get(
+                "image",
+                "rapidsai/rapidsai:latest"
+                if self._worker_gpu
+                else "daskdev/dask:latest",
+            )
             if self.image is None
             else self.image
         )
@@ -669,16 +708,17 @@ class ECSCluster(SpecCluster):
             "security_groups": self._security_groups,
             "log_group": self.cloudwatch_logs_group,
             "log_stream_prefix": self._cloudwatch_logs_stream_prefix,
-            "fargate": self._fargate,
             "environment": self._environment,
             "tags": self.tags,
         }
         scheduler_options = {
             "task_definition_arn": self.scheduler_task_definition_arn,
+            "fargate": self._fargate_scheduler,
             **options,
         }
         worker_options = {
             "task_definition_arn": self.worker_task_definition_arn,
+            "fargate": self._fargate_workers,
             "cpu": self._worker_cpu,
             "mem": self._worker_mem,
             **options,
@@ -715,8 +755,13 @@ class ECSCluster(SpecCluster):
             await client.close()
 
     async def _create_cluster(self):
-        if not self._fargate:
+        if not self._fargate_scheduler or not self._fargate_workers:
             raise RuntimeError("You must specify a cluster when not using Fargate.")
+        if self._worker_gpu:
+            raise RuntimeError(
+                "It is not possible to use GPUs with Fargate. "
+                "Please provide an existing cluster with GPU instances available. "
+            )
         self.cluster_name = dask.config.expand_environment_variables(
             self._cluster_name_template
         )
@@ -922,7 +967,7 @@ class ECSCluster(SpecCluster):
                 }
             ],
             volumes=[],
-            requiresCompatibilities=["FARGATE"] if self._fargate else [],
+            requiresCompatibilities=["FARGATE"] if self._fargate_scheduler else [],
             cpu=str(self._scheduler_cpu),
             memory=str(self._scheduler_mem),
             tags=dict_to_aws(self.tags),
@@ -936,6 +981,11 @@ class ECSCluster(SpecCluster):
         )
 
     async def _create_worker_task_definition_arn(self):
+        resource_requirements = []
+        if self._worker_gpu:
+            resource_requirements.append(
+                {"type": "GPU", "value": str(self._worker_gpu)}
+            )
         response = await self._clients["ecs"].register_task_definition(
             family="{}-{}".format(self.cluster_name, "worker"),
             taskRoleArn=self._task_role_arn,
@@ -948,8 +998,17 @@ class ECSCluster(SpecCluster):
                     "cpu": self._worker_cpu,
                     "memory": self._worker_mem,
                     "memoryReservation": self._worker_mem,
+                    "resourceRequirements": resource_requirements,
                     "essential": True,
-                    "command": ["dask-worker"],
+                    "command": [
+                        "dask-cuda-worker" if self._worker_gpu else "dask-worker",
+                        "--nthreads",
+                        "{}".format(int(self._worker_cpu / 1024)),
+                        "--memory-limit",
+                        "{}MB".format(int(self._worker_mem)),
+                        "--death-timeout",
+                        "60",
+                    ],
                     "logConfiguration": {
                         "logDriver": "awslogs",
                         "options": {
@@ -962,7 +1021,7 @@ class ECSCluster(SpecCluster):
                 }
             ],
             volumes=[],
-            requiresCompatibilities=["FARGATE"] if self._fargate else [],
+            requiresCompatibilities=["FARGATE"] if self._fargate_workers else [],
             cpu=str(self._worker_cpu),
             memory=str(self._worker_mem),
             tags=dict_to_aws(self.tags),
@@ -1009,7 +1068,7 @@ class FargateCluster(ECSCluster):
     """
 
     def __init__(self, **kwargs):
-        super().__init__(fargate=True, **kwargs)
+        super().__init__(fargate_scheduler=True, fargate_workers=True, **kwargs)
 
 
 async def _cleanup_stale_resources():
