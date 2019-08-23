@@ -91,6 +91,8 @@ class Task:
     ):
         self.lock = asyncio.Lock()
         self.name = name
+        self.address = None
+        self.external_address = None
         self._clients = clients
         self.cluster_arn = cluster_arn
         self.task_definition_arn = task_definition_arn
@@ -147,7 +149,7 @@ class Task:
             )
         )["tasks"]
 
-    async def _get_address_from_logs(self):
+    async def _set_address_from_logs(self):
         timeout = Timeout(
             30, "Failed to find %s ip address after 30 seconds." % self.task_type
         )
@@ -157,9 +159,12 @@ class Task:
                     if query_string in line:
                         address = line.split(query_string)[1].strip()
                         if self._use_public_ip:
-                            address = address.replace(self.private_ip, self.public_ip)
+                            self.external_address = address.replace(
+                                self.private_ip, self.public_ip
+                            )
                         logger.debug("%s", line)
-                        return address
+                        self.address = address
+                        return
             else:
                 if not await self._task_is_running():
                     raise RuntimeError("%s exited unexpectedly!" % type(self).__name__)
@@ -236,7 +241,7 @@ class Task:
         if self._use_public_ip:
             self.public_ip = interface["Association"]["PublicIp"]
         self.private_ip = interface["PrivateIpAddresses"][0]["PrivateIpAddress"]
-        self.address = await self._get_address_from_logs()
+        await self._set_address_from_logs()
         self.status = "running"
 
     async def close(self, **kwargs):
