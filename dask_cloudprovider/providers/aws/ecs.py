@@ -322,15 +322,17 @@ class Worker(Task):
         Other kwargs to be passed to :class:`Task`.
     """
 
-    def __init__(self, scheduler: str, cpu: int, mem: int, **kwargs):
+    def __init__(self, scheduler: str, cpu: int, mem: int, gpu: int, **kwargs):
         super().__init__(**kwargs)
         self.task_type = "worker"
         self.scheduler = scheduler
         self._cpu = cpu
         self._mem = mem
+        self._gpu = gpu
         self._overrides = {
             "command": [
-                "dask-worker",
+                "dask-cuda-worker" if self._gpu else "dask-worker",
+                self.scheduler,
                 "--name",
                 str(self.name),
                 "--nthreads",
@@ -341,7 +343,6 @@ class Worker(Task):
                 "60",
             ]
         }
-        self.environment["DASK_SCHEDULER_ADDRESS"] = self.scheduler
 
 
 class ECSCluster(SpecCluster):
@@ -695,6 +696,7 @@ class ECSCluster(SpecCluster):
             "fargate": self._fargate_workers,
             "cpu": self._worker_cpu,
             "mem": self._worker_mem,
+            "gpu": self._worker_gpu,
             **options,
         }
 
