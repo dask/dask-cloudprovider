@@ -1,13 +1,11 @@
-Welcome to dask-cloudprovider's documentation!
-==============================================
+Dask Cloud Provider
+===================
 
+*Native Cloud integration for Dask.*
 
-Native Cloud integration for Dask. This library intends to allow people to
-create dask clusters on a given cloud provider with no set up other than having
-credentials.
-
-Providers
-=========
+This library creates Dask clusters on a given cloud provider
+with no set up other than having credentials.
+Currently, it only supports AWS..
 
 Below are the different modules for creating clusters on various cloud
 providers.
@@ -27,7 +25,7 @@ Fargate/ECS
 ^^^^^^^^^^^
 
 The ``FargateCluster`` will create a new Fargate ECS cluster by default along
-with all the IAM roles, security groups, etc that it needs to function.
+with all the IAM roles, security groups, an so on that it needs to function.
 
 .. code-block:: python
 
@@ -56,7 +54,7 @@ will be created automatically like in ``FargateCluster``.
 GPU Support
 ~~~~~~~~~~~
 
-There is also support in ``ECSCLuster`` for GPU aware dask clusters. To do
+There is also support in ``ECSCLuster`` for GPU aware Dask clusters. To do
 this you need to create an ECS cluster with GPU capable instances (from the
 ``p3`` or ``p3dn`` families) and specify the number of GPUs each worker task
 should have.
