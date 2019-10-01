@@ -5,7 +5,7 @@ Dask Cloud Provider
 
 This library creates Dask clusters on a given cloud provider
 with no set up other than having credentials.
-Currently, it only supports AWS..
+Currently, it only supports AWS.
 
 Below are the different modules for creating clusters on various cloud
 providers.
@@ -25,7 +25,7 @@ Fargate/ECS
 ^^^^^^^^^^^
 
 The ``FargateCluster`` will create a new Fargate ECS cluster by default along
-with all the IAM roles, security groups, an so on that it needs to function.
+with all the IAM roles, security groups, and so on that it needs to function.
 
 .. code-block:: python
 
