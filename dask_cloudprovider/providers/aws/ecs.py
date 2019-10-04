@@ -577,6 +577,9 @@ class ECSCluster(SpecCluster):
         if self._tags is None:
             self._tags = self.config.get("tags")
 
+        if self._environment is None:
+            self._environment = self.config.get("environment")
+
         if self._worker_gpu is None:
             self._worker_gpu = self.config.get(
                 "worker_gpu"
