@@ -65,6 +65,11 @@ class Task:
     tags: str
         AWS resource tags to be applied to any resources that are created.
 
+    find_address_timeout: int
+        Configurable timeout in seconds for finding the scheduler IP from the
+        cloudwatch logs.
+
+        Defaults to 60 seconds
     kwargs:
         Any additional kwargs which may need to be stored for later use.
 
@@ -86,6 +91,7 @@ class Task:
         fargate,
         environment,
         tags,
+        find_address_timeout=60,
         name=None,
         **kwargs
     ):
@@ -110,6 +116,7 @@ class Task:
         self.fargate = fargate
         self.environment = environment or {}
         self.tags = tags
+        self._find_address_timeout = find_address_timeout
         self.kwargs = kwargs
         self.status = "created"
 
@@ -151,7 +158,7 @@ class Task:
 
     async def _set_address_from_logs(self):
         timeout = Timeout(
-            30, "Failed to find %s ip address after 30 seconds." % self.task_type
+            self._find_address_timeout, "Failed to find %s ip address after 30 seconds." % self._find_address_timeout
         )
         while timeout.run():
             async for line in self.logs():
@@ -484,6 +491,11 @@ class ECSCluster(SpecCluster):
         Tags to apply to all resources created automatically.
 
         Defaults to ``None``. Tags will always include ``{"createdBy": "dask-cloudprovider"}``
+    find_address_timeout: int
+        Configurable timeout in seconds for finding the scheduler IP from the
+        cloudwatch logs.
+
+        Defaults to 60 seconds
     skip_cleanup: bool (optional)
         Skip cleaning up of stale resources. Useful if you have lots of resources
         and this operation takes a while.
@@ -522,6 +534,7 @@ class ECSCluster(SpecCluster):
         security_groups=None,
         environment=None,
         tags=None,
+        find_address_timeout=None
         skip_cleanup=None,
         **kwargs
     ):
@@ -550,6 +563,7 @@ class ECSCluster(SpecCluster):
         self._security_groups = security_groups
         self._environment = environment
         self._tags = tags
+        self._find_address_timeout = find_address_timeout
         self._skip_cleanup = skip_cleanup
         self._lock = asyncio.Lock()
         super().__init__(**kwargs)
@@ -582,6 +596,9 @@ class ECSCluster(SpecCluster):
 
         if self._environment is None:
             self._environment = self.config.get("environment")
+
+        if self._find_address_timeout is None:
+            self._find_address_timeout = self.config.get("find_address_timeout", 60)
 
         if self._worker_gpu is None:
             self._worker_gpu = self.config.get(
