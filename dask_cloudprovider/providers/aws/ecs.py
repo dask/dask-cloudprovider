@@ -257,7 +257,7 @@ class Task:
 
     @property
     def task_id(self):
-        return self.task_arn.split("/")[1]
+        return self.task_arn.split("/")[-1]
 
     @property
     def _log_stream_name(self):
