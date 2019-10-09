@@ -184,35 +184,38 @@ class Task:
                     if await self._is_long_arn_format_enabled()
                     else {}
                 )  # Tags are only supported if you opt into long arn format so we need to check for that
-                [self.task] = (
-                    await self._clients["ecs"].run_task(
-                        cluster=self.cluster_arn,
-                        taskDefinition=self.task_definition_arn,
-                        overrides={
-                            "containerOverrides": [
-                                {
-                                    "name": "dask-{}".format(self.task_type),
-                                    "environment": dict_to_aws(
-                                        self.environment, key_string="name"
-                                    ),
-                                    **self._overrides,
-                                }
-                            ]
-                        },
-                        count=1,
-                        launchType="FARGATE" if self.fargate else "EC2",
-                        networkConfiguration={
-                            "awsvpcConfiguration": {
-                                "subnets": self._vpc_subnets,
-                                "securityGroups": self._security_groups,
-                                "assignPublicIp": "ENABLED"
-                                if self._use_public_ip
-                                else "DISABLED",
+                response = await self._clients["ecs"].run_task(
+                    cluster=self.cluster_arn,
+                    taskDefinition=self.task_definition_arn,
+                    overrides={
+                        "containerOverrides": [
+                            {
+                                "name": "dask-{}".format(self.task_type),
+                                "environment": dict_to_aws(
+                                    self.environment, key_string="name"
+                                ),
+                                **self._overrides,
                             }
-                        },
-                        **kwargs
-                    )
-                )["tasks"]
+                        ]
+                    },
+                    count=1,
+                    launchType="FARGATE" if self.fargate else "EC2",
+                    networkConfiguration={
+                        "awsvpcConfiguration": {
+                            "subnets": self._vpc_subnets,
+                            "securityGroups": self._security_groups,
+                            "assignPublicIp": "ENABLED"
+                            if self._use_public_ip
+                            else "DISABLED",
+                        }
+                    },
+                    **kwargs
+                )
+
+                if not response.get("tasks"):
+                    raise RuntimeError(response)  # print entire response
+
+                [self.task] = response["tasks"]
                 break
             except Exception as e:
                 timeout.set_exception(e)
