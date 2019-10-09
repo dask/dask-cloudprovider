@@ -1,32 +1,31 @@
 cloudprovider:
-
   ecs:
-    fargate_scheduler: False  # Use fargate mode for the scheduler
-    fargate_workers: False  # Use fargate mode for the workers
-    scheduler_cpu: 1024  # Millicpu (1024ths of a CPU core)
-    scheduler_mem: 4096  # Memory in MB
-    worker_cpu: 4096  # Millicpu (1024ths of a CPU core)
-    worker_mem: 16384  # Memory in MB
-    worker_gpu: 0  # Number of GPUs for each worker
-    n_workers: 0  # Number of workers to start the cluster with
-    scheduler_timeout: '5 minutes'  # Length of inactivity to wait before closing the cluster
+    fargate_scheduler: False # Use fargate mode for the scheduler
+    fargate_workers: False # Use fargate mode for the workers
+    scheduler_cpu: 1024 # Millicpu (1024ths of a CPU core)
+    scheduler_mem: 4096 # Memory in MB
+    worker_cpu: 4096 # Millicpu (1024ths of a CPU core)
+    worker_mem: 16384 # Memory in MB
+    worker_gpu: 0 # Number of GPUs for each worker
+    n_workers: 0 # Number of workers to start the cluster with
+    scheduler_timeout: "5 minutes" # Length of inactivity to wait before closing the cluster
 
-    image: 'daskdev/dask:latest'  # Docker image to use for non GPU tasks
-    gpu_image: 'rapidsai/rapidsai:latest'  # Docker image to use for GPU tasks
-    cluster_name_template: 'dask-{uuid}'  # Template to use when creating a cluster
-    cluster_arn: ''  # ARN of existing ECS cluster to use (if not set one will be created)
-    execution_role_arn: ''  # Arn of existing execution role to use (if not set one will be created)
-    task_role_arn: ''  # Arn of existing task role to use (if not set one will be created)
-    task_role_policies: []  # List of policy arns to attach to tasks (e.g S3 read only access)
+    image: "daskdev/dask:latest" # Docker image to use for non GPU tasks
+    gpu_image: "rapidsai/rapidsai:latest" # Docker image to use for GPU tasks
+    cluster_name_template: "dask-{uuid}" # Template to use when creating a cluster
+    cluster_arn: "" # ARN of existing ECS cluster to use (if not set one will be created)
+    execution_role_arn: "" # Arn of existing execution role to use (if not set one will be created)
+    task_role_arn: "" # Arn of existing task role to use (if not set one will be created)
+    task_role_policies: [] # List of policy arns to attach to tasks (e.g S3 read only access)
 
-    cloudwatch_logs_group: ''  # Name of existing cloudwatch logs group to use (if not set one will be created)
-    cloudwatch_logs_stream_prefix: '{cluster_name}'  # Stream prefix template
-    cloudwatch_logs_default_retention: 30  # Number of days to retain logs (only applied if not using existing group)
+    cloudwatch_logs_group: "" # Name of existing cloudwatch logs group to use (if not set one will be created)
+    cloudwatch_logs_stream_prefix: "{cluster_name}" # Stream prefix template
+    cloudwatch_logs_default_retention: 30 # Number of days to retain logs (only applied if not using existing group)
 
-    vpc: 'default'  # VPC to use for tasks
-    subnets: []  # VPC subnets to use (will use all available if not set)
+    vpc: "default" # VPC to use for tasks
+    subnets: [] # VPC subnets to use (will use all available if not set)
     security_groups: [] # Security groups to use (if not set one will be created)
 
-    tags: {}  # Tags to apply to all AWS resources created by the cluster manager
-
-    skip_cleanup: False  # Skip cleaning up of stale resources
+    tags: {} # Tags to apply to all AWS resources created by the cluster manager
+    environment: {} # Environment variables that are set within a task container
+    skip_cleanup: False # Skip cleaning up of stale resources
