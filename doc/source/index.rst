@@ -7,6 +7,10 @@ This library creates Dask clusters on a given cloud provider
 with no set up other than having credentials.
 Currently, it only supports AWS.
 
+.. code-block:: console
+
+   $ pip install dask-cloudprovider
+
 Below are the different modules for creating clusters on various cloud
 providers.
 
