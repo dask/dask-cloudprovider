@@ -69,7 +69,7 @@ class Task:
         Configurable timeout in seconds for finding the scheduler IP from the
         cloudwatch logs.
 
-        Defaults to 60 seconds
+        Defaults to 60 seconds.
     kwargs:
         Any additional kwargs which may need to be stored for later use.
 
@@ -158,7 +158,10 @@ class Task:
 
     async def _set_address_from_logs(self):
         timeout = Timeout(
-            self._find_address_timeout, "Failed to find ip address after %s seconds." % self._find_address_timeout
+            self._find_address_timeout,
+            "Failed to find {} ip address after {} seconds.".format(
+                self.task_type, self._find_address_timeout
+            ),
         )
         while timeout.run():
             async for line in self.logs():
@@ -495,7 +498,7 @@ class ECSCluster(SpecCluster):
         Configurable timeout in seconds for finding the scheduler IP from the
         cloudwatch logs.
 
-        Defaults to 60 seconds
+        Defaults to 60 seconds.
     skip_cleanup: bool (optional)
         Skip cleaning up of stale resources. Useful if you have lots of resources
         and this operation takes a while.
