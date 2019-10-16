@@ -158,7 +158,7 @@ class Task:
 
     async def _set_address_from_logs(self):
         timeout = Timeout(
-            self._find_address_timeout, "Failed to find %s ip address after 30 seconds." % self._find_address_timeout
+            self._find_address_timeout, "Failed to find ip address after %s seconds." % self._find_address_timeout
         )
         while timeout.run():
             async for line in self.logs():
