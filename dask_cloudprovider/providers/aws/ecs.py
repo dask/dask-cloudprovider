@@ -69,7 +69,6 @@ class Task:
         Configurable timeout in seconds for finding the task IP from the
         cloudwatch logs.
 
-        Defaults to 60 seconds.
     kwargs:
         Any additional kwargs which may need to be stored for later use.
 
@@ -91,7 +90,7 @@ class Task:
         fargate,
         environment,
         tags,
-        find_address_timeout=60,
+        find_address_timeout,
         name=None,
         **kwargs
     ):
@@ -711,6 +710,7 @@ class ECSCluster(SpecCluster):
             "log_stream_prefix": self._cloudwatch_logs_stream_prefix,
             "environment": self._environment,
             "tags": self.tags,
+            "find_address_timeout": self._find_address_timeout,
         }
         scheduler_options = {
             "task_definition_arn": self.scheduler_task_definition_arn,
