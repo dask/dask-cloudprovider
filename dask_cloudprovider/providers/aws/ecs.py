@@ -66,7 +66,7 @@ class Task:
         AWS resource tags to be applied to any resources that are created.
 
     find_address_timeout: int
-        Configurable timeout in seconds for finding the scheduler IP from the
+        Configurable timeout in seconds for finding the task IP from the
         cloudwatch logs.
 
         Defaults to 60 seconds.
@@ -495,7 +495,7 @@ class ECSCluster(SpecCluster):
 
         Defaults to ``None``. Tags will always include ``{"createdBy": "dask-cloudprovider"}``
     find_address_timeout: int
-        Configurable timeout in seconds for finding the scheduler IP from the
+        Configurable timeout in seconds for finding the task IP from the
         cloudwatch logs.
 
         Defaults to 60 seconds.
