@@ -534,7 +534,7 @@ class ECSCluster(SpecCluster):
         security_groups=None,
         environment=None,
         tags=None,
-        find_address_timeout=None
+        find_address_timeout=None,
         skip_cleanup=None,
         **kwargs
     ):
