@@ -523,6 +523,9 @@ class ECSCluster(SpecCluster):
         environment=None,
         tags=None,
         skip_cleanup=None,
+        aws_access_key_id=None,
+        aws_secret_access_key=None,
+        region_name=None,
         **kwargs
     ):
         self._clients = None
@@ -551,6 +554,9 @@ class ECSCluster(SpecCluster):
         self._environment = environment
         self._tags = tags
         self._skip_cleanup = skip_cleanup
+        self._aws_access_key_id = aws_access_key_id
+        self._aws_secret_access_key = aws_secret_access_key
+        self._region_name = region_name
         self._lock = asyncio.Lock()
         super().__init__(**kwargs)
 
@@ -570,7 +576,11 @@ class ECSCluster(SpecCluster):
         if not self._skip_cleanup:
             await _cleanup_stale_resources()
 
-        self._clients = await self._get_clients()
+        self._clients = await self._get_clients(
+            aws_access_key_id=self._aws_access_key_id,
+            aws_secret_access_key=self._aws_secret_access_key,
+            region_name=self._region_name,
+        )
 
         if self._fargate_scheduler is None:
             self._fargate_scheduler = self.config.get("fargate_scheduler")
@@ -722,14 +732,14 @@ class ECSCluster(SpecCluster):
     def tags(self):
         return {**self._tags, **DEFAULT_TAGS, "cluster": self.cluster_name}
 
-    async def _get_clients(self):
+    async def _get_clients(self, **kwargs):
         session = aiobotocore.get_session()
         weakref.finalize(self, self.sync, self._close_clients)
         return {
-            "ec2": session.create_client("ec2"),
-            "ecs": session.create_client("ecs"),
-            "iam": session.create_client("iam"),
-            "logs": session.create_client("logs"),
+            "ec2": session.create_client("ec2", **kwargs),
+            "ecs": session.create_client("ecs", **kwargs),
+            "iam": session.create_client("iam", **kwargs),
+            "logs": session.create_client("logs", **kwargs),
         }
 
     async def _close_clients(self):
