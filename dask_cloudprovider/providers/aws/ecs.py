@@ -12,7 +12,11 @@ import dask
 
 from dask_cloudprovider.utils.logs import Log, Logs
 from dask_cloudprovider.utils.timeout import Timeout
-from dask_cloudprovider.providers.aws.helper import dict_to_aws, aws_to_dict
+from dask_cloudprovider.providers.aws.helper import (
+    dict_to_aws,
+    aws_to_dict,
+    get_sleep_duration,
+)
 
 from distributed.deploy.spec import SpecCluster
 from distributed.utils import warn_on_duration
@@ -280,33 +284,47 @@ class Task:
         )
 
     async def logs(self, follow=False):
+        current_try = 0
         next_token = None
         read_from = 0
+
         while True:
-            if next_token:
-                l = await self._clients["logs"].get_log_events(
-                    logGroupName=self.log_group,
-                    logStreamName=self._log_stream_name,
-                    nextToken=next_token,
-                )
-            else:
-                l = await self._clients["logs"].get_log_events(
-                    logGroupName=self.log_group,
-                    logStreamName=self._log_stream_name,
-                    startTime=read_from,
-                )
-            if next_token != l["nextForwardToken"]:
-                next_token = l["nextForwardToken"]
-            else:
-                next_token = None
-            if not l["events"]:
-                if follow:
-                    await asyncio.sleep(1)
+            try:
+                if next_token:
+                    l = await self._clients["logs"].get_log_events(
+                        logGroupName=self.log_group,
+                        logStreamName=self._log_stream_name,
+                        nextToken=next_token,
+                    )
                 else:
-                    break
-            for event in l["events"]:
-                read_from = event["timestamp"]
-                yield event["message"]
+                    l = await self._clients["logs"].get_log_events(
+                        logGroupName=self.log_group,
+                        logStreamName=self._log_stream_name,
+                        startTime=read_from,
+                    )
+                if next_token != l["nextForwardToken"]:
+                    next_token = l["nextForwardToken"]
+                else:
+                    next_token = None
+                if not l["events"]:
+                    if follow:
+                        await asyncio.sleep(1)
+                    else:
+                        break
+                for event in l["events"]:
+                    read_from = event["timestamp"]
+                    yield event["message"]
+            except ClientError as e:
+                if e.response["Error"]["Code"] == "ThrottlingException":
+                    warnings.warn(
+                        "get_log_events rate limit exceeded, retrying after delay.",
+                        RuntimeWarning,
+                    )
+                    backoff_duration = get_sleep_duration(current_try)
+                    await asyncio.sleep(backoff_duration)
+                    current_try += 1
+                else:
+                    raise
 
     def __repr__(self):
         return "<ECS Task %s: status=%s>" % (type(self).__name__, self.status)
