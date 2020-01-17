@@ -366,7 +366,7 @@ class Worker(Task):
                 "--name",
                 str(self.name),
                 "--nthreads",
-                "{}".format(int(self._cpu / 1024)),
+                "{}".format(max(int(self._cpu / 1024), 1)),
                 "--memory-limit",
                 "{}GB".format(int(self._mem / 1024)),
                 "--death-timeout",
@@ -1033,7 +1033,7 @@ class ECSCluster(SpecCluster):
                     "command": [
                         "dask-cuda-worker" if self._worker_gpu else "dask-worker",
                         "--nthreads",
-                        "{}".format(int(self._worker_cpu / 1024)),
+                        "{}".format(max(int(self._worker_cpu / 1024), 1)),
                         "--memory-limit",
                         "{}MB".format(int(self._worker_mem)),
                         "--death-timeout",
