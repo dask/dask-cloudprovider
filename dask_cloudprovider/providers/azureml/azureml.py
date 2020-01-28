@@ -1,51 +1,114 @@
 from azureml.core import Workspace, Experiment, Datastore, Dataset, Environment
+from azureml.train.estimator import Estimator
+from azureml.core.runconfig import MpiConfiguration
 
 class AzureMLCluster:
     def __init__(self
-        , workspace
-        , compute
-        , node_count
-        , environment_name
-        , experiment_name
+        , workspace                     # AML workspace object
+        , compute                       # AML compute object
+        , node_count                    # initial node count, must be less than 
+                                        # or equal to AML compute object max nodes
+        , environment_name              # name of the environment to use
+        , experiment_name               # name of the experiment to start
+        , docker_image=None             # optional -- docker image
+        , jupyter_port=9000
+        , dask_dashboard_port=9001
+        , codefileshare=None
+        , datafileshare=None
+        , update_environment=False
+        , use_GPU=False
+        , gpus_per_node=None
         , use_existing_run=False
+        , **kwargs
     ):
         self.workspace=workspace
         self.compute=compute
         self.node_count=node_count
         self.environment_name=environment_name
         self.experiment_name=experiment_name
+        self.update_environment=update_environment
+        self.docker_image=docker_image
+        self.jupyter_port=jupyter_port
+        self.dask_dashboard_port=dask_dashboard_port
+        self.codefileshare=codefileshare
+        self.datafileshare=self.workspace.get_default_datastore() if datafileshare == None else datafileshare
+        self.use_GPU=use_GPU
+        self.gpus_per_node=gpus_per_node
         self.use_existing_run=use_existing_run
+        self.kwargs=kwargs
         self.workers_list=[]
         self.run=self.create_cluster()
 
-        print('Initiated...')
+        self.__print_message('Initiated')
+
+    def __print_message(self, msg, length=80, filler='#', pre_post=''):
+        print(f'{pre_post} {msg} {pre_post}'.center(length, filler))
         
-    # def create_cluster(self):        
-    #     #set up environment
-    #     if self.environment_name not in self.workspace.environments:
-    #         env=Environment.from_existing_conda_environment(self.environment_name, 'azureml_py36')
-    #         env.python.conda_dependencies.add_pip_package('mpi4py')
-    #         env = env.register(ws)
-    #     else:
-    #         env = self.workspace.environments[self.environment_name]
+    def create_cluster(self):  
+        self.__print_message('Setting up environment')      
+        # set up environment
+        if (
+               self.environment_name not in self.workspace.environments 
+            or self.update_environment
+        ):
+            print('Rebuilding')
+            env = Environment(name=self.environment_name)
+            env.docker.enabled = True
+            env.docker.base_image = self.docker_image
 
-    #     #submit run
-    #     exp = Experiment(self.workspace, self.experiment_name)
-    #     if self.use_existing_run==True: 
-    #         run = next(exp.get_runs())
-    #     else:
-    #         est = Estimator(
-    #             'setup',
-    #             compute_target=self.compute,
-    #             entry_script='start.py',
-    #             environment_definition=env,
-    #             script_params={'--datastore': self.workspace.get_default_datastore()},
-    #             node_count=self.node_count,
-    #             distributed_training=MpiConfiguration()
-    #         )
-    #         run = exp.submit(est)
+            if self.use_GPU and 'python_interpreter' in self.kwargs:
+                env.python.interpreter_path = self.kwargs['python_interpreter']
+            env = env.register(self.workspace)
+        else:
+            env = self.workspace.environments[self.environment_name]
 
-    #     return run
+        script_params, env_params = {}, {}
+
+        ### CHECK IF pip_packages or conda_packages in kwargs
+        if 'pip_packages' in self.kwargs:
+            env_params['pip_packages'] = self.kwargs['pip_packages']
+
+        if 'conda_packages' in self.kwargs:
+            env_params['conda_packages'] = self.kwargs['conda_packages']
+
+        script_params['--jupyter'] = True
+        script_params['--code_store'] = self.workspace.datastores[self.codefileshare]
+        script_params['--data_store'] = self.workspace.datastores[self.datafileshare]
+
+        if self.use_GPU:
+            script_params['--use_GPU'] = True
+            script_params['--n_gpus_per_node'] = self.gpus_per_node
+
+        # print(env_params, script_params)
+
+        # submit run
+        self.__print_message('Submitting the experiment')
+        exp = Experiment(self.workspace, self.experiment_name)
+
+        if self.use_existing_run==True: 
+            run = next(exp.get_runs())
+        else:
+            est = Estimator(
+                  'dask_cloudprovider/providers/azureml/setup'
+                , compute_target=self.compute
+                , entry_script='start_dask_cluster.py'
+                , environment_definition=env
+                , script_params=script_params
+                , node_count=self.node_count
+                , distributed_training=MpiConfiguration()
+                , use_docker=True
+                , **env_params
+            )
+
+            # ### since the docker image we use 
+            # if self.use_GPU and 'python_interpreter' in self.kwargs:
+            #     est._estimator_config.environment.python.interpreter_path = (
+            #         self.kwargs['python_interpreter']
+            #     )
+
+            run = exp.submit(est)
+
+        return run
     
     # def connect_cluster(self):
     #     if not self.run: 
