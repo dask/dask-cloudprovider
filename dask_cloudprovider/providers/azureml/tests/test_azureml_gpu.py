@@ -122,7 +122,7 @@ if __name__ == '__main__':
         , compute=ct
         , codefileshare=codefileshare
         , datafileshare=datafileshare
-        , node_count=4
+        , initial_node_count=2
         , docker_image='todrabas/aml_rapids:latest'
         , use_GPU=True
         , gpus_per_node=gpus_per_node
