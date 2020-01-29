@@ -133,18 +133,18 @@ if __name__ == '__main__':
         worker_flush = threading.Thread(target=flush, args=(worker_proc, worker_log))
         worker_flush.start()
 
-        ### BATCH RUN
-        if(args.script):
-            command_line = ' '.join(['python', args.script]+unparsed)
-            print('Launching:', command_line)
-            exit_code = os.system(command_line)
-            print('process ended with code', exit_code)
-            print('killing scheduler, worker and jupyter')
-            jupyter_proc.kill() if args.jupyter else 0
-            scheduler_proc.kill()
-            worker_proc.kill()
-        else: ### ELSE -- INTERACTIVE
-            flush(scheduler_proc, scheduler_log)
+        # ### BATCH RUN
+        # if(args.script):
+        #     command_line = ' '.join(['python', args.script]+unparsed)
+        #     print('Launching:', command_line)
+        #     exit_code = os.system(command_line)
+        #     print('process ended with code', exit_code)
+        #     print('killing scheduler, worker and jupyter')
+        #     jupyter_proc.kill() if args.jupyter else 0
+        #     scheduler_proc.kill()
+        #     worker_proc.kill()
+        # else: ### ELSE -- INTERACTIVE
+        flush(scheduler_proc, scheduler_log)
 
     ### UNLESS I'M A WORKER
     else:

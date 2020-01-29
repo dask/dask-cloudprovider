@@ -40,7 +40,7 @@ if __name__ == '__main__':
     workspace_name = 'todrabas_UK_STH'
 
     ws = Workspace(
-          workspace_name=workspace_name 
+          workspace_name=workspace_name
         , subscription_id=subscription_id
         , resource_group=resource_group
         , auth=interactive_auth
@@ -49,16 +49,16 @@ if __name__ == '__main__':
     # ws = Workspace.from_config()
 
     ### name
-    name        = 'todrabas'             # REPLACE
+    name = 'todrabas'             # REPLACE
 
     ### vnet settings
-    vnet_rg     = ws.resource_group  # replace if needed
-    vnet_name   = 'todrabas_UK_STH_VN'     # replace if needed
+    vnet_rg = ws.resource_group  # replace if needed
+    vnet_name = 'todrabas_UK_STH_VN'     # replace if needed
     subnet_name = 'default'          # replace if needed
 
-    ### azure ml names 
-    ct_name     = f'{name}-dask-ct'
-    exp_name    = f'{name}-dask-demo'
+    ### azure ml names
+    ct_name = f'{name}-dask-ct'
+    exp_name = f'{name}-dask-demo'
 
     ### trust but verify
     verify = f'''
@@ -81,16 +81,16 @@ if __name__ == '__main__':
         # create config for Azure ML cluster
         # change properties as needed
         config = AmlCompute.provisioning_configuration(
-              vm_size                       = vm_name
-            , min_nodes                     = 0
-            , max_nodes                     = 4
-            , vnet_resourcegroup_name       = vnet_rg
-            , vnet_name                     = vnet_name
-            , subnet_name                   = subnet_name
-            , idle_seconds_before_scaledown = 120
+              vm_size=vm_name
+            , min_nodes=0
+            , max_nodes=4
+            , vnet_resourcegroup_name=vnet_rg
+            , vnet_name=vnet_name
+            , subnet_name=subnet_name
+            , idle_seconds_before_scaledown=120
         )
         ct = ComputeTarget.create(ws, ct_name, config)
-        ct.wait_for_completion(show_output=True)    
+        ct.wait_for_completion(show_output=True)
     else:
         ct = ws.compute_targets[ct_name]
 
@@ -104,13 +104,14 @@ if __name__ == '__main__':
         Datastore.register_azure_file_share(
             ws
             , codefileshare
-            , account_name = ws.datastores['workspacefilestore'].account_name # less stupid
-            , account_key  = ws.datastores['workspacefilestore'].account_key   # less less stupid
+            , account_name=ws.datastores['workspacefilestore'].account_name # less stupid
+            , account_key=ws.datastores['workspacefilestore'].account_key   # less less stupid
         )
-    
+
     if datafileshare not in ws.datasets:
         print('Registering dataset...')
-        ds = Dataset.File.from_files('https://azureopendatastorage.blob.core.windows.net/isdweatherdatacontainer/ISDWeather/*/*/*.parquet', validate=False)
+        ds = Dataset.File.from_files(
+            'https://azureopendatastorage.blob.core.windows.net/isdweatherdatacontainer/ISDWeather/*/*/*.parquet', validate=False)
         # os.system('sudo chmod 777 /mnt')
         # ds.download('/mnt/data/isd')
         ws.datastores[datafileshare].upload('/mnt/data/isd', '/noaa-isd')
@@ -128,11 +129,14 @@ if __name__ == '__main__':
         , environment_name='todrabas_GPU_ENV'
         , experiment_name=exp_name
         , use_existing_run=False
-        , update_environment=True
+        , update_environment=False
         , python_interpreter='/opt/conda/envs/rapids/bin/python'
         # , pip_packages=['foo']
         # , conda_packages=['bar']
     )
+
+    ### GET THE CLIENT
+    client = amlcluster.connect_cluster()
 
     # # for k in Environment.list(workspace=ws):
     # #     print(k)
