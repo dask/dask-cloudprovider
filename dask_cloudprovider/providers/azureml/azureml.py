@@ -54,7 +54,7 @@ class AzureMLCluster:
                self.environment_name not in self.workspace.environments
             or self.update_environment
         ):
-            self.__print_message('Rebuilding')
+            self.__print_message('Rebuilding environment')
             env = Environment(name=self.environment_name)
             env.docker.enabled = True
             env.docker.base_image = self.docker_image
@@ -152,7 +152,7 @@ class AzureMLCluster:
         # HTML(f'<a href="{dashboard_url}">Dashboard link</a>')
 
         # build the jupyter link
-        jupyter_url = f'https://{socket.gethostname()}-{self.jupyter_port}.{ws.get_details()["location"]}.instances.azureml.net/lab?token={self.run.get_metrics()["token"]}'
+        jupyter_url = f'https://{socket.gethostname()}-{self.jupyter_port}.{self.workspace.get_details()["location"]}.instances.azureml.net/lab?token={self.run.get_metrics()["token"]}'
         # HTML(f'<a href="{jupyter_url}">Jupyter link</a>')
         self.__print_message(f'NOTEBOOK: {jupyter_url}')
 
