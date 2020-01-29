@@ -1,4 +1,5 @@
 from azureml.core import Workspace, Experiment, Datastore, Dataset, Environment
+from azureml.core.environment import CondaDependencies
 from azureml.train.estimator import Estimator
 from azureml.core.runconfig import MpiConfiguration
 
@@ -44,32 +45,46 @@ class AzureMLCluster:
     def __print_message(self, msg, length=80, filler='#', pre_post=''):
         print(f'{pre_post} {msg} {pre_post}'.center(length, filler))
         
-    def create_cluster(self):  
-        self.__print_message('Setting up environment')      
+    def create_cluster(self):
         # set up environment
+        self.__print_message('Setting up environment')
+        
         if (
                self.environment_name not in self.workspace.environments 
             or self.update_environment
         ):
-            print('Rebuilding')
+            self.__print_message('Rebuilding')
             env = Environment(name=self.environment_name)
             env.docker.enabled = True
             env.docker.base_image = self.docker_image
 
             if self.use_GPU and 'python_interpreter' in self.kwargs:
                 env.python.interpreter_path = self.kwargs['python_interpreter']
+                env.python.user_managed_dependencies = True
+            
+            ### CHECK IF pip_packages or conda_packages in kwargs
+            conda_dep = None
+            if 'pip_packages' in self.kwargs or 'conda_packages' in self.kwargs:
+                conda_dep = CondaDependencies()
+
+            if 'pip_packages' in self.kwargs:
+                if self.kwargs['pip_packages'] is list:
+                    for pip_package in self.kwargs['pip_packages']:
+                        conda_dep.add_pip_package(pip_package)
+
+            if 'conda_packages' in self.kwargs:
+                if self.kwargs['pip_packages'] is list:
+                    for conda_package in self.kwargs['conda_packages']:
+                        conda_dep.add_conda_package(conda_package)
+
+            if conda_dep is not None:
+                env.python.conda_dependencies=conda_dep
+
             env = env.register(self.workspace)
         else:
             env = self.workspace.environments[self.environment_name]
 
         script_params, env_params = {}, {}
-
-        ### CHECK IF pip_packages or conda_packages in kwargs
-        if 'pip_packages' in self.kwargs:
-            env_params['pip_packages'] = self.kwargs['pip_packages']
-
-        if 'conda_packages' in self.kwargs:
-            env_params['conda_packages'] = self.kwargs['conda_packages']
 
         script_params['--jupyter'] = True
         script_params['--code_store'] = self.workspace.datastores[self.codefileshare]
@@ -78,8 +93,6 @@ class AzureMLCluster:
         if self.use_GPU:
             script_params['--use_GPU'] = True
             script_params['--n_gpus_per_node'] = self.gpus_per_node
-
-        # print(env_params, script_params)
 
         # submit run
         self.__print_message('Submitting the experiment')
@@ -99,12 +112,6 @@ class AzureMLCluster:
                 , use_docker=True
                 , **env_params
             )
-
-            # ### since the docker image we use 
-            # if self.use_GPU and 'python_interpreter' in self.kwargs:
-            #     est._estimator_config.environment.python.interpreter_path = (
-            #         self.kwargs['python_interpreter']
-            #     )
 
             run = exp.submit(est)
 
