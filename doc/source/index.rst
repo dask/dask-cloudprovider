@@ -16,14 +16,14 @@ Pip
 .. code-block:: console
 
    $ pip install dask-cloudprovider
-   
+
 Conda
 ^^^^^
 
 .. code-block:: console
 
    $ conda install -c conda-forge dask-cloudprovider
-   
+
 -----
 
 Below are the different modules for creating clusters on various cloud
@@ -73,9 +73,9 @@ will be created automatically like in ``FargateCluster``.
 GPU Support
 ~~~~~~~~~~~
 
-There is also support in ``ECSCLuster`` for GPU aware Dask clusters. To do
+There is also support in ``ECSCluster`` for GPU aware Dask clusters. To do
 this you need to create an ECS cluster with GPU capable instances (from the
-``p3`` or ``p3dn`` families) and specify the number of GPUs each worker task
+``g3``, ``p3`` or ``p3dn`` families) and specify the number of GPUs each worker task
 should have.
 
 .. code-block:: python
@@ -84,6 +84,12 @@ should have.
    cluster = ECSCluster(
        cluster_arn="arn:aws:ecs:<region>:<acctid>:cluster/<gpuclustername>",
        worker_gpu=1)
+
+By setting the ``worker_gpu`` option to something other than ``None`` will cause the cluster
+to run ``dask-cuda-worker`` as the worker startup command. Setting this option will also change
+the default Docker image to ``rapidsai/rapidsai:latest``, if you're using a custom image
+you must ensure the NVIDIA CUDA toolkit is installed with a version that matches the host machine
+along with ``dask-cuda``.
 
 .. toctree::
    :maxdepth: 3
