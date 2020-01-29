@@ -40,19 +40,23 @@ class AzureMLCluster:
         self.gpus_per_node = gpus_per_node
         self.use_existing_run = use_existing_run
         self.kwargs = kwargs
-        self.max_nodes = self.compute..serialize()['properties']['properties']['scaleSettings']['maxNodeCount']
- 
- 
+        self.max_nodes = self.compute.serialize()['properties']['properties']['scaleSettings']['maxNodeCount']
+  
         self.scheduler_params = {}
         self.worker_params = {}
-        self.run = self.create_cluster()
-
+ 
         ### CLUSTER PARAMS
         self.scheduler_ip_port = None
         self.workers_list = []
         self.URLs = {}
 
-        self.__print_message('Initiated')
+        ### SANITY CHECKS
+        if self.initial_node_count > self.max_nodes:
+            raise Exception(f'Initial count of nodes ({self.initial_node_count}) greater than allowed: {self.max_nodes}')
+
+        self.run = self.create_cluster()
+
+        # self.__print_message('Initiated')
 
     def __print_message(self, msg, length=80, filler='#', pre_post=''):
         print(f'{pre_post} {msg} {pre_post}'.center(length, filler))
@@ -112,14 +116,22 @@ class AzureMLCluster:
         self.__print_message('Submitting the experiment')
         exp = Experiment(self.workspace, self.experiment_name)
 
+        run = None
         if self.use_existing_run == True:
-            run = next(exp.get_runs())
-        else:
+            runs = exp.get_runs()
+
+            try:
+                run = next(x for x in runs if ('scheduler' in x.get_metrics() and x.get_status() == 'Running'))
+            except StopIteration:
+                run = None
+                self.__print_message('NO EXISTING RUN WITH SCHEDULER', filler='!')
+        
+        if not run:
             est = Estimator(
                   'dask_cloudprovider/providers/azureml/setup'
                 , compute_target=self.compute
                 , entry_script='start_scheduler.py'
-                , environment_definition=self.env_obj
+                , environment_definition=self.environment_obj
                 , script_params=self.scheduler_params
                 , node_count=1 ### start only scheduler
                 , distributed_training=MpiConfiguration()
@@ -128,29 +140,26 @@ class AzureMLCluster:
 
             run = exp.submit(est)
 
-        if self.initial_node_count > self.max_nodes:
-            raise Exception(f'Initial count of nodes ({self.initial_node_count}) greater than allowed: {self.max_nodes}')
-        else:
-            self.scale(self.initial_node_count)
+            self.__print_message("Waiting for scheduler node's ip")
+            while (
+                self.run.get_status() != 'Canceled' 
+                and 'scheduler' not in self.run.get_metrics()
+            ):
+                print('.', end="")
+                time.sleep(5)
+            
+            print('\n\n')
+            self.scheduler_ip_port = self.run.get_metrics()["scheduler"]
+            self.__print_message(f'Scheduler: {self.run.get_metrics()["scheduler"]}')
 
         self.run = run
+        self.scale(self.initial_node_count)
 
     def connect_cluster(self):
         if not self.run:
-            sys.exit("run doesn't exist.")
-        dashboard_port = self.dask_dashboard_port
+            sys.exit("Run doesn't exist!")
 
-        self.__print_message("Waiting for scheduler node's ip")
-        while (
-            self.run.get_status() != 'Canceled' 
-            and 'scheduler' not in self.run.get_metrics()
-        ):
-            print('.', end="")
-            time.sleep(5)
-        
-        print('\n\n')
-        self.scheduler_ip_port = self.run.get_metrics()["scheduler"]
-        self.__print_message(self.run.get_metrics()["scheduler"])
+        dashboard_port = self.dask_dashboard_port
 
         if self.run.get_status() == 'Canceled':
             print('\nRun was canceled')
@@ -198,8 +207,8 @@ class AzureMLCluster:
                 , compute_target=self.compute
                 , entry_script='start_worker.py' # pass scheduler ip from parent run
                 , environment_definition=self.environment_obj
-                , script_params=self.worker_params,
-                , node_count=1,
+                , script_params=self.worker_params
+                , node_count=1
                 , distributed_training=MpiConfiguration()
             )
 
