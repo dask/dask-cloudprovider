@@ -36,17 +36,17 @@ if __name__ == '__main__':
     parser.add_argument("--jupyter_port",    default=8888)
     parser.add_argument("--dashboard_port",  default=8787)
     parser.add_argument("--scheduler_port",  default=8786)
-    # parser.add_argument("--use_GPU",         default=False)
-    # parser.add_argument("--n_gpus_per_node", default=0)
+    parser.add_argument("--use_GPU",         default=False)
+    parser.add_argument("--n_gpus_per_node", default=0)
     # parser.add_argument("--script")
 
     args, unparsed = parser.parse_known_args()
     
-    # ### CONFIGURE GPU RUN
-    # GPU_run = args.use_GPU
+    ### CONFIGURE GPU RUN
+    GPU_run = args.use_GPU
 
-    # if GPU_run:
-    #     n_gpus_per_node = eval(args.n_gpus_per_node)
+    if GPU_run:
+        n_gpus_per_node = eval(args.n_gpus_per_node)
 
     ip = socket.gethostbyname(socket.gethostname())
     
@@ -120,41 +120,17 @@ if __name__ == '__main__':
         scheduler_log = open("scheduler_log.txt", "w")
         scheduler_proc = subprocess.Popen(cmd.split(), universal_newlines=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 
-        # ### CHOOSE THE WORKER TYPE TO RUN ON HEADNODE
-        # if not GPU_run:
-        #     cmd = "dask-worker " + scheduler 
-        # else:
-        #     os.environ["CUDA_VISIBLE_DEVICES"] = str(list(range(n_gpus_per_node))).strip("[]")
-        #     cmd = "dask-cuda-worker " + scheduler + " --memory-limit 0"
+        ### CHOOSE THE WORKER TYPE TO RUN ON HEADNODE
+        if not GPU_run:
+            cmd = "dask-worker " + scheduler 
+        else:
+            os.environ["CUDA_VISIBLE_DEVICES"] = str(list(range(n_gpus_per_node))).strip("[]")
+            cmd = "dask-cuda-worker " + scheduler + " --memory-limit 0"
 
-        # worker_log = open("worker_{rank}_log.txt".format(rank=rank), "w")
-        # worker_proc = subprocess.Popen(cmd.split(), universal_newlines=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        worker_log = open("worker_{rank}_log.txt".format(rank=rank), "w")
+        worker_proc = subprocess.Popen(cmd.split(), universal_newlines=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 
-        # worker_flush = threading.Thread(target=flush, args=(worker_proc, worker_log))
-        # worker_flush.start()
+        worker_flush = threading.Thread(target=flush, args=(worker_proc, worker_log))
+        worker_flush.start()
 
-        # ### BATCH RUN
-        # if(args.script):
-        #     command_line = ' '.join(['python', args.script]+unparsed)
-        #     print('Launching:', command_line)
-        #     exit_code = os.system(command_line)
-        #     print('process ended with code', exit_code)
-        #     print('killing scheduler, worker and jupyter')
-        #     jupyter_proc.kill() if args.jupyter else 0
-        #     scheduler_proc.kill()
-        #     worker_proc.kill()
-        # else: ### ELSE -- INTERACTIVE
         flush(scheduler_proc, scheduler_log)
-
-    # ### UNLESS I'M A WORKER
-    # else:
-    #     if not GPU_run:
-    #         cmd = "dask-worker " + scheduler 
-    #     else:
-    #         os.environ["CUDA_VISIBLE_DEVICES"] = str(list(range(n_gpus_per_node))).strip("[]")
-    #         cmd = "dask-cuda-worker " + scheduler + " --memory-limit 0"
-                 
-    #     worker_log = open("worker_{rank}_log.txt".format(rank=rank), "w")
-    #     worker_proc = subprocess.Popen(cmd.split(), universal_newlines=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-
-    #     flush(worker_proc, worker_log)

@@ -3,7 +3,7 @@ from azureml.core.environment import CondaDependencies
 from azureml.train.estimator import Estimator
 from azureml.core.runconfig import MpiConfiguration
 from IPython.core.display import HTML
-import time, os, socket
+import time, os, socket, sys
 
 class AzureMLCluster:
     def __init__(self
@@ -54,7 +54,7 @@ class AzureMLCluster:
         if self.initial_node_count > self.max_nodes:
             raise Exception(f'Initial count of nodes ({self.initial_node_count}) greater than allowed: {self.max_nodes}')
 
-        self.run = self.create_cluster()
+        self.create_cluster()
 
         # self.__print_message('Initiated')
 
@@ -142,18 +142,18 @@ class AzureMLCluster:
 
             self.__print_message("Waiting for scheduler node's ip")
             while (
-                self.run.get_status() != 'Canceled' 
-                and 'scheduler' not in self.run.get_metrics()
+                run.get_status() != 'Canceled' 
+                and 'scheduler' not in run.get_metrics()
             ):
                 print('.', end="")
                 time.sleep(5)
             
             print('\n\n')
-            self.scheduler_ip_port = self.run.get_metrics()["scheduler"]
-            self.__print_message(f'Scheduler: {self.run.get_metrics()["scheduler"]}')
+            self.scheduler_ip_port = run.get_metrics()["scheduler"]
+            self.__print_message(f'Scheduler: {run.get_metrics()["scheduler"]}')
 
         self.run = run
-        self.scale(self.initial_node_count)
+        self.scale(self.initial_node_count - 1)
 
     def connect_cluster(self):
         if not self.run:
@@ -177,7 +177,7 @@ class AzureMLCluster:
     def print_links_ComputeVM(self):
         #get the dashboard link
         dashboard_url = f'https://{socket.gethostname()}-{self.dask_dashboard_port}.{self.workspace.get_details()["location"]}.instances.azureml.net/status'
-        self.__print_message(f'DASHOARD: {dashboard_url}')
+        self.__print_message(f'DASHBOARD: {dashboard_url}')
         self.URLs['dashboard'] = HTML(f'<a href="{dashboard_url}">Dashboard link</a>')
 
         # build the jupyter link
@@ -200,10 +200,10 @@ class AzureMLCluster:
 
     # scale up
     def scale_up(self, workers=1):
-        script_params
+
         for i in range(workers):
             est = Estimator(
-                'setup'
+                 'dask_cloudprovider/providers/azureml/setup'
                 , compute_target=self.compute
                 , entry_script='start_worker.py' # pass scheduler ip from parent run
                 , environment_definition=self.environment_obj
@@ -212,7 +212,7 @@ class AzureMLCluster:
                 , distributed_training=MpiConfiguration()
             )
 
-            child_run = Experiment(self.workspace, experiment_name).submit(est)
+            child_run = Experiment(self.workspace, self.experiment_name).submit(est)
             self.workers_list.append(child_run)
 
     # scale down
@@ -222,4 +222,13 @@ class AzureMLCluster:
                     child_run=self.workers_list.pop(0) #deactive oldest workers
                     child_run.cancel()
                 else:
-                    print("All scaled workers are removed.")
+                    self.__print_message("All scaled workers are removed.")
+                    
+    # close cluster
+    def close(self):
+        while self.workers_list:
+            child_run=self.workers_list.pop()
+            child_run.cancel()
+        if self.run:
+            self.run.cancel()
+        self.__print_message("Scheduler and workers are disconnected.")
