@@ -87,7 +87,7 @@ if __name__ == '__main__':
             , vnet_resourcegroup_name=vnet_rg
             , vnet_name=vnet_name
             , subnet_name=subnet_name
-            , idle_seconds_before_scaledown=120
+            , idle_seconds_before_scaledown=300
         )
         ct = ComputeTarget.create(ws, ct_name, config)
         ct.wait_for_completion(show_output=True)

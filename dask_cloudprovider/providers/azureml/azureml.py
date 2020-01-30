@@ -109,6 +109,8 @@ class AzureMLCluster:
         self.worker_params['--data_store'] = self.workspace.datastores[self.datafileshare]
 
         if self.use_GPU:
+            self.scheduler_params['--use_GPU'] = True
+            self.scheduler_params['--n_gpus_per_node'] = self.gpus_per_node
             self.worker_params['--use_GPU'] = True
             self.worker_params['--n_gpus_per_node'] = self.gpus_per_node
 
@@ -149,7 +151,9 @@ class AzureMLCluster:
                 time.sleep(5)
             
             print('\n\n')
+            
             self.scheduler_ip_port = run.get_metrics()["scheduler"]
+            self.worker_params['--scheduler_ip_port'] = self.scheduler_ip_port
             self.__print_message(f'Scheduler: {run.get_metrics()["scheduler"]}')
 
         self.run = run
@@ -200,7 +204,6 @@ class AzureMLCluster:
 
     # scale up
     def scale_up(self, workers=1):
-
         for i in range(workers):
             est = Estimator(
                  'dask_cloudprovider/providers/azureml/setup'
@@ -222,7 +225,7 @@ class AzureMLCluster:
                     child_run=self.workers_list.pop(0) #deactive oldest workers
                     child_run.cancel()
                 else:
-                    self.__print_message("All scaled workers are removed.")
+                    print("All scaled workers are removed.")
                     
     # close cluster
     def close(self):
