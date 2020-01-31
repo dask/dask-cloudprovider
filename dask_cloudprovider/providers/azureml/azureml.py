@@ -23,12 +23,12 @@ class AzureMLCluster:
         , jupyter=True                  # start Jupyter lab process on headnode
         , jupyter_port=9000             # port to forward the Jupyter process to
         , dashboard_port=9001           # port to forward Dask dashboard to
-        , datastores=[]
+        , datastores=[]                 # datastores specs
         , **kwargs
     ):
         ### GENERAL FLAGS
         self.workspace = workspace
-        self.compute = compute
+        self.compute_target = compute_target
         self.initial_node_count = initial_node_count
 
         ### EXPERIMENT DEFINITION
@@ -41,7 +41,7 @@ class AzureMLCluster:
         self.conda_packages = conda_packages       
         
         ### GPU RUN INFO
-        self.use_GPU = use_GPU
+        self.use_gpu = use_gpu
         self.n_gpus_per_node = n_gpus_per_node
         
         ### JUPYTER AND PORT FORWARDING
@@ -62,7 +62,7 @@ class AzureMLCluster:
         ### CLUSTER PARAMS
         self.max_nodes = (
             self
-            .compute
+            .compute_target
             .serialize()
             ['properties']
             ['properties']
@@ -77,10 +77,6 @@ class AzureMLCluster:
         ###-----> initial node count
         if self.initial_node_count > self.max_nodes:
             self.initial_node_count = self.max_nodes
-
-        print(self.pip_packages)
-        print(self.environment_definition)
-        print(environment_definition)
 
         ###-----> environment spec
         if self.environment_definition and (
@@ -213,7 +209,7 @@ class AzureMLCluster:
         for i in range(workers):
             est = Estimator(
                  'dask_cloudprovider/providers/azureml/setup'
-                , compute_target=self.compute
+                , compute_target=self.compute_target
                 , entry_script='start_worker.py' # pass scheduler ip from parent run
                 , environment_definition=self.environment_obj
                 , script_params=self.worker_params
