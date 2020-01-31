@@ -8,7 +8,7 @@ import time, os, socket, sys
 class AzureMLCluster:
     def __init__(self
         , workspace                     # AML workspace object
-        , compute                       # AML compute object
+        , compute_target                # AML compute object
         , initial_node_count = 1        # initial node count, must be less than
                                         # or equal to AML compute object max nodes
                                         # will default to max nodes if more than
@@ -17,7 +17,7 @@ class AzureMLCluster:
         , environment_definition=None   # name of the environment to use
         , pip_packages=None             # list of pip packages to install
         , conda_packages=None           # list of conda packages to install 
-        , use_GPU=False                 # flag to indicate GPU vs CPU cluster
+        , use_gpu=False                 # flag to indicate GPU vs CPU cluster
         , n_gpus_per_node=None          # number of GPUs per node if use_GPU flag set
         , docker_image=None             # optional -- docker image
         , jupyter=True                  # start Jupyter lab process on headnode
@@ -78,15 +78,20 @@ class AzureMLCluster:
         if self.initial_node_count > self.max_nodes:
             self.initial_node_count = self.max_nodes
 
+        print(self.pip_packages)
+        print(self.environment_definition)
+        print(environment_definition)
+
         ###-----> environment spec
         if self.environment_definition and (
                (type(self.pip_packages)   is list and len(self.pip_packages)   > 0)
             or (type(self.conda_packages) is list and len(self.conda_packages) > 0)
         ):
-            raise Exception('Cannot specify `environment_definition` and `pip_packages` nor `conda_packages`.')
+            
+            raise Exception('Specify only `environment_definition` or either `pip_packages` or `conda_packages`.')
 
-        ### INITIALIZE CLUSTER
-        self.create_cluster()
+        # ### INITIALIZE CLUSTER
+        # self.create_cluster()
 
     def __print_message(self, msg, length=80, filler='#', pre_post=''):
         print(f'{pre_post} {msg} {pre_post}'.center(length, filler))
