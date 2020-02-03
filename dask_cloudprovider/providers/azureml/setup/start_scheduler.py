@@ -30,20 +30,21 @@ if __name__ == '__main__':
     ### PARSE ARGUMENTS
     parser = argparse.ArgumentParser()
     parser.add_argument("--jupyter",         default=False)
-    parser.add_argument("--code_store",      default=None)
-    parser.add_argument("--data_store",      default=None)
+    # parser.add_argument("--code_store",      default=None)
+    # parser.add_argument("--data_store",      default=None)
+    parser.add_argument("--datastores",      default=None)
     parser.add_argument("--jupyter_token",   default=uuid.uuid1().hex)
     parser.add_argument("--jupyter_port",    default=8888)
     parser.add_argument("--dashboard_port",  default=8787)
     parser.add_argument("--scheduler_port",  default=8786)
-    parser.add_argument("--use_GPU",         default=False)
+    parser.add_argument("--use_gpu",         default=False)
     parser.add_argument("--n_gpus_per_node", default=0)
     # parser.add_argument("--script")
 
     args, unparsed = parser.parse_known_args()
     
     ### CONFIGURE GPU RUN
-    GPU_run = args.use_GPU
+    GPU_run = args.use_gpu
 
     if GPU_run:
         n_gpus_per_node = eval(args.n_gpus_per_node)
@@ -57,20 +58,21 @@ if __name__ == '__main__':
             "dashboard"  : ip + ':' + str(args.dashboard_port),
             "jupyter"    : ip + ':' + str(args.jupyter_port),
             "token"      : args.jupyter_token,
-            "codestore"  : args.code_store,
-            "datastore"  : args.data_store
+            "datastores" : args.datastores
+            # "datastore"  : args.data_store
             }
     else:
         data = None
     
     ### DISTRIBUTE TO CLUSTER
     data = comm.bcast(data, root=0)
-    scheduler = data["scheduler"]
-    dashboard = data["dashboard"]
-    jupyter   = data["jupyter"]
-    codestore = data["codestore"]
-    datastore = data["datastore"]
-    token     = data["token"]
+    scheduler  = data["scheduler"]
+    dashboard  = data["dashboard"]
+    jupyter    = data["jupyter"]
+    datastores = data['datastores']
+    # codestore = data["codestore"]
+    # datastore = data["datastore"]
+    token      = data["token"]
 
     print("- scheduler is ", scheduler)
     print("- dashboard is ", dashboard)
@@ -95,13 +97,15 @@ if __name__ == '__main__':
         Run.get_context().log('dashboard', dashboard)
         Run.get_context().log('jupyter', jupyter)
         Run.get_context().log('token', token)
-        Run.get_context().log('codestore', codestore)
-        Run.get_context().log('datastore', datastore)
+        for i, datastore in enumerate(datastores):
+            Run.get_context().log(f'datastore_{i}', datastore)
+        # Run.get_context().log('codestore', codestore)
+        # Run.get_context().log('datastore', datastore)
         
         if args.jupyter:
             cmd = (f' jupyter lab --ip 0.0.0.0 --port {args.jupyter_port}' + \
                               f' --NotebookApp.token={token}'              + \
-                              f' --notebook-dir={codestore}/..'            + \
+                            #   f' --notebook-dir={codestore}/..'            + \
                               f' --allow-root --no-browser')
     
             jupyter_log = open("jupyter_log.txt", "a")

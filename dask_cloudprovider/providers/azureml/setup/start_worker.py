@@ -29,17 +29,18 @@ if __name__ == '__main__':
 
     ### PARSE ARGUMENTS
     parser = argparse.ArgumentParser()
-    parser.add_argument("--code_store",        default=None)
-    parser.add_argument("--data_store",        default=None)
+    # parser.add_argument("--code_store",        default=None)
+    # parser.add_argument("--data_store",        default=None)
+    parser.add_argument("--datastores",        default=[])
     parser.add_argument("--scheduler_ip_port", default=None)
-    parser.add_argument("--use_GPU",           default=False)
+    parser.add_argument("--use_gpu",           default=False)
     parser.add_argument("--n_gpus_per_node",   default=0)
     # parser.add_argument("--script")
 
     args, unparsed = parser.parse_known_args()
     
     ### CONFIGURE GPU RUN
-    GPU_run = args.use_GPU
+    GPU_run = args.use_gpu
 
     if GPU_run:
         n_gpus_per_node = eval(args.n_gpus_per_node)
