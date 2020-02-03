@@ -6,10 +6,9 @@ from dask_cloudprovider import AzureMLCluster
 from ..azureml_configs import AzureMLConfigurations
 import os
 
-import unittest
-
-class TestAzureMLCluster(unittest.TestCase):
-    def setUp(self):
+import asyncio
+class aml_test:
+    def __init__(self):
         # interactive_auth = InteractiveLoginAuthentication(
         #     tenant_id='72f988bf-86f1-41af-91ab-2d7cd011db47'
         # )
@@ -34,24 +33,24 @@ class TestAzureMLCluster(unittest.TestCase):
         subnet_name = 'default'          # replace if needed
 
         ### azure ml names
-        self.ct_name  = f'{name}-dask-ct'
+        self.ct_name  = f'{name}-gpu'
         self.exp_name = f'{name}-dask-demo'
 
-        # ### trust but verify
-        # verify = f'''
-        # Name: {name}
+        ### trust but verify
+        verify = f'''
+        Name: {name}
 
-        # vNET RG: {vnet_rg}
-        # vNET name: {vnet_name}
-        # vNET subnet name: {subnet_name}
+        vNET RG: {vnet_rg}
+        vNET name: {vnet_name}
+        vNET subnet name: {subnet_name}
 
-        # Compute target: {self.ct_name}
-        # Experiment name: {self.exp_name}
-        # '''
+        Compute target: {self.ct_name}
+        Experiment name: {self.exp_name}
+        '''
 
-        # print(verify)
+        print(verify)
 
-        self.vm_name = list(AzureMLConfigurations.azure_gpu_vms.keys())[6]
+        self.vm_name = list(AzureMLConfigurations.azure_gpu_vms.keys())[4]
         self.gpus_per_node = AzureMLConfigurations.azure_gpu_vms[self.vm_name]
 
         if self.ct_name not in self.ws.compute_targets:
@@ -103,6 +102,8 @@ class TestAzureMLCluster(unittest.TestCase):
         self.pip_packages = ['azureml-sdk']
         self.conda_packages = ['matplotlib']
 
+        
+
         if (
                 self.environment_name not in self.ws.environments
             or self.update_environment
@@ -138,38 +139,30 @@ class TestAzureMLCluster(unittest.TestCase):
             self.evn = env
         else:
             self.env = self.ws.environments[self.environment_name]
-
-        # print('zzzz', self.env)
-
+        
+        print(f'''
+        Environment: {self.env.name}
+        ''')
         self.datastores = [codefileshare, datafileshare]
 
-    def test_environmentDefinedNoPackages(self):
-        amlcluster = AzureMLCluster(
-              workspace=self.ws
-            , compute_target=self.ct
-            , initial_node_count=2
-            , experiment_name=self.exp_name
-            , environment_defintion=self.env
-        )
-
-    def test_environmentUndefinedNoPackages(self):
-        amlcluster = AzureMLCluster(
-              workspace=self.ws
-            , compute_target=self.ct
-            , initial_node_count=2
-            , experiment_name=self.exp_name
-        )
-
-    @unittest.expectedFailure
-    def test_environmentDefinedAndPIPPackages(self):
+    def environmentDefinedNoPackages_Start(self):
         amlcluster = AzureMLCluster(
               workspace=self.ws
             , compute_target=self.ct
             , initial_node_count=2
             , experiment_name=self.exp_name
             , environment_definition=self.env
-            , pip_packages=self.pip_packages
+            , use_gpu=True
+            , n_gpus_per_node=4
+            , datastores=[codefileshare, datafileshare]
         )
 
+        # return amlcluster
+
+        # amlcluster.create_cluster()
+
 if __name__ == '__main__':
-    unittest.main()
+    amlcl = aml_test()
+    amlcl.environmentDefinedNoPackages_Start()
+    # asyncio.run(asyncio.gather(amlcl.environmentDefinedNoPackages_Start()))
+    # amlcl

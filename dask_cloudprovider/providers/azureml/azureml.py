@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from azureml.core import Workspace, Experiment, Datastore, Dataset, Environment
 from azureml.core.environment import CondaDependencies
 from azureml.train.estimator import Estimator
@@ -95,6 +96,7 @@ class AzureMLCluster(Cluster):
         # ### INITIALIZE CLUSTER
         # self.create_cluster()
         super().__init__(asynchronous=asynchronous)
+        asyncio.run(self.create_cluster())
 
     def __print_message(self, msg, length=80, filler='#', pre_post=''):
         print(f'{pre_post} {msg} {pre_post}'.center(length, filler))
@@ -105,7 +107,7 @@ class AzureMLCluster(Cluster):
     # async def _start(self):
     #     self.__print_message('Starting cluster...')
 
-    def create_cluster(self):
+    async def create_cluster(self):
         # set up environment
         self.__print_message('Setting up cluster')
 
@@ -119,6 +121,7 @@ class AzureMLCluster(Cluster):
         for datastore in self.datastores:
             temp_datastores.append(self.workspace.datastores[datastore])            
         self.datastores = temp_datastores
+        print(self.datastores)
 
         self.scheduler_params['--datastores'] = [['sss', 'fff']]
 
@@ -161,7 +164,7 @@ class AzureMLCluster(Cluster):
 
             run = exp.submit(est)
 
-            self.__print_message("Waiting for scheduler node's ip")
+            self.__print_message("Waiting for scheduler node's IP")
             while (
                 (
                        run.get_status() != 'Canceled' 
@@ -179,8 +182,10 @@ class AzureMLCluster(Cluster):
             self.__print_message(f'Scheduler: {run.get_metrics()["scheduler"]}')
             
             ### REQUIRED BY dask.distributed.deploy.cluster.Cluster
-            self.scheduler_comm = rpc(run.get_metrics()["scheduler"])     
-            super()._start()
+            self.scheduler_comm = rpc(run.get_metrics()["scheduler"])
+            print(self.scheduler_comm.live_comm())
+            # await asyncio.wait_for(self._start(), timeout=120.0)
+            # super()._start()
 
         self.run = run
         # self.scale(self.initial_node_count - 1)
@@ -190,6 +195,18 @@ class AzureMLCluster(Cluster):
         ### TESTING ONLY
         self.run.cancel()
         self.run.complete()
+
+    async def _start(self):
+        print('Starting')
+        comm = await asyncio.wait_for(self.scheduler_comm.live_comm(), timeout=120.0)
+        await comm.write({"op": "subscribe_worker_status"})
+        print('FFFSFSF')
+        self.scheduler_info = await comm.read()
+        # self._watch_worker_status_comm = comm
+        # self._watch_worker_status_task = asyncio.ensure_future(
+        #     self._watch_worker_status(comm)
+        # )
+        self.status = "running"
 
     def connect_cluster(self):
         if not self.run:
