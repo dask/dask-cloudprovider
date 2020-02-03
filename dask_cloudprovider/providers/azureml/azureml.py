@@ -1,3 +1,5 @@
+import asyncio
+import logging
 from azureml.core import Workspace, Experiment, Datastore, Dataset, Environment
 from azureml.core.environment import CondaDependencies
 from azureml.train.estimator import Estimator
@@ -5,7 +7,10 @@ from azureml.core.runconfig import MpiConfiguration
 from IPython.core.display import HTML
 import time, os, socket, sys
 
-class AzureMLCluster:
+from distributed.deploy.cluster import Cluster
+from distributed.core import rpc
+
+class AzureMLCluster(Cluster):
     def __init__(self
         , workspace                     # AML workspace object
         , compute_target                # AML compute object
@@ -23,12 +28,13 @@ class AzureMLCluster:
         , jupyter=True                  # start Jupyter lab process on headnode
         , jupyter_port=9000             # port to forward the Jupyter process to
         , dashboard_port=9001           # port to forward Dask dashboard to
-        , datastores=[]
+        , datastores=[]                 # datastores specs
+        , asynchronous=False            # flag to run jobs in an asynchronous way
         , **kwargs
     ):
         ### GENERAL FLAGS
         self.workspace = workspace
-        self.compute = compute
+        self.compute_target = compute_target
         self.initial_node_count = initial_node_count
 
         ### EXPERIMENT DEFINITION
@@ -38,10 +44,10 @@ class AzureMLCluster:
         ### ENVIRONMENT AND VARIABLES
         self.environment_definition = environment_definition
         self.pip_packages = pip_packages 
-        self.conda_packages = conda_packages       
+        self.conda_packages = conda_packages
         
         ### GPU RUN INFO
-        self.use_GPU = use_GPU
+        self.use_gpu = use_gpu
         self.n_gpus_per_node = n_gpus_per_node
         
         ### JUPYTER AND PORT FORWARDING
@@ -62,7 +68,7 @@ class AzureMLCluster:
         ### CLUSTER PARAMS
         self.max_nodes = (
             self
-            .compute
+            .compute_target
             .serialize()
             ['properties']
             ['properties']
@@ -72,15 +78,12 @@ class AzureMLCluster:
         self.scheduler_ip_port = None
         self.workers_list = []
         self.URLs = {}
+        # self.status = "created"     ### REQUIRED BY distributed.deploy.cluster.Cluster
 
         ### SANITY CHECKS
         ###-----> initial node count
         if self.initial_node_count > self.max_nodes:
             self.initial_node_count = self.max_nodes
-
-        print(self.pip_packages)
-        print(self.environment_definition)
-        print(environment_definition)
 
         ###-----> environment spec
         if self.environment_definition and (
@@ -92,6 +95,8 @@ class AzureMLCluster:
 
         # ### INITIALIZE CLUSTER
         # self.create_cluster()
+        super().__init__(asynchronous=asynchronous)
+        asyncio.run(self.create_cluster())
 
     def __print_message(self, msg, length=80, filler='#', pre_post=''):
         print(f'{pre_post} {msg} {pre_post}'.center(length, filler))
@@ -99,71 +104,109 @@ class AzureMLCluster:
     def __get_estimator(self):
         return None
 
-    def create_cluster(self):
+    # async def _start(self):
+    #     self.__print_message('Starting cluster...')
+
+    async def create_cluster(self):
         # set up environment
-        self.__print_message('Setting up environment')
+        self.__print_message('Setting up cluster')
 
-
-        # 
-
-        # ### scheduler and worker parameters
-        # self.scheduler_params['--jupyter'] = True
+        ### scheduler and worker parameters
+        self.scheduler_params['--jupyter'] = True
         # self.scheduler_params['--code_store'] = self.workspace.datastores[self.codefileshare]
         # self.scheduler_params['--data_store'] = self.workspace.datastores[self.datafileshare]
-
-        # self.worker_params['--code_store'] = self.workspace.datastores[self.codefileshare]
-        # self.worker_params['--data_store'] = self.workspace.datastores[self.datafileshare]
-
-        # if self.use_GPU:
-        #     self.scheduler_params['--use_GPU'] = True
-        #     self.scheduler_params['--n_gpus_per_node'] = self.gpus_per_node
-        #     self.worker_params['--use_GPU'] = True
-        #     self.worker_params['--n_gpus_per_node'] = self.gpus_per_node
-
-        # # submit run
-        # self.__print_message('Submitting the experiment')
-        # exp = Experiment(self.workspace, self.experiment_name)
-
-        # run = None
-        # if self.use_existing_run == True:
-        #     runs = exp.get_runs()
-
-        #     try:
-        #         run = next(x for x in runs if ('scheduler' in x.get_metrics() and x.get_status() == 'Running'))
-        #     except StopIteration:
-        #         run = None
-        #         self.__print_message('NO EXISTING RUN WITH SCHEDULER', filler='!')
         
-        # if not run:
-        #     est = Estimator(
-        #           'dask_cloudprovider/providers/azureml/setup'
-        #         , compute_target=self.compute
-        #         , entry_script='start_scheduler.py'
-        #         , environment_definition=self.environment_obj
-        #         , script_params=self.scheduler_params
-        #         , node_count=1 ### start only scheduler
-        #         , distributed_training=MpiConfiguration()
-        #         , use_docker=True
-        #     )
+        ### ADD DATASTORES
+        temp_datastores = []
+        for datastore in self.datastores:
+            temp_datastores.append(self.workspace.datastores[datastore])            
+        self.datastores = temp_datastores
+        print(self.datastores)
 
-        #     run = exp.submit(est)
+        self.scheduler_params['--datastores'] = [['sss', 'fff']]
 
-        #     self.__print_message("Waiting for scheduler node's ip")
-        #     while (
-        #         run.get_status() != 'Canceled' 
-        #         and 'scheduler' not in run.get_metrics()
-        #     ):
-        #         print('.', end="")
-        #         time.sleep(5)
+        # self.scheduler_params['--datastores'] = self.datastores
+        # self.worker_params['--datastores']    = self.datastores
+        # # self.worker_params['--code_store'] = self.workspace.datastores[self.codefileshare]
+        # # self.worker_params['--data_store'] = self.workspace.datastores[self.datafileshare]
+
+        if self.use_gpu:
+            self.scheduler_params['--use_gpu'] = True
+            self.scheduler_params['--n_gpus_per_node'] = self.n_gpus_per_node
+            self.worker_params['--use_gpu'] = True
+            self.worker_params['--n_gpus_per_node'] = self.n_gpus_per_node
+
+        # submit run
+        self.__print_message('Submitting the experiment')
+        exp = Experiment(self.workspace, self.experiment_name)
+
+        run = None
+        if self.use_existing_run == True:
+            runs = exp.get_runs()
+
+            try:
+                run = next(x for x in runs if ('scheduler' in x.get_metrics() and x.get_status() == 'Running'))
+            except StopIteration:
+                run = None
+                self.__print_message('NO EXISTING RUN WITH SCHEDULER', filler='!')
+        
+        if not run:
+            est = Estimator(
+                  'dask_cloudprovider/providers/azureml/setup'
+                , compute_target=self.compute_target
+                , entry_script='start_scheduler.py'
+                , environment_definition=self.environment_definition
+                , script_params=self.scheduler_params
+                , node_count=1 ### start only scheduler
+                , distributed_training=MpiConfiguration()
+                , use_docker=True
+            )
+
+            run = exp.submit(est)
+
+            self.__print_message("Waiting for scheduler node's IP")
+            while (
+                (
+                       run.get_status() != 'Canceled' 
+                    or run.get_status() != 'Failed'
+                )
+                and 'scheduler' not in run.get_metrics()
+            ):
+                print('.', end="")
+                time.sleep(5)
             
-        #     print('\n\n')
+            print('\n\n')
             
-        #     self.scheduler_ip_port = run.get_metrics()["scheduler"]
-        #     self.worker_params['--scheduler_ip_port'] = self.scheduler_ip_port
-        #     self.__print_message(f'Scheduler: {run.get_metrics()["scheduler"]}')
+            self.scheduler_ip_port = run.get_metrics()["scheduler"]
+            self.worker_params['--scheduler_ip_port'] = self.scheduler_ip_port
+            self.__print_message(f'Scheduler: {run.get_metrics()["scheduler"]}')
+            
+            ### REQUIRED BY dask.distributed.deploy.cluster.Cluster
+            self.scheduler_comm = rpc(run.get_metrics()["scheduler"])
+            print(self.scheduler_comm.live_comm())
+            # await asyncio.wait_for(self._start(), timeout=120.0)
+            # super()._start()
 
-        # self.run = run
+        self.run = run
         # self.scale(self.initial_node_count - 1)
+
+        self.__print_message(self.status)
+
+        ### TESTING ONLY
+        self.run.cancel()
+        self.run.complete()
+
+    async def _start(self):
+        print('Starting')
+        comm = await asyncio.wait_for(self.scheduler_comm.live_comm(), timeout=120.0)
+        await comm.write({"op": "subscribe_worker_status"})
+        print('FFFSFSF')
+        self.scheduler_info = await comm.read()
+        # self._watch_worker_status_comm = comm
+        # self._watch_worker_status_task = asyncio.ensure_future(
+        #     self._watch_worker_status(comm)
+        # )
+        self.status = "running"
 
     def connect_cluster(self):
         if not self.run:
@@ -213,9 +256,9 @@ class AzureMLCluster:
         for i in range(workers):
             est = Estimator(
                  'dask_cloudprovider/providers/azureml/setup'
-                , compute_target=self.compute
+                , compute_target=self.compute_target
                 , entry_script='start_worker.py' # pass scheduler ip from parent run
-                , environment_definition=self.environment_obj
+                , environment_definition=self.environment_definition
                 , script_params=self.worker_params
                 , node_count=1
                 , distributed_training=MpiConfiguration()
@@ -240,7 +283,9 @@ class AzureMLCluster:
             child_run=self.workers_list.pop()
             child_run.complete() # complete() will mark the run "Complete", but won't kill the process
             child_run.cancel()
+            child_run.complete()
         if self.run:
             self.run.complete()  # complete() will mark the run "Complete", but won't kill the process
             self.run.cancel()
+            self.run.complete()
         self.__print_message("Scheduler and workers are disconnected.")
