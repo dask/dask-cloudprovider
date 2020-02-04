@@ -72,10 +72,10 @@ class aml_test:
 
         ## specify the data and code stores
 
-        codefileshare = 'codefileshare'
-        datafileshare = 'datafiles'
+        self.codefileshare = 'codefileshare'
+        self.datafileshare = 'datafiles'
 
-        if codefileshare not in self.ws.datastores:
+        if self.codefileshare not in self.ws.datastores:
             print('Registering codeshare...')
             Datastore.register_azure_file_share(
                 self.ws
@@ -84,7 +84,7 @@ class aml_test:
                 , account_key=self.ws.datastores['workspacefilestore'].account_key   # less less stupid
             )
 
-        if datafileshare not in self.ws.datasets:
+        if self.datafileshare not in self.ws.datasets:
             print('Registering dataset...')
             ds = Dataset.File.from_files(
                 'https://azureopendatastorage.blob.core.windows.net/isdweatherdatacontainer/ISDWeather/*/*/*.parquet', validate=False)
@@ -143,7 +143,7 @@ class aml_test:
         print(f'''
         Environment: {self.env.name}
         ''')
-        self.datastores = [codefileshare, datafileshare]
+        self.datastores = [self.codefileshare, self.datafileshare]
 
     def environmentDefinedNoPackages_Start(self):
         amlcluster = AzureMLCluster(
@@ -154,7 +154,7 @@ class aml_test:
             , environment_definition=self.env
             , use_gpu=True
             , n_gpus_per_node=4
-            , datastores=[codefileshare, datafileshare]
+            , datastores=self.datastores#[self.codefileshare, self.datafileshare]
         )
 
         # return amlcluster
