@@ -96,7 +96,14 @@ class AzureMLCluster(Cluster):
         # ### INITIALIZE CLUSTER
         # self.create_cluster()
         super().__init__(asynchronous=asynchronous)
-        asyncio.run(self.create_cluster())
+        print(sys.version_info.minor)
+        
+        ### BREAKING CHANGE IN ASYNCIO API
+        if sys.version_info.minor < 7:
+            loop = asyncio.get_event_loop()
+            loop.run_until_complete(self.create_cluster())
+        else:
+            asyncio.run(self.create_cluster())
 
     def __print_message(self, msg, length=80, filler='#', pre_post=''):
         print(f'{pre_post} {msg} {pre_post}'.center(length, filler))
@@ -183,8 +190,8 @@ class AzureMLCluster(Cluster):
             
             ### REQUIRED BY dask.distributed.deploy.cluster.Cluster
             self.scheduler_comm = rpc(run.get_metrics()["scheduler"])
-            print(self.scheduler_comm.live_comm())
-            # await asyncio.wait_for(self._start(), timeout=120.0)
+#             print(self.scheduler_comm.live_comm())
+            await asyncio.wait_for(self._start(), timeout=120.0)
             # super()._start()
 
         self.run = run
@@ -272,6 +279,7 @@ class AzureMLCluster(Cluster):
          for i in range(workers):
                 if self.workers_list:
                     child_run=self.workers_list.pop(0) #deactive oldest workers
+                    child_run.complete() # complete() will mark the run "Complete", but won't kill the process
                     child_run.cancel()
                 else:
                     print("All scaled workers are removed.")
@@ -280,9 +288,11 @@ class AzureMLCluster(Cluster):
     def close(self):
         while self.workers_list:
             child_run=self.workers_list.pop()
+            child_run.complete() # complete() will mark the run "Complete", but won't kill the process
             child_run.cancel()
             child_run.complete()
         if self.run:
+            self.run.complete()  # complete() will mark the run "Complete", but won't kill the process
             self.run.cancel()
             self.run.complete()
         self.__print_message("Scheduler and workers are disconnected.")
