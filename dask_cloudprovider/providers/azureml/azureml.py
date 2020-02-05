@@ -57,6 +57,10 @@ class AzureMLCluster(Cluster):
 
         ### DATASTORES
         self.datastores = datastores
+        self.codefileshare = datastores[0]
+        self.datafileshare = datastores[1]
+        
+        print(self.datastores, self.codefileshare, self.datafileshare)
         
         ### FUTURE EXTENSIONS
         self.kwargs = kwargs
@@ -76,9 +80,8 @@ class AzureMLCluster(Cluster):
             ['maxNodeCount']
         )
         self.scheduler_ip_port = None
-        self.workers_list = []
+#         self.workers_list = []
         self.URLs = {}
-        # self.status = "created"     ### REQUIRED BY distributed.deploy.cluster.Cluster
 
         ### SANITY CHECKS
         ###-----> initial node count
@@ -94,16 +97,23 @@ class AzureMLCluster(Cluster):
             raise Exception('Specify only `environment_definition` or either `pip_packages` or `conda_packages`.')
 
         # ### INITIALIZE CLUSTER
-        # self.create_cluster()
         super().__init__(asynchronous=asynchronous)
-        print(sys.version_info.minor)
         
         ### BREAKING CHANGE IN ASYNCIO API
-        if sys.version_info.minor < 7:
-            loop = asyncio.get_event_loop()
-            loop.run_until_complete(self.create_cluster())
-        else:
-            asyncio.run(self.create_cluster())
+        version_info = sys.version_info
+        
+        try:
+            if version_info.major == 3:
+                if version_info.minor < 7:
+                    loop = asyncio.get_event_loop()
+                    loop.run_until_complete(self.create_cluster())
+                else:
+                    asyncio.run(self.create_cluster())
+            else:
+                raise Exception('Python 3 required.')
+        except RuntimeError:
+            print('Awaiting...')
+            cluster_future = asyncio.ensure_future(self.create_cluster())
 
     def __print_message(self, msg, length=80, filler='#', pre_post=''):
         print(f'{pre_post} {msg} {pre_post}'.center(length, filler))
@@ -111,31 +121,28 @@ class AzureMLCluster(Cluster):
     def __get_estimator(self):
         return None
 
-    # async def _start(self):
-    #     self.__print_message('Starting cluster...')
-
     async def create_cluster(self):
         # set up environment
         self.__print_message('Setting up cluster')
 
         ### scheduler and worker parameters
         self.scheduler_params['--jupyter'] = True
-        # self.scheduler_params['--code_store'] = self.workspace.datastores[self.codefileshare]
-        # self.scheduler_params['--data_store'] = self.workspace.datastores[self.datafileshare]
+        self.scheduler_params['--code_store'] = self.workspace.datastores[self.codefileshare]
+        self.scheduler_params['--data_store'] = self.workspace.datastores[self.datafileshare]
         
         ### ADD DATASTORES
-        temp_datastores = []
-        for datastore in self.datastores:
-            temp_datastores.append(self.workspace.datastores[datastore])            
-        self.datastores = temp_datastores
-        print(self.datastores)
+#         temp_datastores = []
+#         for datastore in self.datastores:
+#             temp_datastores.append(self.workspace.datastores[datastore])            
+#         self.datastores = temp_datastores
 
-        self.scheduler_params['--datastores'] = [['sss', 'fff']]
-
-        # self.scheduler_params['--datastores'] = self.datastores
-        # self.worker_params['--datastores']    = self.datastores
-        # # self.worker_params['--code_store'] = self.workspace.datastores[self.codefileshare]
-        # # self.worker_params['--data_store'] = self.workspace.datastores[self.datafileshare]
+#         self.scheduler_params['--datastores'] = [self.datastores]
+#         self.worker_params['--datastores']    = [self.datastores]
+#         self.worker_params['--code-store']    = self.workspace.get_default_datastore()
+        self.worker_params['--code_store'] = self.workspace.datastores[self.codefileshare]
+        self.worker_params['--data_store'] = self.workspace.datastores[self.datafileshare]
+        
+        print(self.scheduler_params)
 
         if self.use_gpu:
             self.scheduler_params['--use_gpu'] = True
@@ -191,29 +198,21 @@ class AzureMLCluster(Cluster):
             ### REQUIRED BY dask.distributed.deploy.cluster.Cluster
             self.scheduler_comm = rpc(run.get_metrics()["scheduler"])
 #             print(self.scheduler_comm.live_comm())
-            await asyncio.wait_for(self._start(), timeout=120.0)
+            await super()._start()
             # super()._start()
 
         self.run = run
-        # self.scale(self.initial_node_count - 1)
+        self.scale(self.initial_node_count - 1)
 
         self.__print_message(self.status)
+        
+#         await super()._close()
+        
+#         self.__print_message(self.status)
 
-        ### TESTING ONLY
-        self.run.cancel()
-        self.run.complete()
-
-    async def _start(self):
-        print('Starting')
-        comm = await asyncio.wait_for(self.scheduler_comm.live_comm(), timeout=120.0)
-        await comm.write({"op": "subscribe_worker_status"})
-        print('FFFSFSF')
-        self.scheduler_info = await comm.read()
-        # self._watch_worker_status_comm = comm
-        # self._watch_worker_status_task = asyncio.ensure_future(
-        #     self._watch_worker_status(comm)
-        # )
-        self.status = "running"
+#         ### TESTING ONLY
+#         self.run.cancel()
+#         self.run.complete()
 
     def connect_cluster(self):
         if not self.run:
@@ -231,12 +230,12 @@ class AzureMLCluster(Cluster):
 
     def port_forwarding_ComputeVM(self):
         os.system(f'killall socat') # kill all socat processes - cleans up previous port forward setups
-        os.system(f'setsid socat tcp-listen:{self.dask_dashboard_port},reuseaddr,fork tcp:{self.run.get_metrics()["dashboard"]} &')
+        os.system(f'setsid socat tcp-listen:{self.dashboard_port},reuseaddr,fork tcp:{self.run.get_metrics()["dashboard"]} &')
         os.system(f'setsid socat tcp-listen:{self.jupyter_port},reuseaddr,fork tcp:{self.run.get_metrics()["jupyter"]} &')
 
     def print_links_ComputeVM(self):
         #get the dashboard link
-        dashboard_url = f'https://{socket.gethostname()}-{self.dask_dashboard_port}.{self.workspace.get_details()["location"]}.instances.azureml.net/status'
+        dashboard_url = f'https://{socket.gethostname()}-{self.dashboard_port}.{self.workspace.get_details()["location"]}.instances.azureml.net/status'
         self.__print_message(f'DASHBOARD: {dashboard_url}')
         self.URLs['dashboard'] = HTML(f'<a href="{dashboard_url}">Dashboard link</a>')
 
@@ -285,14 +284,15 @@ class AzureMLCluster(Cluster):
                     print("All scaled workers are removed.")
                     
     # close cluster
-    def close(self):
+    async def close(self):
         while self.workers_list:
             child_run=self.workers_list.pop()
-            child_run.complete() # complete() will mark the run "Complete", but won't kill the process
+#             child_run.complete() # complete() will mark the run "Complete", but won't kill the process
             child_run.cancel()
             child_run.complete()
         if self.run:
-            self.run.complete()  # complete() will mark the run "Complete", but won't kill the process
+#             self.run.complete()  # complete() will mark the run "Complete", but won't kill the process
             self.run.cancel()
             self.run.complete()
+        await super()._close()
         self.__print_message("Scheduler and workers are disconnected.")
