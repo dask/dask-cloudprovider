@@ -942,7 +942,7 @@ class ECSCluster(SpecCluster):
                     "IpProtocol": "TCP",
                     "FromPort": 0,
                     "ToPort": 65535,
-                    "UserIdGroupPairs": [{"GroupName": self.cluster_name}],
+                    "UserIdGroupPairs": [{"GroupId": response["GroupId"]}],
                 },
             ],
             DryRun=False,
