@@ -10,6 +10,17 @@ import time, os, socket, sys
 from distributed.deploy.cluster import Cluster
 from distributed.core import rpc
 
+from distributed.utils import (
+    PeriodicCallback,
+    log_errors,
+    ignoring,
+    sync,
+    Log,
+    Logs,
+    thread_state,
+    format_dashboard_link,
+)
+
 class AzureMLCluster(Cluster):
     def __init__(self
         , workspace                     # AML workspace object
@@ -195,18 +206,6 @@ class AzureMLCluster(Cluster):
         self.__print_message(f'Scaling to {self.initial_node_count} workers')
         self.scale(self.initial_node_count - 1)
 
-#         self.__print_message(self.status)
-        print(self.scheduler_info)
-        
-#         await super()._close()
-        
-#         self.__print_message(self.status)
-
-#         ### TESTING ONLY
-#         self.run.cancel()
-#         self.run.complete()
-
-
     def connect_cluster(self):
         if not self.run:
             sys.exit("Run doesn't exist!")
@@ -218,27 +217,126 @@ class AzureMLCluster(Cluster):
         else:
             print(f'\nSetting up port forwarding...')
             self.port_forwarding_ComputeVM()
-            self.print_links_ComputeVM()
+#             self.print_links_ComputeVM()
             print(f'Cluster is ready to use.')
 
     def port_forwarding_ComputeVM(self):
         os.system(f'killall socat') # kill all socat processes - cleans up previous port forward setups
         os.system(f'setsid socat tcp-listen:{self.dashboard_port},reuseaddr,fork tcp:{self.run.get_metrics()["dashboard"]} &')
         os.system(f'setsid socat tcp-listen:{self.jupyter_port},reuseaddr,fork tcp:{self.run.get_metrics()["jupyter"]} &')
+        
+        self.scheduler_info['dashboard_url'] = f'https://{socket.gethostname()}-{self.dashboard_port}.{self.workspace.get_details()["location"]}.instances.azureml.net/status'
+        self.scheduler_info['jupyter_url'] = (
+            f'https://{socket.gethostname()}-{self.jupyter_port}.{self.workspace.get_details()["location"]}.instances.azureml.net/lab?token={self.run.get_metrics()["token"]}'
+        )
+        
+    @property
+    def dashboard_link(self):
+        try:
+            link = self.scheduler_info['dashboard_url']
+        except KeyError:
+            return ""
+        else:
+            return link
 
+    @property
+    def jupyter_link(self):
+        try:
+            link = self.scheduler_info['jupyter_url']
+        except KeyError:
+            return ""
+        else:
+            return link
+        
+    def _widget(self):
+        """ Create IPython widget for display within a notebook """
+        try:
+            return self._cached_widget
+        except AttributeError:
+            pass
+
+        try:
+            from ipywidgets import Layout, VBox, HBox, IntText, Button, HTML, Accordion
+        except ImportError:
+            self._cached_widget = None
+            return None
+
+        layout = Layout(width="150px")
+
+        if self.dashboard_link:
+            dashboard_link = '<p><b>Dashboard: </b><a href="%s" target="_blank">%s</a></p>\n' % (
+                self.dashboard_link,
+                self.dashboard_link,
+            )
+        else:
+            dashboard_link = ""
+            
+        if self.jupyter_link:
+            jupyter_link = '<p><b>Jupyter: </b><a href="%s" target="_blank">%s</a></p>\n' % (
+                self.jupyter_link,
+                self.jupyter_link,
+            )
+        else:
+            jupyter_link = ""
+
+        title = "<h2>%s</h2>" % self._cluster_class_name
+        title = HTML(title)
+        dashboard = HTML(dashboard_link)
+        jupyter   = HTML(jupyter_link)
+
+        status = HTML(self._widget_status(), layout=Layout(min_width="150px"))
+
+        if self._supports_scaling:
+            request = IntText(0, description="Workers", layout=layout)
+            scale = Button(description="Scale", layout=layout)
+
+            minimum = IntText(0, description="Minimum", layout=layout)
+            maximum = IntText(0, description="Maximum", layout=layout)
+            adapt = Button(description="Adapt", layout=layout)
+
+            accordion = Accordion(
+                [HBox([request, scale]), HBox([minimum, maximum, adapt])],
+                layout=Layout(min_width="500px"),
+            )
+            accordion.selected_index = None
+            accordion.set_title(0, "Manual Scaling")
+            accordion.set_title(1, "Adaptive Scaling")
+
+            def adapt_cb(b):
+                self.adapt(minimum=minimum.value, maximum=maximum.value)
+                update()
+
+            adapt.on_click(adapt_cb)
+
+            def scale_cb(b):
+                with log_errors():
+                    n = request.value
+                    with ignoring(AttributeError):
+                        self._adaptive.stop()
+                    self.scale(n)
+                    update()
+
+            scale.on_click(scale_cb)
+        else:
+            accordion = HTML("")
+
+        box = VBox([title, HBox([status, accordion]), jupyter, dashboard])
+
+        self._cached_widget = box
+
+        def update():
+            status.value = self._widget_status()
+
+        pc = PeriodicCallback(update, 500, io_loop=self.loop)
+        self.periodic_callbacks["cluster-repr"] = pc
+        pc.start()
+
+        return box
+        
     def print_links_ComputeVM(self):
-        #get the dashboard link
-        dashboard_url = f'https://{socket.gethostname()}-{self.dashboard_port}.{self.workspace.get_details()["location"]}.instances.azureml.net/status'
-        self.__print_message(f'DASHBOARD: {dashboard_url}')
-        self.URLs['dashboard'] = HTML(f'<a href="{dashboard_url}">Dashboard link</a>')
+        self.__print_message(f"DASHBOARD: {self.scheduler_info['dashboard_url']}")
 
-        # build the jupyter link
-        jupyter_url = f'https://{socket.gethostname()}-{self.jupyter_port}.{self.workspace.get_details()["location"]}.instances.azureml.net/lab?token={self.run.get_metrics()["token"]}'
-        self.__print_message(f'NOTEBOOK: {jupyter_url}')
-        self.URLs['notebook'] =  HTML(f'<a href="{jupyter_url}">Jupyter link</a>')
-
-    def get_links(self):
-        return self.URLs
+        self.__print_message(f"NOTEBOOK: {self.scheduler_info['jupyter_url']}")
 
     def scale(self, workers=1):
         count=len(self.workers_list)
