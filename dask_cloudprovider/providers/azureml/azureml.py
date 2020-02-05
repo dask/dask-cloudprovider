@@ -60,7 +60,7 @@ class AzureMLCluster(Cluster):
         self.codefileshare = datastores[0]
         self.datafileshare = datastores[1]
         
-        print(self.datastores, self.codefileshare, self.datafileshare)
+#         print(self.datastores, self.codefileshare, self.datafileshare)
         
         ### FUTURE EXTENSIONS
         self.kwargs = kwargs
@@ -80,7 +80,7 @@ class AzureMLCluster(Cluster):
             ['maxNodeCount']
         )
         self.scheduler_ip_port = None
-#         self.workers_list = []
+        self.workers_list = []
         self.URLs = {}
 
         ### SANITY CHECKS
@@ -102,18 +102,20 @@ class AzureMLCluster(Cluster):
         ### BREAKING CHANGE IN ASYNCIO API
         version_info = sys.version_info
         
-        try:
+#         asyncio.ensure_future(self.create_cluster())
+        self.loop = asyncio.get_event_loop()
+    
+        if not self.loop.is_running():
             if version_info.major == 3:
                 if version_info.minor < 7:
-                    loop = asyncio.get_event_loop()
-                    loop.run_until_complete(self.create_cluster())
+                    self.loop.run_until_complete(self.create_cluster())
                 else:
                     asyncio.run(self.create_cluster())
             else:
                 raise Exception('Python 3 required.')
-        except RuntimeError:
-            print('Awaiting...')
-            cluster_future = asyncio.ensure_future(self.create_cluster())
+        else:
+            print('Attaching to running loop...')
+            asyncio.ensure_future(self.create_cluster())
 
     def __print_message(self, msg, length=80, filler='#', pre_post=''):
         print(f'{pre_post} {msg} {pre_post}'.center(length, filler))
@@ -129,21 +131,10 @@ class AzureMLCluster(Cluster):
         self.scheduler_params['--jupyter'] = True
         self.scheduler_params['--code_store'] = self.workspace.datastores[self.codefileshare]
         self.scheduler_params['--data_store'] = self.workspace.datastores[self.datafileshare]
-        
-        ### ADD DATASTORES
-#         temp_datastores = []
-#         for datastore in self.datastores:
-#             temp_datastores.append(self.workspace.datastores[datastore])            
-#         self.datastores = temp_datastores
 
-#         self.scheduler_params['--datastores'] = [self.datastores]
-#         self.worker_params['--datastores']    = [self.datastores]
-#         self.worker_params['--code-store']    = self.workspace.get_default_datastore()
         self.worker_params['--code_store'] = self.workspace.datastores[self.codefileshare]
         self.worker_params['--data_store'] = self.workspace.datastores[self.datafileshare]
-        
-        print(self.scheduler_params)
-
+    
         if self.use_gpu:
             self.scheduler_params['--use_gpu'] = True
             self.scheduler_params['--n_gpus_per_node'] = self.n_gpus_per_node
@@ -197,14 +188,15 @@ class AzureMLCluster(Cluster):
             
             ### REQUIRED BY dask.distributed.deploy.cluster.Cluster
             self.scheduler_comm = rpc(run.get_metrics()["scheduler"])
-#             print(self.scheduler_comm.live_comm())
-            await super()._start()
-            # super()._start()
+            asyncio.ensure_future(super()._start())
 
         self.run = run
+        
+        self.__print_message(f'Scaling to {self.initial_node_count} workers')
         self.scale(self.initial_node_count - 1)
 
-        self.__print_message(self.status)
+#         self.__print_message(self.status)
+        print(self.scheduler_info)
         
 #         await super()._close()
         
@@ -213,6 +205,7 @@ class AzureMLCluster(Cluster):
 #         ### TESTING ONLY
 #         self.run.cancel()
 #         self.run.complete()
+
 
     def connect_cluster(self):
         if not self.run:
