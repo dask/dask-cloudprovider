@@ -32,7 +32,7 @@ if __name__ == '__main__':
     parser.add_argument("--jupyter",         default=False)
     # parser.add_argument("--code_store",      default=None)
     # parser.add_argument("--data_store",      default=None)
-    parser.add_argument("--datastores",      default=None)
+    parser.add_argument("--datastores",      default=[])  # datastore default value cannot be None because of enumeration later
     parser.add_argument("--jupyter_token",   default=uuid.uuid1().hex)
     parser.add_argument("--jupyter_port",    default=8888)
     parser.add_argument("--dashboard_port",  default=8787)
