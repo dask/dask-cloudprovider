@@ -54,7 +54,11 @@ class AzureMLCluster(Cluster):
         self.use_existing_run = use_existing_run
 
         ### ENVIRONMENT AND VARIABLES
-        self.environment_definition = environment_definition
+        if not environment_definition:
+            self.environment_definition=self._get_default_environment()
+        else:
+            self.environment_definition = environment_definition
+            
         self.pip_packages = pip_packages 
         self.conda_packages = conda_packages
         
@@ -67,11 +71,6 @@ class AzureMLCluster(Cluster):
         self.jupyter_port = jupyter_port
         self.dashboard_port = dashboard_port
 
-        ### DATASTORES
-        self.datastores = datastores
-        self.codefileshare = datastores[0]
-        self.datafileshare = datastores[1]
-        
         ### FUTURE EXTENSIONS
         self.kwargs = kwargs
 
@@ -79,6 +78,23 @@ class AzureMLCluster(Cluster):
         self.scheduler_params = {}
         self.worker_params = {}
  
+        ### DATASTORES
+        self.datastores = datastores  # Temporary safety check here. TODO: are we sure datastores list has elements?
+        if len(self.datastores)>=1:
+            codefileshare = datastores[0]
+            self.scheduler_params['--code_store'] = self.workspace.datastores[codefileshare]
+        elif len(self.datastores)>=2:
+            datafileshare = datastores[1]
+            self.scheduler_params['--data_store'] = self.workspace.datastores[datafileshare]
+        
+        ### scheduler and worker parameters
+        self.scheduler_params['--jupyter'] = True    
+        if self.use_gpu:
+            self.scheduler_params['--use_gpu'] = True
+            self.scheduler_params['--n_gpus_per_node'] = self.n_gpus_per_node
+            self.worker_params['--use_gpu'] = True
+            self.worker_params['--n_gpus_per_node'] = self.n_gpus_per_node
+
         ### CLUSTER PARAMS
         self.max_nodes = (
             self
@@ -102,13 +118,12 @@ class AzureMLCluster(Cluster):
         if self.environment_definition and (
                (type(self.pip_packages)   is list and len(self.pip_packages)   > 0)
             or (type(self.conda_packages) is list and len(self.conda_packages) > 0)
-        ):
-            
+        ):            
             raise Exception('Specify only `environment_definition` or either `pip_packages` or `conda_packages`.')
 
         ### INITIALIZE CLUSTER
         super().__init__(asynchronous=asynchronous)
-        
+        self.status="created"
         ### BREAKING CHANGE IN ASYNCIO API
         version_info = sys.version_info
         self.loop = asyncio.get_event_loop()
@@ -134,20 +149,6 @@ class AzureMLCluster(Cluster):
     async def create_cluster(self):
         # set up environment
         self.__print_message('Setting up cluster')
-
-        ### scheduler and worker parameters
-        self.scheduler_params['--jupyter'] = True
-        self.scheduler_params['--code_store'] = self.workspace.datastores[self.codefileshare]
-        self.scheduler_params['--data_store'] = self.workspace.datastores[self.datafileshare]
-
-        self.worker_params['--code_store'] = self.workspace.datastores[self.codefileshare]
-        self.worker_params['--data_store'] = self.workspace.datastores[self.datafileshare]
-    
-        if self.use_gpu:
-            self.scheduler_params['--use_gpu'] = True
-            self.scheduler_params['--n_gpus_per_node'] = self.n_gpus_per_node
-            self.worker_params['--use_gpu'] = True
-            self.worker_params['--n_gpus_per_node'] = self.n_gpus_per_node
 
         # submit run
         self.__print_message('Submitting the experiment')
@@ -190,19 +191,29 @@ class AzureMLCluster(Cluster):
             
             print('\n\n')
             
-            self.scheduler_ip_port = run.get_metrics()["scheduler"]
-            self.worker_params['--scheduler_ip_port'] = self.scheduler_ip_port
-            self.__print_message(f'Scheduler: {run.get_metrics()["scheduler"]}')
-            
-            ### REQUIRED BY dask.distributed.deploy.cluster.Cluster
-            self.scheduler_comm = rpc(run.get_metrics()["scheduler"])
-            asyncio.ensure_future(super()._start())
-
+        self.scheduler_ip_port = run.get_metrics()["scheduler"]
+        self.worker_params['--scheduler_ip_port'] = self.scheduler_ip_port
+        self.__print_message(f'Scheduler: {run.get_metrics()["scheduler"]}')
         self.run = run
         
+        ### REQUIRED BY dask.distributed.deploy.cluster.Cluster
+        self.scheduler_comm = rpc(run.get_metrics()["scheduler"])
+        asyncio.ensure_future(super()._start())
+        
         self.__print_message(f'Scaling to {self.initial_node_count} workers')
-        self.scale(self.initial_node_count - 1)
+        if self.initial_node_count>1:
+            self.scale(self.initial_node_count - 1)
 
+    def _get_default_environment(self):
+        environment_name="env-dask-aml"
+        if environment_name not in workspace.environments:
+            env=Environment.from_existing_conda_environment(environment_name, 'azureml_py36')
+            env.python.conda_dependencies.add_pip_package('mpi4py')
+            env = env.register(workspace)
+        else:
+            env = workspace.environments[environment_name]
+        return env
+    
     def connect_cluster(self):
         if not self.run:
             sys.exit("Run doesn't exist!")
@@ -402,8 +413,11 @@ class AzureMLCluster(Cluster):
         self.__print_message(f"NOTEBOOK: {self.scheduler_info['jupyter_url']}")
 
     def scale(self, workers=1):
-        count=len(self.workers_list)
-
+        if workers<=0:
+            self.close()
+            return
+        
+        count=len(self.workers_list)+1 # one more worker in head node
         if count < workers:
             self.scale_up(workers-count)
         elif count > workers:
@@ -439,6 +453,8 @@ class AzureMLCluster(Cluster):
                     
     # close cluster
     async def _close(self):
+        if(self.status=="closed"):
+            return
         while self.workers_list:
             child_run=self.workers_list.pop()
             child_run.cancel()
@@ -447,6 +463,7 @@ class AzureMLCluster(Cluster):
             self.run.cancel()
             self.run.complete()
         await super()._close()
+        self.status="closed"
         self.__print_message("Scheduler and workers are disconnected.")
 
     def close(self):
