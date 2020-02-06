@@ -1,10 +1,10 @@
 import asyncio
 import logging
-from azureml.core import Workspace, Experiment, Datastore, Dataset, Environment
-from azureml.core.environment import CondaDependencies
+# from azureml.core import Workspace, Experiment, Datastore, Dataset, Environment
+# from azureml.core.environment import CondaDependencies
 from azureml.train.estimator import Estimator
 from azureml.core.runconfig import MpiConfiguration
-from IPython.core.display import HTML
+# from IPython.core.display import HTML
 import time, os, socket, sys
 
 from distributed.deploy.cluster import Cluster
