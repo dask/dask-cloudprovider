@@ -30,8 +30,6 @@ if __name__ == '__main__':
     ### PARSE ARGUMENTS
     parser = argparse.ArgumentParser()
     parser.add_argument("--jupyter",         default=False)
-    # parser.add_argument("--code_store",      default=None)
-    # parser.add_argument("--data_store",      default=None)
     parser.add_argument("--datastores",      default=[])  # datastore default value cannot be None because of enumeration later
     parser.add_argument("--jupyter_token",   default=uuid.uuid1().hex)
     parser.add_argument("--jupyter_port",    default=8888)
@@ -97,7 +95,7 @@ if __name__ == '__main__':
         Run.get_context().log('dashboard', dashboard)
         Run.get_context().log('jupyter', jupyter)
         Run.get_context().log('token', token)
-        for i, datastore in enumerate(datastores):
+        for i, datastore in enumerate(datastores): # TODO: mount all datastors 
             Run.get_context().log(f'datastore_{i}', datastore)
         # Run.get_context().log('codestore', codestore)
         # Run.get_context().log('datastore', datastore)
