@@ -19,6 +19,7 @@ from distributed.utils import (
     Logs,
     thread_state,
     format_dashboard_link,
+    format_bytes
 )
 
 class AzureMLCluster(Cluster):
@@ -71,8 +72,6 @@ class AzureMLCluster(Cluster):
         self.codefileshare = datastores[0]
         self.datafileshare = datastores[1]
         
-#         print(self.datastores, self.codefileshare, self.datafileshare)
-        
         ### FUTURE EXTENSIONS
         self.kwargs = kwargs
 
@@ -107,13 +106,11 @@ class AzureMLCluster(Cluster):
             
             raise Exception('Specify only `environment_definition` or either `pip_packages` or `conda_packages`.')
 
-        # ### INITIALIZE CLUSTER
+        ### INITIALIZE CLUSTER
         super().__init__(asynchronous=asynchronous)
         
         ### BREAKING CHANGE IN ASYNCIO API
         version_info = sys.version_info
-        
-#         asyncio.ensure_future(self.create_cluster())
         self.loop = asyncio.get_event_loop()
     
         if not self.loop.is_running():
@@ -125,7 +122,7 @@ class AzureMLCluster(Cluster):
             else:
                 raise Exception('Python 3 required.')
         else:
-            print('Attaching to running loop...')
+            print('Attaching to existing loop...')
             asyncio.ensure_future(self.create_cluster())
 
     def __print_message(self, msg, length=80, filler='#', pre_post=''):
@@ -217,7 +214,6 @@ class AzureMLCluster(Cluster):
         else:
             print(f'\nSetting up port forwarding...')
             self.port_forwarding_ComputeVM()
-#             self.print_links_ComputeVM()
             print(f'Cluster is ready to use.')
 
     def port_forwarding_ComputeVM(self):
@@ -247,6 +243,73 @@ class AzureMLCluster(Cluster):
             return ""
         else:
             return link
+        
+    def _format_workers(self, workers, requested, use_gpu, n_gpus_per_node=None):
+        if use_gpu:
+            if workers == requested:
+                return f'{workers}'
+            else:
+                return f'{workers} / {requested}'
+
+        else:
+            if workers == requested:
+                return f'{workers}'
+            else:
+                return f'{workers} / {requested}'
+        
+    def _widget_status(self):
+        ### reporting proper number of nodes vs workers in a multi-GPU worker scenario
+        workers = len(self.scheduler_info["workers"])
+        
+        if self.use_gpu:
+            workers = int(workers / self.n_gpus_per_node)
+            
+        if hasattr(self, "worker_spec"):
+            requested = sum(
+                1 if "group" not in each else len(each["group"])
+                for each in self.worker_spec.values()
+            )
+            
+        elif hasattr(self, "workers"):
+            requested = len(self.workers)
+        else:
+            requested = workers
+            
+        workers = self._format_workers(workers, requested, self.use_gpu, self.n_gpus_per_node)
+            
+        cores = sum(v["nthreads"] for v in self.scheduler_info["workers"].values())        
+        cores_or_gpus = 'GPUs' if self.use_gpu else 'Cores'
+        
+        memory = sum(v["memory_limit"] for v in self.scheduler_info["workers"].values())
+        memory = format_bytes(memory)
+        
+        
+        text = """
+<div>
+  <style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+    .dataframe thead th {
+        text-align: right;
+    }
+  </style>
+  <table style="text-align: right;">
+    <tr> <th>Workers</th> <td>%s</td></tr>
+    <tr> <th>%s</th> <td>%s</td></tr>
+    <tr> <th>Memory</th> <td>%s</td></tr>
+  </table>
+</div>
+""" % (
+            self._format_workers(workers, requested, self.use_gpu, self.n_gpus_per_node),
+            cores_or_gpus,
+            cores,
+            memory,
+        )
+        return text
         
     def _widget(self):
         """ Create IPython widget for display within a notebook """
@@ -287,10 +350,10 @@ class AzureMLCluster(Cluster):
         status = HTML(self._widget_status(), layout=Layout(min_width="150px"))
 
         if self._supports_scaling:
-            request = IntText(0, description="Workers", layout=layout)
+            request = IntText(self.initial_node_count, description="Workers", layout=layout)
             scale = Button(description="Scale", layout=layout)
 
-            minimum = IntText(0, description="Minimum", layout=layout)
+            minimum = IntText(1, description="Minimum", layout=layout)
             maximum = IntText(0, description="Maximum", layout=layout)
             adapt = Button(description="Adapt", layout=layout)
 
@@ -375,15 +438,16 @@ class AzureMLCluster(Cluster):
                     print("All scaled workers are removed.")
                     
     # close cluster
-    async def close(self):
+    async def _close(self):
         while self.workers_list:
             child_run=self.workers_list.pop()
-#             child_run.complete() # complete() will mark the run "Complete", but won't kill the process
             child_run.cancel()
             child_run.complete()
         if self.run:
-#             self.run.complete()  # complete() will mark the run "Complete", but won't kill the process
             self.run.cancel()
             self.run.complete()
         await super()._close()
         self.__print_message("Scheduler and workers are disconnected.")
+
+    def close(self):
+        asyncio.ensure_future(self._close())
