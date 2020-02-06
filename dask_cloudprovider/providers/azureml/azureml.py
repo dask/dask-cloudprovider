@@ -26,14 +26,12 @@ class AzureMLCluster(Cluster):
     def __init__(self
         , workspace                     # AML workspace object
         , compute_target                # AML compute object
+        , environment_definition        # AML Environment object
         , initial_node_count = 1        # initial node count, must be less than
                                         # or equal to AML compute object max nodes
                                         # will default to max nodes if more than
         , experiment_name='DaskAML'     # name of the experiment to start
         , use_existing_run=False        # use existing run if any
-        , environment_definition=None   # name of the environment to use
-        , pip_packages=None             # list of pip packages to install
-        , conda_packages=None           # list of conda packages to install 
         , use_gpu=False                 # flag to indicate GPU vs CPU cluster
         , n_gpus_per_node=None          # number of GPUs per node if use_GPU flag set
         , docker_image=None             # optional -- docker image
@@ -54,18 +52,12 @@ class AzureMLCluster(Cluster):
         self.use_existing_run = use_existing_run
 
         ### ENVIRONMENT AND VARIABLES
-        if not environment_definition:
-            self.environment_definition=self._get_default_environment()
-        else:
-            self.environment_definition = environment_definition
-            
-        self.pip_packages = pip_packages 
-        self.conda_packages = conda_packages
+        self.environment_definition = environment_definition
         
         ### GPU RUN INFO
         self.use_gpu = use_gpu
         self.n_gpus_per_node = n_gpus_per_node
-        
+
         ### JUPYTER AND PORT FORWARDING
         self.jupyter = jupyter
         self.jupyter_port = jupyter_port
@@ -79,13 +71,7 @@ class AzureMLCluster(Cluster):
         self.worker_params = {}
  
         ### DATASTORES
-        self.datastores = datastores  # Temporary safety check here. TODO: are we sure datastores list has elements?
-        if len(self.datastores)>=1:
-            codefileshare = datastores[0]
-            self.scheduler_params['--code_store'] = self.workspace.datastores[codefileshare]
-        elif len(self.datastores)>=2:
-            datafileshare = datastores[1]
-            self.scheduler_params['--data_store'] = self.workspace.datastores[datafileshare]
+        self.datastores = datastores
         
         ### scheduler and worker parameters
         self.scheduler_params['--jupyter'] = True    
@@ -114,16 +100,9 @@ class AzureMLCluster(Cluster):
         if self.initial_node_count > self.max_nodes:
             self.initial_node_count = self.max_nodes
 
-        ###-----> environment spec
-        if self.environment_definition and (
-               (type(self.pip_packages)   is list and len(self.pip_packages)   > 0)
-            or (type(self.conda_packages) is list and len(self.conda_packages) > 0)
-        ):            
-            raise Exception('Specify only `environment_definition` or either `pip_packages` or `conda_packages`.')
-
         ### INITIALIZE CLUSTER
         super().__init__(asynchronous=asynchronous)
-        self.status="created"
+
         ### BREAKING CHANGE IN ASYNCIO API
         version_info = sys.version_info
         self.loop = asyncio.get_event_loop()
@@ -153,43 +132,28 @@ class AzureMLCluster(Cluster):
         # submit run
         self.__print_message('Submitting the experiment')
         exp = Experiment(self.workspace, self.experiment_name)
+        estimator = Estimator(
+            'dask_cloudprovider/providers/azureml/setup'
+            , compute_target=self.compute_target
+            , entry_script='start_scheduler.py'
+            , environment_definition=self.environment_definition
+            , script_params=self.scheduler_params
+            , node_count=1 ### start only scheduler
+            , distributed_training=MpiConfiguration()
+            , use_docker=True
+        )
 
-        run = None
-        if self.use_existing_run == True:
-            runs = exp.get_runs()
+        run = exp.submit(estimator)
 
-            try:
-                run = next(x for x in runs if ('scheduler' in x.get_metrics() and x.get_status() == 'Running'))
-            except StopIteration:
-                run = None
-                self.__print_message('NO EXISTING RUN WITH SCHEDULER', filler='!')
-        
-        if not run:
-            est = Estimator(
-                  'dask_cloudprovider/providers/azureml/setup'
-                , compute_target=self.compute_target
-                , entry_script='start_scheduler.py'
-                , environment_definition=self.environment_definition
-                , script_params=self.scheduler_params
-                , node_count=1 ### start only scheduler
-                , distributed_training=MpiConfiguration()
-                , use_docker=True
-            )
+        self.__print_message("Waiting for scheduler node's IP")
+        while (
+            (run.get_status() != 'Canceled' 
+            or run.get_status() != 'Failed') 
+            and 'scheduler' not in run.get_metrics()):
+            print('.', end="")
+            time.sleep(5)
 
-            run = exp.submit(est)
-
-            self.__print_message("Waiting for scheduler node's IP")
-            while (
-                (
-                       run.get_status() != 'Canceled' 
-                    or run.get_status() != 'Failed'
-                )
-                and 'scheduler' not in run.get_metrics()
-            ):
-                print('.', end="")
-                time.sleep(5)
-            
-            print('\n\n')
+        print('\n\n')
             
         self.scheduler_ip_port = run.get_metrics()["scheduler"]
         self.worker_params['--scheduler_ip_port'] = self.scheduler_ip_port
@@ -203,23 +167,11 @@ class AzureMLCluster(Cluster):
         self.__print_message(f'Scaling to {self.initial_node_count} workers')
         if self.initial_node_count>1:
             self.scale(self.initial_node_count - 1)
+        self.__print_message(f'Scaling is done')
 
-    def _get_default_environment(self):
-        environment_name="env-dask-aml"
-        if environment_name not in workspace.environments:
-            env=Environment.from_existing_conda_environment(environment_name, 'azureml_py36')
-            env.python.conda_dependencies.add_pip_package('mpi4py')
-            env = env.register(workspace)
-        else:
-            env = workspace.environments[environment_name]
-        return env
-    
     def connect_cluster(self):
         if not self.run:
             sys.exit("Run doesn't exist!")
-
-        dashboard_port = self.dask_dashboard_port
-
         if self.run.get_status() == 'Canceled':
             print('\nRun was canceled')
         else:
