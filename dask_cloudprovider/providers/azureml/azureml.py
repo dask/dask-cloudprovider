@@ -10,6 +10,18 @@ import time, os, socket, sys
 from distributed.deploy.cluster import Cluster
 from distributed.core import rpc
 
+from distributed.utils import (
+    PeriodicCallback,
+    log_errors,
+    ignoring,
+    sync,
+    Log,
+    Logs,
+    thread_state,
+    format_dashboard_link,
+    format_bytes
+)
+
 class AzureMLCluster(Cluster):
     def __init__(self
         , workspace                     # AML workspace object
@@ -57,6 +69,8 @@ class AzureMLCluster(Cluster):
 
         ### DATASTORES
         self.datastores = datastores
+        self.codefileshare = datastores[0]
+        self.datafileshare = datastores[1]
         
         ### FUTURE EXTENSIONS
         self.kwargs = kwargs
@@ -78,7 +92,6 @@ class AzureMLCluster(Cluster):
         self.scheduler_ip_port = None
         self.workers_list = []
         self.URLs = {}
-        # self.status = "created"     ### REQUIRED BY distributed.deploy.cluster.Cluster
 
         ### SANITY CHECKS
         ###-----> initial node count
@@ -93,17 +106,24 @@ class AzureMLCluster(Cluster):
             
             raise Exception('Specify only `environment_definition` or either `pip_packages` or `conda_packages`.')
 
-        # ### INITIALIZE CLUSTER
-        # self.create_cluster()
+        ### INITIALIZE CLUSTER
         super().__init__(asynchronous=asynchronous)
-        print(sys.version_info.minor)
         
         ### BREAKING CHANGE IN ASYNCIO API
-        if sys.version_info.minor < 7:
-            loop = asyncio.get_event_loop()
-            loop.run_until_complete(self.create_cluster())
+        version_info = sys.version_info
+        self.loop = asyncio.get_event_loop()
+    
+        if not self.loop.is_running():
+            if version_info.major == 3:
+                if version_info.minor < 7:
+                    self.loop.run_until_complete(self.create_cluster())
+                else:
+                    asyncio.run(self.create_cluster())
+            else:
+                raise Exception('Python 3 required.')
         else:
-            asyncio.run(self.create_cluster())
+            print('Attaching to existing loop...')
+            asyncio.ensure_future(self.create_cluster())
 
     def __print_message(self, msg, length=80, filler='#', pre_post=''):
         print(f'{pre_post} {msg} {pre_post}'.center(length, filler))
@@ -111,32 +131,18 @@ class AzureMLCluster(Cluster):
     def __get_estimator(self):
         return None
 
-    # async def _start(self):
-    #     self.__print_message('Starting cluster...')
-
     async def create_cluster(self):
         # set up environment
         self.__print_message('Setting up cluster')
 
         ### scheduler and worker parameters
         self.scheduler_params['--jupyter'] = True
-        # self.scheduler_params['--code_store'] = self.workspace.datastores[self.codefileshare]
-        # self.scheduler_params['--data_store'] = self.workspace.datastores[self.datafileshare]
-        
-        ### ADD DATASTORES
-        temp_datastores = []
-        for datastore in self.datastores:
-            temp_datastores.append(self.workspace.datastores[datastore])            
-        self.datastores = temp_datastores
-        print(self.datastores)
+        self.scheduler_params['--code_store'] = self.workspace.datastores[self.codefileshare]
+        self.scheduler_params['--data_store'] = self.workspace.datastores[self.datafileshare]
 
-        self.scheduler_params['--datastores'] = [['sss', 'fff']]
-
-        # self.scheduler_params['--datastores'] = self.datastores
-        # self.worker_params['--datastores']    = self.datastores
-        # # self.worker_params['--code_store'] = self.workspace.datastores[self.codefileshare]
-        # # self.worker_params['--data_store'] = self.workspace.datastores[self.datafileshare]
-
+        self.worker_params['--code_store'] = self.workspace.datastores[self.codefileshare]
+        self.worker_params['--data_store'] = self.workspace.datastores[self.datafileshare]
+    
         if self.use_gpu:
             self.scheduler_params['--use_gpu'] = True
             self.scheduler_params['--n_gpus_per_node'] = self.n_gpus_per_node
@@ -190,30 +196,12 @@ class AzureMLCluster(Cluster):
             
             ### REQUIRED BY dask.distributed.deploy.cluster.Cluster
             self.scheduler_comm = rpc(run.get_metrics()["scheduler"])
-#             print(self.scheduler_comm.live_comm())
-            await asyncio.wait_for(self._start(), timeout=120.0)
-            # super()._start()
+            asyncio.ensure_future(super()._start())
 
         self.run = run
-        # self.scale(self.initial_node_count - 1)
-
-        self.__print_message(self.status)
-
-        ### TESTING ONLY
-        self.run.cancel()
-        self.run.complete()
-
-    async def _start(self):
-        print('Starting')
-        comm = await asyncio.wait_for(self.scheduler_comm.live_comm(), timeout=120.0)
-        await comm.write({"op": "subscribe_worker_status"})
-        print('FFFSFSF')
-        self.scheduler_info = await comm.read()
-        # self._watch_worker_status_comm = comm
-        # self._watch_worker_status_task = asyncio.ensure_future(
-        #     self._watch_worker_status(comm)
-        # )
-        self.status = "running"
+        
+        self.__print_message(f'Scaling to {self.initial_node_count} workers')
+        self.scale(self.initial_node_count - 1)
 
     def connect_cluster(self):
         if not self.run:
@@ -226,27 +214,192 @@ class AzureMLCluster(Cluster):
         else:
             print(f'\nSetting up port forwarding...')
             self.port_forwarding_ComputeVM()
-            self.print_links_ComputeVM()
             print(f'Cluster is ready to use.')
 
     def port_forwarding_ComputeVM(self):
         os.system(f'killall socat') # kill all socat processes - cleans up previous port forward setups
-        os.system(f'setsid socat tcp-listen:{self.dask_dashboard_port},reuseaddr,fork tcp:{self.run.get_metrics()["dashboard"]} &')
+        os.system(f'setsid socat tcp-listen:{self.dashboard_port},reuseaddr,fork tcp:{self.run.get_metrics()["dashboard"]} &')
         os.system(f'setsid socat tcp-listen:{self.jupyter_port},reuseaddr,fork tcp:{self.run.get_metrics()["jupyter"]} &')
+        
+        self.scheduler_info['dashboard_url'] = f'https://{socket.gethostname()}-{self.dashboard_port}.{self.workspace.get_details()["location"]}.instances.azureml.net/status'
+        self.scheduler_info['jupyter_url'] = (
+            f'https://{socket.gethostname()}-{self.jupyter_port}.{self.workspace.get_details()["location"]}.instances.azureml.net/lab?token={self.run.get_metrics()["token"]}'
+        )
+        
+    @property
+    def dashboard_link(self):
+        try:
+            link = self.scheduler_info['dashboard_url']
+        except KeyError:
+            return ""
+        else:
+            return link
 
+    @property
+    def jupyter_link(self):
+        try:
+            link = self.scheduler_info['jupyter_url']
+        except KeyError:
+            return ""
+        else:
+            return link
+        
+    def _format_workers(self, workers, requested, use_gpu, n_gpus_per_node=None):
+        if use_gpu:
+            if workers == requested:
+                return f'{workers}'
+            else:
+                return f'{workers} / {requested}'
+
+        else:
+            if workers == requested:
+                return f'{workers}'
+            else:
+                return f'{workers} / {requested}'
+        
+    def _widget_status(self):
+        ### reporting proper number of nodes vs workers in a multi-GPU worker scenario
+        workers = len(self.scheduler_info["workers"])
+        
+        if self.use_gpu:
+            workers = int(workers / self.n_gpus_per_node)
+            
+        if hasattr(self, "worker_spec"):
+            requested = sum(
+                1 if "group" not in each else len(each["group"])
+                for each in self.worker_spec.values()
+            )
+            
+        elif hasattr(self, "workers"):
+            requested = len(self.workers)
+        else:
+            requested = workers
+            
+        workers = self._format_workers(workers, requested, self.use_gpu, self.n_gpus_per_node)
+            
+        cores = sum(v["nthreads"] for v in self.scheduler_info["workers"].values())        
+        cores_or_gpus = 'GPUs' if self.use_gpu else 'Cores'
+        
+        memory = sum(v["memory_limit"] for v in self.scheduler_info["workers"].values())
+        memory = format_bytes(memory)
+        
+        
+        text = """
+<div>
+  <style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+    .dataframe thead th {
+        text-align: right;
+    }
+  </style>
+  <table style="text-align: right;">
+    <tr> <th>Workers</th> <td>%s</td></tr>
+    <tr> <th>%s</th> <td>%s</td></tr>
+    <tr> <th>Memory</th> <td>%s</td></tr>
+  </table>
+</div>
+""" % (
+            self._format_workers(workers, requested, self.use_gpu, self.n_gpus_per_node),
+            cores_or_gpus,
+            cores,
+            memory,
+        )
+        return text
+        
+    def _widget(self):
+        """ Create IPython widget for display within a notebook """
+        try:
+            return self._cached_widget
+        except AttributeError:
+            pass
+
+        try:
+            from ipywidgets import Layout, VBox, HBox, IntText, Button, HTML, Accordion
+        except ImportError:
+            self._cached_widget = None
+            return None
+
+        layout = Layout(width="150px")
+
+        if self.dashboard_link:
+            dashboard_link = '<p><b>Dashboard: </b><a href="%s" target="_blank">%s</a></p>\n' % (
+                self.dashboard_link,
+                self.dashboard_link,
+            )
+        else:
+            dashboard_link = ""
+            
+        if self.jupyter_link:
+            jupyter_link = '<p><b>Jupyter: </b><a href="%s" target="_blank">%s</a></p>\n' % (
+                self.jupyter_link,
+                self.jupyter_link,
+            )
+        else:
+            jupyter_link = ""
+
+        title = "<h2>%s</h2>" % self._cluster_class_name
+        title = HTML(title)
+        dashboard = HTML(dashboard_link)
+        jupyter   = HTML(jupyter_link)
+
+        status = HTML(self._widget_status(), layout=Layout(min_width="150px"))
+
+        if self._supports_scaling:
+            request = IntText(self.initial_node_count, description="Workers", layout=layout)
+            scale = Button(description="Scale", layout=layout)
+
+            minimum = IntText(1, description="Minimum", layout=layout)
+            maximum = IntText(0, description="Maximum", layout=layout)
+            adapt = Button(description="Adapt", layout=layout)
+
+            accordion = Accordion(
+                [HBox([request, scale]), HBox([minimum, maximum, adapt])],
+                layout=Layout(min_width="500px"),
+            )
+            accordion.selected_index = None
+            accordion.set_title(0, "Manual Scaling")
+            accordion.set_title(1, "Adaptive Scaling")
+
+            def adapt_cb(b):
+                self.adapt(minimum=minimum.value, maximum=maximum.value)
+                update()
+
+            adapt.on_click(adapt_cb)
+
+            def scale_cb(b):
+                with log_errors():
+                    n = request.value
+                    with ignoring(AttributeError):
+                        self._adaptive.stop()
+                    self.scale(n)
+                    update()
+
+            scale.on_click(scale_cb)
+        else:
+            accordion = HTML("")
+
+        box = VBox([title, HBox([status, accordion]), jupyter, dashboard])
+
+        self._cached_widget = box
+
+        def update():
+            status.value = self._widget_status()
+
+        pc = PeriodicCallback(update, 500, io_loop=self.loop)
+        self.periodic_callbacks["cluster-repr"] = pc
+        pc.start()
+
+        return box
+        
     def print_links_ComputeVM(self):
-        #get the dashboard link
-        dashboard_url = f'https://{socket.gethostname()}-{self.dask_dashboard_port}.{self.workspace.get_details()["location"]}.instances.azureml.net/status'
-        self.__print_message(f'DASHBOARD: {dashboard_url}')
-        self.URLs['dashboard'] = HTML(f'<a href="{dashboard_url}">Dashboard link</a>')
+        self.__print_message(f"DASHBOARD: {self.scheduler_info['dashboard_url']}")
 
-        # build the jupyter link
-        jupyter_url = f'https://{socket.gethostname()}-{self.jupyter_port}.{self.workspace.get_details()["location"]}.instances.azureml.net/lab?token={self.run.get_metrics()["token"]}'
-        self.__print_message(f'NOTEBOOK: {jupyter_url}')
-        self.URLs['notebook'] =  HTML(f'<a href="{jupyter_url}">Jupyter link</a>')
-
-    def get_links(self):
-        return self.URLs
+        self.__print_message(f"NOTEBOOK: {self.scheduler_info['jupyter_url']}")
 
     def scale(self, workers=1):
         count=len(self.workers_list)
@@ -285,14 +438,16 @@ class AzureMLCluster(Cluster):
                     print("All scaled workers are removed.")
                     
     # close cluster
-    def close(self):
+    async def _close(self):
         while self.workers_list:
             child_run=self.workers_list.pop()
-            child_run.complete() # complete() will mark the run "Complete", but won't kill the process
             child_run.cancel()
             child_run.complete()
         if self.run:
-            self.run.complete()  # complete() will mark the run "Complete", but won't kill the process
             self.run.cancel()
             self.run.complete()
+        await super()._close()
         self.__print_message("Scheduler and workers are disconnected.")
+
+    def close(self):
+        asyncio.ensure_future(self._close())
