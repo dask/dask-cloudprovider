@@ -30,7 +30,6 @@ class AzureMLCluster(Cluster):
                                         # or equal to AML compute object max nodes
                                         # will default to max nodes if more than
         , experiment_name='DaskAML'     # name of the experiment to start
-        , use_existing_run=False        # use existing run if any
         , use_gpu=False                 # flag to indicate GPU vs CPU cluster
         , n_gpus_per_node=None          # number of GPUs per node if use_GPU flag set
         , docker_image=None             # optional -- docker image
@@ -38,6 +37,7 @@ class AzureMLCluster(Cluster):
         , jupyter_port=9000             # port to forward the Jupyter process to
         , dashboard_port=9001           # port to forward Dask dashboard to
         , datastores=[]                 # datastores specs
+        , code_store=None               # name of the code store if specified
         , asynchronous=False            # flag to run jobs in an asynchronous way
         , **kwargs
     ):
@@ -48,7 +48,6 @@ class AzureMLCluster(Cluster):
 
         ### EXPERIMENT DEFINITION
         self.experiment_name = experiment_name
-        self.use_existing_run = use_existing_run
 
         ### ENVIRONMENT AND VARIABLES
         self.environment_definition = environment_definition
@@ -71,17 +70,12 @@ class AzureMLCluster(Cluster):
  
         ### DATASTORES
         self.datastores = datastores
-        
-#         print(self.datastores)
-#         print(self.workspace.datastores[self.datastores[0]])
+        self.code_store = code_store
         
         ### scheduler and worker parameters
         self.scheduler_params['--jupyter'] = True
-#         temp_datastores = ('$AZUREML_DATAREFERENCE_{} '*len(self.datastores))[0:-1]        
-#         self.scheduler_params['--datastores'] = 
-#         self.scheduler_params['--code_store'] = self.workspace.datastores['workspacefilestore']
-        
-#         print(self.scheduler_params)
+        if self.code_store is not None:
+            self.scheduler_params['--code_store'] = self.code_store
         
         if self.use_gpu:
             self.scheduler_params['--use_gpu'] = True
@@ -149,17 +143,21 @@ class AzureMLCluster(Cluster):
             , node_count=1 ### start only scheduler
             , distributed_training=MpiConfiguration()
             , use_docker=True
+            , inputs=self.datastores
         )
 
         run = exp.submit(estimator)
 
         self.__print_message("Waiting for scheduler node's IP")
         while (
-            (run.get_status() != 'Canceled' 
-            or run.get_status() != 'Failed') 
-            and 'scheduler' not in run.get_metrics()):
-            print('.', end="")
-            time.sleep(5)
+             run.get_status() != 'Canceled'
+             and run.get_status() != 'Failed'
+             and 'scheduler' not in run.get_metrics()):
+             print('.', end="")
+             time.sleep(5)
+            
+        if run.get_status() == 'Canceled' or run.get_status() == 'Failed':
+            raise Exception('Failed to start the AzureML cluster.')
 
         print('\n\n')
             
@@ -389,7 +387,7 @@ class AzureMLCluster(Cluster):
     # scale up
     def scale_up(self, workers=1):
         for i in range(workers):
-            est = Estimator(
+            estimator = Estimator(
                  'dask_cloudprovider/providers/azure/setup'
                 , compute_target=self.compute_target
                 , entry_script='start_worker.py' # pass scheduler ip from parent run
@@ -399,7 +397,7 @@ class AzureMLCluster(Cluster):
                 , distributed_training=MpiConfiguration()
             )
 
-            child_run = Experiment(self.workspace, self.experiment_name).submit(est)
+            child_run = Experiment(self.workspace, self.experiment_name).submit(estimator)
             self.workers_list.append(child_run)
 
     # scale down
