@@ -30,7 +30,6 @@ class AzureMLCluster(Cluster):
                                         # or equal to AML compute object max nodes
                                         # will default to max nodes if more than
         , experiment_name='DaskAML'     # name of the experiment to start
-        , use_existing_run=False        # use existing run if any
         , use_gpu=False                 # flag to indicate GPU vs CPU cluster
         , n_gpus_per_node=None          # number of GPUs per node if use_GPU flag set
         , docker_image=None             # optional -- docker image
@@ -48,7 +47,6 @@ class AzureMLCluster(Cluster):
 
         ### EXPERIMENT DEFINITION
         self.experiment_name = experiment_name
-        self.use_existing_run = use_existing_run
 
         ### ENVIRONMENT AND VARIABLES
         self.environment_definition = environment_definition
@@ -155,11 +153,14 @@ class AzureMLCluster(Cluster):
 
         self.__print_message("Waiting for scheduler node's IP")
         while (
-            (run.get_status() != 'Canceled' 
-            or run.get_status() != 'Failed') 
-            and 'scheduler' not in run.get_metrics()):
-            print('.', end="")
-            time.sleep(5)
+             run.get_status() != 'Canceled'
+             and run.get_status() != 'Failed'
+             and 'scheduler' not in run.get_metrics()):
+             print('.', end="")
+             time.sleep(5)
+            
+        if run.get_status() == 'Canceled' or run.get_status() == 'Failed':
+            raise Exception('Failed to start the AzureML cluster.')
 
         print('\n\n')
             
