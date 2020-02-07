@@ -71,7 +71,7 @@ class AzureMLCluster(Cluster):
  
         ### DATASTORES
         self.datastores = datastores
-        
+        self.scheduler_params['--datastores'] = self.datastores
 #         print(self.datastores)
 #         print(self.workspace.datastores[self.datastores[0]])
         
@@ -389,7 +389,7 @@ class AzureMLCluster(Cluster):
     # scale up
     def scale_up(self, workers=1):
         for i in range(workers):
-            est = Estimator(
+            estimator = Estimator(
                  'dask_cloudprovider/providers/azure/setup'
                 , compute_target=self.compute_target
                 , entry_script='start_worker.py' # pass scheduler ip from parent run
@@ -399,7 +399,7 @@ class AzureMLCluster(Cluster):
                 , distributed_training=MpiConfiguration()
             )
 
-            child_run = Experiment(self.workspace, self.experiment_name).submit(est)
+            child_run = Experiment(self.workspace, self.experiment_name).submit(estimator)
             self.workers_list.append(child_run)
 
     # scale down
