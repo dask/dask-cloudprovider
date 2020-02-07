@@ -37,6 +37,7 @@ class AzureMLCluster(Cluster):
         , jupyter_port=9000             # port to forward the Jupyter process to
         , dashboard_port=9001           # port to forward Dask dashboard to
         , datastores=[]                 # datastores specs
+        , code_store=None               # name of the code store if specified
         , asynchronous=False            # flag to run jobs in an asynchronous way
         , **kwargs
     ):
@@ -69,17 +70,12 @@ class AzureMLCluster(Cluster):
  
         ### DATASTORES
         self.datastores = datastores
-        self.scheduler_params['--datastores'] = self.datastores
-#         print(self.datastores)
-#         print(self.workspace.datastores[self.datastores[0]])
+        self.code_store = code_store
         
         ### scheduler and worker parameters
         self.scheduler_params['--jupyter'] = True
-#         temp_datastores = ('$AZUREML_DATAREFERENCE_{} '*len(self.datastores))[0:-1]        
-#         self.scheduler_params['--datastores'] = 
-#         self.scheduler_params['--code_store'] = self.workspace.datastores['workspacefilestore']
-        
-#         print(self.scheduler_params)
+        if self.code_store is not None:
+            self.scheduler_params['--code_store'] = self.code_store
         
         if self.use_gpu:
             self.scheduler_params['--use_gpu'] = True
@@ -147,6 +143,7 @@ class AzureMLCluster(Cluster):
             , node_count=1 ### start only scheduler
             , distributed_training=MpiConfiguration()
             , use_docker=True
+            , inputs=self.datastores
         )
 
         run = exp.submit(estimator)

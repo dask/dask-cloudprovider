@@ -30,7 +30,7 @@ if __name__ == '__main__':
     ### PARSE ARGUMENTS
     parser = argparse.ArgumentParser()
     parser.add_argument("--jupyter",         default=False)
-    parser.add_argument("--datastores",      default=[], nargs='+')  # datastore default value cannot be None because of enumeration later
+    parser.add_argument("--code_store",      default=None)
     parser.add_argument("--jupyter_token",   default=uuid.uuid1().hex)
     parser.add_argument("--jupyter_port",    default=8888)
     parser.add_argument("--dashboard_port",  default=8787)
@@ -56,7 +56,8 @@ if __name__ == '__main__':
             "dashboard"  : ip + ':' + str(args.dashboard_port),
             "jupyter"    : ip + ':' + str(args.jupyter_port),
             "token"      : args.jupyter_token,
-            "datastores" : args.datastores
+            "code_store" : args.code_store
+#             "datastores" : args.datastores
             # "datastore"  : args.data_store
             }
     else:
@@ -67,8 +68,8 @@ if __name__ == '__main__':
     scheduler  = data["scheduler"]
     dashboard  = data["dashboard"]
     jupyter    = data["jupyter"]
-    datastores = data['datastores']
-    # codestore = data["codestore"]
+#     datastores = data['datastores']
+    code_store = data["code_store"]
     # datastore = data["datastore"]
     token      = data["token"]
 
@@ -90,21 +91,29 @@ if __name__ == '__main__':
                 os.system(f'kill {server["pid"]}')
 
         ### RECORD LOGS
-        Run.get_context().log('headnode', ip)
-        Run.get_context().log('scheduler', scheduler) 
-        Run.get_context().log('dashboard', dashboard)
-        Run.get_context().log('jupyter', jupyter)
-        Run.get_context().log('token', token)
-        for i, datastore in enumerate(datastores): 
-            Run.get_context().log(f'datastore_{i}', datastore)
+        run = Run.get_context()
+        run.log('headnode', ip)
+        run.log('scheduler', scheduler) 
+        run.log('dashboard', dashboard)
+        run.log('jupyter', jupyter)
+        run.log('token', token)
         
-        datastore_mounted=datastores[0] # TODO: use iteration to mount all data stores.
-        print("datastore mounted ", datastore_mounted)
+        ### CHECK IF SPECIFIED code_store EXISTS IN dataReferences
+        code_store_mounted = ""
+        
+        if code_store is not None:
+            if code_store in run.get_details()['runDefinition']['dataReferences'].keys():
+                workspace_name = run.experiment.workspace.name.lower()
+                run_id = run.get_details()['runId']
+                code_mount_name = run.get_details()['runDefinition']['dataReferences']['codes']['dataStoreName']  #### HARDCODED 'codes' for now
+
+                code_store_mounted = f'/mnt/batch/tasks/shared/LS_root/jobs/{workspace_name}/azureml/{run_id}/mounts/{code_mount_name}'            
+    
         if args.jupyter:
             cmd = (f' jupyter lab --ip 0.0.0.0 --port {args.jupyter_port}' + \
-                              f' --NotebookApp.token={token}'              + \
-                              f' --notebook-dir={datastore_mounted}'            + \
-                              f' --allow-root --no-browser')
+                              f' --NotebookApp.token={token}')
+            cmd += f' --notebook-dir={code_store_mounted}' if len(code_store_mounted) > 0 else  ""
+            cmd += f' --allow-root --no-browser'
     
             jupyter_log = open("jupyter_log.txt", "a")
             jupyter_proc = subprocess.Popen(cmd.split(), universal_newlines=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
