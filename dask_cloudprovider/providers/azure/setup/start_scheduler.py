@@ -30,7 +30,7 @@ if __name__ == '__main__':
     ### PARSE ARGUMENTS
     parser = argparse.ArgumentParser()
     parser.add_argument("--jupyter",         default=False)
-    parser.add_argument("--datastores",      default=[])  # datastore default value cannot be None because of enumeration later
+    parser.add_argument("--datastores",      default=[], nargs='+')  # datastore default value cannot be None because of enumeration later
     parser.add_argument("--jupyter_token",   default=uuid.uuid1().hex)
     parser.add_argument("--jupyter_port",    default=8888)
     parser.add_argument("--dashboard_port",  default=8787)
@@ -95,15 +95,15 @@ if __name__ == '__main__':
         Run.get_context().log('dashboard', dashboard)
         Run.get_context().log('jupyter', jupyter)
         Run.get_context().log('token', token)
-        for i, datastore in enumerate(datastores): # TODO: mount all datastors 
+        for i, datastore in enumerate(datastores): 
             Run.get_context().log(f'datastore_{i}', datastore)
-        # Run.get_context().log('codestore', codestore)
-        # Run.get_context().log('datastore', datastore)
         
+        datastore_mounted=datastores[0] # TODO: use iteration to mount all data stores.
+        print("datastore mounted ", datastore_mounted)
         if args.jupyter:
             cmd = (f' jupyter lab --ip 0.0.0.0 --port {args.jupyter_port}' + \
                               f' --NotebookApp.token={token}'              + \
-                            #   f' --notebook-dir={codestore}/..'            + \
+                              f' --notebook-dir={datastore_mounted}'            + \
                               f' --allow-root --no-browser')
     
             jupyter_log = open("jupyter_log.txt", "a")
