@@ -9,7 +9,10 @@ import time, os, socket, sys
 from distributed.deploy.cluster import Cluster
 from distributed.core import rpc
 
+import dask
+
 from distributed.utils import (
+    LoopRunner,
     PeriodicCallback,
     log_errors,
     ignoring,
@@ -23,34 +26,33 @@ from distributed.utils import (
 
 class AzureMLCluster(Cluster):
     def __init__(self
-        , workspace                     # AML workspace object
-        , compute_target                # AML compute object
-        , environment_definition        # AML Environment object
-        , initial_node_count = 1        # initial node count, must be less than
-                                        # or equal to AML compute object max nodes
+        , workspace                     # AzureML workspace object
+        , compute_target                # AzureML compute object
+        , environment_definition        # AzureML Environment object
+        , experiment_name=None          # name of the experiment to start
+        , initial_node_count=None       # initial node count, must be less than
+                                        # or equal to AzureML compute object max nodes
                                         # will default to max nodes if more than
-        , experiment_name='DaskAML'     # name of the experiment to start
-        , use_gpu=False                 # flag to indicate GPU vs CPU cluster
+        , use_gpu=None                  # flag to indicate GPU vs CPU cluster
         , n_gpus_per_node=None          # number of GPUs per node if use_GPU flag set
-        , docker_image=None             # optional -- docker image
-        , jupyter=True                  # start Jupyter lab process on headnode
-        , jupyter_port=9000             # port to forward the Jupyter process to
-        , dashboard_port=9001           # port to forward Dask dashboard to
-        , datastores=[]                 # datastores specs
+        , jupyter=None                  # start Jupyter lab process on headnode
+        , jupyter_port=None             # port to forward the Jupyter process to
+        , dashboard_port=None           # port to forward Dask dashboard to
+        , datastores=None               # datastores specs
         , code_store=None               # name of the code store if specified
-        , asynchronous=False            # flag to run jobs in an asynchronous way
+        , asynchronous=False             # flag to run jobs in an asynchronous way
         , **kwargs
     ):
-        ### GENERAL FLAGS
+        ### REQUIRED PARAMETERS
         self.workspace = workspace
         self.compute_target = compute_target
-        self.initial_node_count = initial_node_count
+        self.environment_definition = environment_definition
 
         ### EXPERIMENT DEFINITION
         self.experiment_name = experiment_name
 
         ### ENVIRONMENT AND VARIABLES
-        self.environment_definition = environment_definition
+        self.initial_node_count = initial_node_count
         
         ### GPU RUN INFO
         self.use_gpu = use_gpu
@@ -60,17 +62,62 @@ class AzureMLCluster(Cluster):
         self.jupyter = jupyter
         self.jupyter_port = jupyter_port
         self.dashboard_port = dashboard_port
+        
+        ### DATASTORES
+        self.datastores = datastores
+        self.code_store = code_store
 
         ### FUTURE EXTENSIONS
         self.kwargs = kwargs
 
+        ### GET RUNNING LOOP
+        self._loop_runner = LoopRunner(loop=None, asynchronous=asynchronous)
+        self.loop = self._loop_runner.loop
+
+        ### INITIALIZE CLUSTER
+        super().__init__(asynchronous=asynchronous)
+
+        if not self.asynchronous:
+            self._loop_runner.start()
+            self.sync(self.get_defaults)
+            self.sync(self.create_cluster)
+
+    async def get_defaults(self):
+        self.config = dask.config.get("cloudprovider.azure", {})
+        print(self.config)
+
+        if self.experiment_name is None:
+            self.experiment_name = self.config.get("experiment_name")
+
+        if self.initial_node_count is None:
+            self.initial_node_count = self.config.get("initial_node_count")
+
+        if self.use_gpu is None:
+            self.use_gpu = self.config.get("use_gpu")
+
+        if self.n_gpus_per_node is None:
+            self.n_gpus_per_node = self.config.get("n_gpus_per_node")
+
+        if self.jupyter is None:
+            self.jupyter = self.config.get("jupyter")
+
+        if self.jupyter_port is None:
+            self.jupyter_port = self.config.get("jupyter_port")
+
+        if self.dashboard_port is None:
+            self.dashboard_port = self.config.get("dashboard_port")
+
+        if self.datastores is None:
+            self.datastores = self.config.get("datastores")
+
+        if self.code_store is None:
+            self.code_store = self.config.get("code_store")
+
+        print(self.experiment_name)
+
         ### PARAMETERS TO START THE CLUSTER
         self.scheduler_params = {}
         self.worker_params = {}
- 
-        ### DATASTORES
-        self.datastores = datastores
-        self.code_store = code_store
         
         ### scheduler and worker parameters
         self.scheduler_params['--jupyter'] = True
@@ -96,30 +143,11 @@ class AzureMLCluster(Cluster):
         self.scheduler_ip_port = None
         self.workers_list = []
         self.URLs = {}
-
+        
         ### SANITY CHECKS
         ###-----> initial node count
         if self.initial_node_count > self.max_nodes:
             self.initial_node_count = self.max_nodes
-
-        ### INITIALIZE CLUSTER
-        super().__init__(asynchronous=asynchronous)
-
-        ### BREAKING CHANGE IN ASYNCIO API
-        version_info = sys.version_info
-        self.loop = asyncio.get_event_loop()
-    
-        if not self.loop.is_running():
-            if version_info.major == 3:
-                if version_info.minor < 7:
-                    self.loop.run_until_complete(self.create_cluster())
-                else:
-                    asyncio.run(self.create_cluster())
-            else:
-                raise Exception('Python 3 required.')
-        else:
-            print('Attaching to existing loop...')
-            asyncio.ensure_future(self.create_cluster())
 
     def __print_message(self, msg, length=80, filler='#', pre_post=''):
         print(f'{pre_post} {msg} {pre_post}'.center(length, filler))
@@ -416,11 +444,13 @@ class AzureMLCluster(Cluster):
             return
         while self.workers_list:
             child_run=self.workers_list.pop()
-            child_run.cancel()
             child_run.complete()
+            child_run.cancel()
+
         if self.run:
-            self.run.cancel()
             self.run.complete()
+            self.run.cancel()
+
         await super()._close()
         self.status="closed"
         self.__print_message("Scheduler and workers are disconnected.")
