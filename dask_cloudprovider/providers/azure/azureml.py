@@ -1,10 +1,9 @@
 import asyncio
 import logging
-from azureml.core import Workspace, Experiment, Datastore, Dataset, Environment
-from azureml.core.environment import CondaDependencies
+from azureml.core import Experiment
 from azureml.train.estimator import Estimator
 from azureml.core.runconfig import MpiConfiguration
-from IPython.core.display import HTML
+# from IPython.core.display import HTML
 import time, os, socket, sys
 
 from distributed.deploy.cluster import Cluster
@@ -73,8 +72,17 @@ class AzureMLCluster(Cluster):
         ### DATASTORES
         self.datastores = datastores
         
+#         print(self.datastores)
+#         print(self.workspace.datastores[self.datastores[0]])
+        
         ### scheduler and worker parameters
-        self.scheduler_params['--jupyter'] = True    
+        self.scheduler_params['--jupyter'] = True
+#         temp_datastores = ('$AZUREML_DATAREFERENCE_{} '*len(self.datastores))[0:-1]        
+#         self.scheduler_params['--datastores'] = 
+#         self.scheduler_params['--code_store'] = self.workspace.datastores['workspacefilestore']
+        
+#         print(self.scheduler_params)
+        
         if self.use_gpu:
             self.scheduler_params['--use_gpu'] = True
             self.scheduler_params['--n_gpus_per_node'] = self.n_gpus_per_node
@@ -133,7 +141,7 @@ class AzureMLCluster(Cluster):
         self.__print_message('Submitting the experiment')
         exp = Experiment(self.workspace, self.experiment_name)
         estimator = Estimator(
-            'dask_cloudprovider/providers/azureml/setup'
+            'dask_cloudprovider/providers/azure/setup'
             , compute_target=self.compute_target
             , entry_script='start_scheduler.py'
             , environment_definition=self.environment_definition
@@ -165,8 +173,8 @@ class AzureMLCluster(Cluster):
         asyncio.ensure_future(super()._start())
         
         self.__print_message(f'Scaling to {self.initial_node_count} workers')
-        if self.initial_node_count>1:
-            self.scale(self.initial_node_count - 1)
+        if self.initial_node_count > 1:
+            self.scale(self.initial_node_count)   # LOGIC TO KEEP PROPER TRACK OF WORKERS IN `scale`
         self.__print_message(f'Scaling is done')
 
     def connect_cluster(self):
@@ -365,11 +373,12 @@ class AzureMLCluster(Cluster):
         self.__print_message(f"NOTEBOOK: {self.scheduler_info['jupyter_url']}")
 
     def scale(self, workers=1):
-        if workers<=0:
+        if workers <= 0:
             self.close()
             return
         
         count=len(self.workers_list)+1 # one more worker in head node
+        
         if count < workers:
             self.scale_up(workers-count)
         elif count > workers:
@@ -381,7 +390,7 @@ class AzureMLCluster(Cluster):
     def scale_up(self, workers=1):
         for i in range(workers):
             est = Estimator(
-                 'dask_cloudprovider/providers/azureml/setup'
+                 'dask_cloudprovider/providers/azure/setup'
                 , compute_target=self.compute_target
                 , entry_script='start_worker.py' # pass scheduler ip from parent run
                 , environment_definition=self.environment_definition
