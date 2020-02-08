@@ -455,4 +455,4 @@ class AzureMLCluster(Cluster):
         self.__print_message("Scheduler and workers are disconnected.")
 
     def close(self):
-        asyncio.ensure_future(self._close())
+        self.sync(self._close)
