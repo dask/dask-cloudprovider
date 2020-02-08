@@ -84,7 +84,6 @@ class AzureMLCluster(Cluster):
 
     async def get_defaults(self):
         self.config = dask.config.get("cloudprovider.azure", {})
-        print(self.config)
 
         if self.experiment_name is None:
             self.experiment_name = self.config.get("experiment_name")
