@@ -25,6 +25,109 @@ from distributed.utils import (
 )
 
 class AzureMLCluster(Cluster):
+    """ Deploy a Dask cluster using Azure ML
+
+    This creates a dask scheduler and workers on an Azure ML compute target. 
+
+    Parameters
+    ----------
+    workspace: azureml.core.Workspace (required)
+        Azure ML Workspace - see https://aka.ms/azureml/workspace
+
+    compute_target: azureml.core.ComputeTarget (required)
+        Azure ML Compute Target - see https://aka.ms/azureml/computetarget
+
+    environment_definition: azureml.core.Environment (required)
+        Azure ML Environment - see https://aka.ms/azureml/environment 
+
+    experiment_name: str (optional)
+        The name of the Azure ML Experiment used to control the cluster. 
+
+        Defaults to ``dask-cloudprovider``. 
+
+    initial_node_count: int (optional)
+        The initial number of nodes for the Dask Cluster.
+
+        Defaults to ``1``. 
+
+    use_gpu: bool (optional)
+        Flag indicating whether to setup cluster for using GPUs. 
+
+        Defaults to ``False``. 
+
+    n_gpus_per_node: int (optional)
+        Number of GPUs per node in the Azure ML Compute Target. 
+
+        Defaults to ``0``. 
+
+    jupyter: bool (optional)
+        Flag to start JupyterLab session on the headnode of the cluster.
+
+        Defaults to ``False``. 
+
+    jupyter_port: int (optional)
+        Port on headnode to use for hosting JupyterLab session.
+
+        Defaults to ``9000``. 
+
+    dashboard_port: int (optional)
+        Port on headnode to use for hosting Dask dashboard. 
+
+        Defaults to ``9001``.
+
+    datastores: List[str] (optional)
+        List of Azure ML Datastores to be mounted on the headnode - 
+        see https://aka.ms/azureml/data. 
+        
+        Not all datastores can be 
+        mounted. For specifics of datastores types, see 
+        https://aka.ms/azureml/datastores. 
+
+        Defaults to ``[]``. To mount all datastores in the workspace, 
+        set to ``list(workspace.datastores)``. 
+
+    asynchronous: bool (optional)
+        Flag to run jobs asynchronously. 
+
+    **kwargs: dict
+        Additional keyword arguments.
+
+
+    Example | ``AzureMLCluster`` for Dask Client.
+    ----------
+    ```
+    from azureml.core import Workspace
+    from dask.distributed import Client
+    from dask_cloudprovider import AzureMLCluster
+
+    ws = Workspace.from_config()
+
+    cluster = AzureMLCluster(ws,
+                             ws.compute_targets['dask-ct'],
+                             ws.environments['dask-env'])
+
+    client = Client(cluster)
+    ```
+
+
+    Example | ``AzureMLCluster`` for interactive JupyterLab session. 
+    ----------
+    ```
+    from azureml.core import Workspace
+    from dask_cloudprovider import AzureMLCluster
+
+    ws = Workspace.from_config()
+
+    cluster = AzureMLCluster(ws,
+                             ws.compute_targets['dask-ct'],
+                             ws.environments['dask-env'],
+                             datastores = list(ws.datastores),
+                             jupyter= = True)
+
+    print(cluster.jupyter_link)
+    print(cluster.dashboard_link)
+    ```
+    """
     def __init__(self
         , workspace                     # AzureML workspace object
         , compute_target                # AzureML compute object
@@ -40,7 +143,7 @@ class AzureMLCluster(Cluster):
         , dashboard_port=None           # port to forward Dask dashboard to
         , datastores=None               # datastores specs
         , code_store=None               # name of the code store if specified
-        , asynchronous=False             # flag to run jobs in an asynchronous way
+        , asynchronous=True             # flag to run jobs in an asynchronous way
         , **kwargs
     ):
         ### REQUIRED PARAMETERS
