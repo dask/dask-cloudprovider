@@ -670,5 +670,9 @@ class AzureMLCluster(Cluster):
         """ Close the cluster. All Azure ML Runs corresponding to the scheduler 
         and worker processes will be completed. The Azure ML Compute Target will
         return to its minimum number of nodes after its idle time before scaledown.
+
+        Example
+        ----------
+        cluster.close()
         """
         self.sync(self._close)
