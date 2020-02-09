@@ -77,12 +77,8 @@ class AzureMLCluster(Cluster):
 
     datastores: List[str] (optional)
         List of Azure ML Datastores to be mounted on the headnode - 
-        see https://aka.ms/azureml/data. 
+        see https://aka.ms/azureml/data and https://aka.ms/azureml/datastores. 
         
-        Not all datastores can be 
-        mounted. For specifics of datastores types, see 
-        https://aka.ms/azureml/datastores. 
-
         Defaults to ``[]``. To mount all datastores in the workspace, 
         set to ``list(workspace.datastores)``. 
 
