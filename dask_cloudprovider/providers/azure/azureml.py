@@ -38,7 +38,7 @@ class AzureMLCluster(Cluster):
         Azure ML Compute Target - see https://aka.ms/azureml/computetarget
 
     environment_definition: azureml.core.Environment (required)
-        Azure ML Environment - see https://aka.ms/azureml/environment 
+        Azure ML Environment - see https://aka.ms/azureml/environments
 
     experiment_name: str (optional)
         The name of the Azure ML Experiment used to control the cluster. 
@@ -92,8 +92,8 @@ class AzureMLCluster(Cluster):
     **kwargs: dict
         Additional keyword arguments.
 
-
     Example | ``AzureMLCluster`` for Dask Client.
+    See https://aka.ms/azureml/dask.
     ----------
     ```
     from azureml.core import Workspace
@@ -109,8 +109,8 @@ class AzureMLCluster(Cluster):
     client = Client(cluster)
     ```
 
-
     Example | ``AzureMLCluster`` for interactive JupyterLab session. 
+    See https://aka.ms/azureml/dask.
     ----------
     ```
     from azureml.core import Workspace
@@ -121,8 +121,8 @@ class AzureMLCluster(Cluster):
     cluster = AzureMLCluster(ws,
                              ws.compute_targets['dask-ct'],
                              ws.environments['dask-env'],
-                             datastores = list(ws.datastores),
-                             jupyter= = True)
+                             datastores=list(ws.datastores),
+                             jupyter=True)
 
     print(cluster.jupyter_link)
     print(cluster.dashboard_link)
