@@ -444,7 +444,6 @@ class AzureMLCluster(Cluster):
         ----------
         print(cluster.jupyter_link)
         """
- 
         try:
             link = self.scheduler_info['jupyter_url']
         except KeyError:
