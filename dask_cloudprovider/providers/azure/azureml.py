@@ -27,7 +27,7 @@ from distributed.utils import (
 class AzureMLCluster(Cluster):
     """ Deploy a Dask cluster using Azure ML
 
-    This creates a dask scheduler and workers on an Azure ML compute target. 
+    This creates a dask scheduler and workers on an Azure ML Compute Target. 
 
     Parameters
     ----------
