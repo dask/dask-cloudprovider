@@ -142,6 +142,105 @@ class AzureMLCluster(Cluster):
         , asynchronous=True             # flag to run jobs in an asynchronous way
         , **kwargs
     ):
+    """ Deploy a Dask cluster using Azure ML
+
+    This creates a dask scheduler and workers on an Azure ML Compute Target. 
+
+    Parameters
+    ----------
+    workspace: azureml.core.Workspace (required)
+        Azure ML Workspace - see https://aka.ms/azureml/workspace
+
+    compute_target: azureml.core.ComputeTarget (required)
+        Azure ML Compute Target - see https://aka.ms/azureml/computetarget
+
+    environment_definition: azureml.core.Environment (required)
+        Azure ML Environment - see https://aka.ms/azureml/environments
+
+    experiment_name: str (optional)
+        The name of the Azure ML Experiment used to control the cluster. 
+
+        Defaults to ``dask-cloudprovider``. 
+
+    initial_node_count: int (optional)
+        The initial number of nodes for the Dask Cluster.
+
+        Defaults to ``1``. 
+
+    use_gpu: bool (optional)
+        Flag indicating whether to setup cluster for using GPUs. 
+
+        Defaults to ``False``. 
+
+    n_gpus_per_node: int (optional)
+        Number of GPUs per node in the Azure ML Compute Target. 
+
+        Defaults to ``0``. 
+
+    jupyter: bool (optional)
+        Flag to start JupyterLab session on the headnode of the cluster.
+
+        Defaults to ``False``. 
+
+    jupyter_port: int (optional)
+        Port on headnode to use for hosting JupyterLab session.
+
+        Defaults to ``9000``. 
+
+    dashboard_port: int (optional)
+        Port on headnode to use for hosting Dask dashboard. 
+
+        Defaults to ``9001``.
+
+    datastores: List[str] (optional)
+        List of Azure ML Datastores to be mounted on the headnode - 
+        see https://aka.ms/azureml/data and https://aka.ms/azureml/datastores. 
+        
+        Defaults to ``[]``. To mount all datastores in the workspace, 
+        set to ``list(workspace.datastores)``. 
+
+    asynchronous: bool (optional)
+        Flag to run jobs asynchronously. 
+
+    **kwargs: dict
+        Additional keyword arguments.
+
+    Example | ``AzureMLCluster`` for Dask Client.
+    See https://aka.ms/azureml/dask.
+    ----------
+    ```
+    from azureml.core import Workspace
+    from dask.distributed import Client
+    from dask_cloudprovider import AzureMLCluster
+
+    ws = Workspace.from_config()
+
+    cluster = AzureMLCluster(ws,
+                             ws.compute_targets['dask-ct'],
+                             ws.environments['dask-env'])
+
+    client = Client(cluster)
+    ```
+
+    Example | ``AzureMLCluster`` for interactive JupyterLab session. 
+    See https://aka.ms/azureml/dask.
+    ----------
+    ```
+    from azureml.core import Workspace
+    from dask_cloudprovider import AzureMLCluster
+
+    ws = Workspace.from_config()
+
+    cluster = AzureMLCluster(ws,
+                             ws.compute_targets['dask-ct'],
+                             ws.environments['dask-env'],
+                             datastores=list(ws.datastores),
+                             jupyter=True)
+
+    print(cluster.jupyter_link)
+    print(cluster.dashboard_link)
+    ```
+    """
         ### REQUIRED PARAMETERS
         self.workspace = workspace
         self.compute_target = compute_target
@@ -323,6 +422,12 @@ class AzureMLCluster(Cluster):
         
     @property
     def dashboard_link(self):
+        """ Link to Dask dashboard.
+
+        Example
+        ----------
+        print(cluster.dashboard_link)
+        """
         try:
             link = self.scheduler_info['dashboard_url']
         except KeyError:
@@ -332,6 +437,14 @@ class AzureMLCluster(Cluster):
 
     @property
     def jupyter_link(self):
+        """ Link to JupyterLab on running on the headnode of the cluster.
+        Set ``jupyter=True`` when creating the ``AzureMLCluster``.
+
+        Example
+        ----------
+        print(cluster.jupyter_link)
+        """
+ 
         try:
             link = self.scheduler_info['jupyter_url']
         except KeyError:
@@ -554,4 +667,8 @@ class AzureMLCluster(Cluster):
         self.__print_message("Scheduler and workers are disconnected.")
 
     def close(self):
+        """ Close the cluster. All Azure ML Runs corresponding to the scheduler 
+        and worker processes will be completed. The Azure ML Compute Target will
+        return to its minimum number of nodes after its idle time before scaledown.
+        """
         self.sync(self._close)
