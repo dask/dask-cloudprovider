@@ -31,7 +31,7 @@ cloudprovider:
     find_address_timeout: 60 # Configurable timeout in seconds for finding the task IP from the cloudwatch logs.
     skip_cleanup: False # Skip cleaning up of stale resources
   azure:
-    experiment_name: "DaskAzureML" # default name of the Experiment to submit
+    experiment_name: "dask-cloudprovider" # default name of the Experiment to submit
     initial_node_count: 1 # Initial node count
     use_gpu: False # Flag to indicate GPU vs CPU usage
     n_gpus_per_node: 0 # Number of GPUs per node (if use_gpu == True)
