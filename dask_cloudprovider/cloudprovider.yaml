@@ -39,5 +39,7 @@ cloudprovider:
     jupyter_port: 9000 # default Jupyter lab port on the headnode
     dashboard_port: 9001 # default Dask dashboard port on the headnode
     scheduler_port: 9002 # default for the scheduler port if using from outside of cluster VNET
+    admin_username: "" # username to log in to the AzureML Training Cluster for 'local' runs
+    admin_ssh_key: "" # password to log in to the AzureML Training Cluster for 'local' runs
     datastores: [] # default list of datastores to mount
     code_store: null # required only if datastores are defined
