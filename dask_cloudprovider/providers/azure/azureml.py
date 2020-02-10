@@ -1,5 +1,3 @@
-import asyncio
-import logging
 from azureml.core import Experiment
 from azureml.train.estimator import Estimator
 from azureml.core.runconfig import MpiConfiguration
@@ -16,18 +14,14 @@ from distributed.utils import (
     PeriodicCallback,
     log_errors,
     ignoring,
-    sync,
-    Log,
-    Logs,
-    thread_state,
-    format_dashboard_link,
     format_bytes
 )
+
 
 class AzureMLCluster(Cluster):
     """ Deploy a Dask cluster using Azure ML
 
-    This creates a dask scheduler and workers on an Azure ML Compute Target. 
+    This creates a dask scheduler and workers on an Azure ML Compute Target.
 
     Parameters
     ----------
@@ -41,37 +35,37 @@ class AzureMLCluster(Cluster):
         Azure ML Environment - see https://aka.ms/azureml/environments
 
     experiment_name: str (optional)
-        The name of the Azure ML Experiment used to control the cluster. 
+        The name of the Azure ML Experiment used to control the cluster.
 
-        Defaults to ``dask-cloudprovider``. 
+        Defaults to ``dask-cloudprovider``.
 
     initial_node_count: int (optional)
         The initial number of nodes for the Dask Cluster.
 
-        Defaults to ``1``. 
+        Defaults to ``1``.
 
     use_gpu: bool (optional)
-        Flag indicating whether to setup cluster for using GPUs. 
+        Flag indicating whether to setup cluster for using GPUs.
 
-        Defaults to ``False``. 
+        Defaults to ``False``.
 
     n_gpus_per_node: int (optional)
-        Number of GPUs per node in the Azure ML Compute Target. 
+        Number of GPUs per node in the Azure ML Compute Target.
 
-        Defaults to ``0``. 
+        Defaults to ``0``.
 
     jupyter: bool (optional)
         Flag to start JupyterLab session on the headnode of the cluster.
 
-        Defaults to ``False``. 
+        Defaults to ``False``.
 
     jupyter_port: int (optional)
         Port on headnode to use for hosting JupyterLab session.
 
-        Defaults to ``9000``. 
+        Defaults to ``9000``.
 
     dashboard_port: int (optional)
-        Port on headnode to use for hosting Dask dashboard. 
+        Port on headnode to use for hosting Dask dashboard.
 
         Defaults to ``9001``.
         
@@ -97,14 +91,14 @@ class AzureMLCluster(Cluster):
         Defaults to ``""``.
         
     datastores: List[str] (optional)
-        List of Azure ML Datastores to be mounted on the headnode - 
-        see https://aka.ms/azureml/data and https://aka.ms/azureml/datastores. 
-        
-        Defaults to ``[]``. To mount all datastores in the workspace, 
-        set to ``list(workspace.datastores)``. 
+        List of Azure ML Datastores to be mounted on the headnode -
+        see https://aka.ms/azureml/data and https://aka.ms/azureml/datastores.
+
+        Defaults to ``[]``. To mount all datastores in the workspace,
+        set to ``list(workspace.datastores)``.
 
     asynchronous: bool (optional)
-        Flag to run jobs asynchronously. 
+        Flag to run jobs asynchronously.
 
     **kwargs: dict
         Additional keyword arguments.
@@ -126,7 +120,7 @@ class AzureMLCluster(Cluster):
     client = Client(cluster)
     ```
 
-    Example | ``AzureMLCluster`` for interactive JupyterLab session. 
+    Example | ``AzureMLCluster`` for interactive JupyterLab session.
     See https://aka.ms/azureml/dask.
     ----------
     ```
@@ -164,8 +158,7 @@ class AzureMLCluster(Cluster):
         , datastores=None               # datastores specs
         , code_store=None               # name of the code store if specified
         , asynchronous=True             # flag to run jobs in an asynchronous way
-        , **kwargs
-    ):
+        , **kwargs):
         ### REQUIRED PARAMETERS
         self.workspace = workspace
         self.compute_target = compute_target
@@ -176,7 +169,7 @@ class AzureMLCluster(Cluster):
 
         ### ENVIRONMENT AND VARIABLES
         self.initial_node_count = initial_node_count
-        
+
         ### GPU RUN INFO
         self.use_gpu = use_gpu
         self.n_gpus_per_node = n_gpus_per_node
@@ -189,7 +182,7 @@ class AzureMLCluster(Cluster):
         self.admin_username = admin_username
         self.admin_ssh_key = admin_ssh_key
         self.scheduler_ip_port = None   ### INIT FOR HOLDING THE ADDRESS FOR THE SCHEDULER
-        
+
         ### DATASTORES
         self.datastores = datastores
         self.code_store = code_store
@@ -254,12 +247,12 @@ class AzureMLCluster(Cluster):
         ### PARAMETERS TO START THE CLUSTER
         self.scheduler_params = {}
         self.worker_params = {}
-        
+
         ### scheduler and worker parameters
         self.scheduler_params['--jupyter'] = True
         if self.code_store is not None:
             self.scheduler_params['--code_store'] = self.code_store
-        
+
         if self.use_gpu:
             self.scheduler_params['--use_gpu'] = True
             self.scheduler_params['--n_gpus_per_node'] = self.n_gpus_per_node
@@ -279,7 +272,7 @@ class AzureMLCluster(Cluster):
         self.scheduler_ip_port = None
         self.workers_list = []
         self.URLs = {}
-        
+
         ### SANITY CHECKS
         ###-----> initial node count
         if self.initial_node_count > self.max_nodes:
@@ -337,18 +330,18 @@ class AzureMLCluster(Cluster):
 
         self.__print_message("Waiting for scheduler node's IP")
         while (
-             run.get_status() != 'Canceled'
-             and run.get_status() != 'Failed'
-             and 'scheduler' not in run.get_metrics()):
-                 print('.', end="")
-                 time.sleep(5)
-            
+                run.get_status() != 'Canceled'
+                and run.get_status() != 'Failed'
+                and 'scheduler' not in run.get_metrics()):
+            print('.', end="")
+            time.sleep(5)
+
         if run.get_status() == 'Canceled' or run.get_status() == 'Failed':
             raise Exception('Failed to start the AzureML cluster.')
 
         print('\n\n')
 
-        ### SET FLAGS    
+        ### SET FLAGS
         self.scheduler_ip_port = run.get_metrics()["scheduler"]
         self.worker_params['--scheduler_ip_port'] = self.scheduler_ip_port
         self.__print_message(f'Scheduler: {run.get_metrics()["scheduler"]}')
@@ -360,7 +353,7 @@ class AzureMLCluster(Cluster):
                 await self.sync(self.__check_if_scheduler_ip_reachable)
             except:
                 time.sleep(1)
-                
+
         ### REQUIRED BY dask.distributed.deploy.cluster.Cluster
         _scheduler = self.__prepare_rpc_connection_to_headnode()
         self.scheduler_comm = rpc(_scheduler)
@@ -369,22 +362,12 @@ class AzureMLCluster(Cluster):
         await self.sync(self.__update_links)
         
         self.__print_message('Connections established')
-                
+
         self.__print_message(f'Scaling to {self.initial_node_count} workers')
         if self.initial_node_count > 1:
             self.scale(self.initial_node_count)   # LOGIC TO KEEP PROPER TRACK OF WORKERS IN `scale`
         self.__print_message(f'Scaling is done')
-        
-    # def connect_cluster(self):
-    #     if not self.run:
-    #         sys.exit("Run doesn't exist!")
-    #     if self.run.get_status() == 'Canceled':
-    #         print('\nRun was canceled')
-    #     else:
-    #         print(f'\nSetting up port forwarding...')
-    #         self.port_forwarding_ComputeVM()
-    #         print(f'Cluster is ready to use.')
-            
+       
     async def __update_links(self):
         if self.same_vnet:
             self.scheduler_info['dashboard_url'] = f'https://{socket.gethostname()}-{self.dashboard_port}.{self.workspace.get_details()["location"]}.instances.azureml.net/status'
@@ -423,7 +406,7 @@ class AzureMLCluster(Cluster):
                     , stderr=subprocess.STDOUT
                 )
             ) 
-        
+
     @property
     def dashboard_link(self):
         """ Link to Dask dashboard.
@@ -456,6 +439,7 @@ class AzureMLCluster(Cluster):
             return link
         
     def _format_nodes(self, nodes, requested, use_gpu, n_gpus_per_node=None):
+
         if use_gpu:
             if nodes == requested:
                 return f'{nodes}'
@@ -496,7 +480,6 @@ class AzureMLCluster(Cluster):
             else sum(v["memory_limit"] for v in self.scheduler_info["workers"].values())
         )
         memory = format_bytes(memory)
-           
         text = """
 <div>
   <style scoped>
@@ -523,7 +506,7 @@ class AzureMLCluster(Cluster):
             memory,
         )
         return text
-        
+
     def _widget(self):
         """ Create IPython widget for display within a notebook """
         try:
@@ -546,7 +529,7 @@ class AzureMLCluster(Cluster):
             )
         else:
             dashboard_link = ""
-            
+
         if self.jupyter_link:
             jupyter_link = '<p><b>Jupyter: </b><a href="%s" target="_blank">%s</a></p>\n' % (
                 self.jupyter_link,
@@ -558,7 +541,7 @@ class AzureMLCluster(Cluster):
         title = "<h2>%s</h2>" % self._cluster_class_name
         title = HTML(title)
         dashboard = HTML(dashboard_link)
-        jupyter   = HTML(jupyter_link)
+        jupyter = HTML(jupyter_link)
 
         status = HTML(self._widget_status(), layout=Layout(min_width="150px"))
 
@@ -608,7 +591,7 @@ class AzureMLCluster(Cluster):
         pc.start()
 
         return box
-        
+
     def print_links_ComputeVM(self):
         self.__print_message(f"DASHBOARD: {self.scheduler_info['dashboard_url']}")
 
@@ -618,13 +601,13 @@ class AzureMLCluster(Cluster):
         if workers <= 0:
             self.close()
             return
-        
-        count=len(self.workers_list)+1 # one more worker in head node
-        
+
+        count = len(self.workers_list) + 1 # one more worker in head node
+
         if count < workers:
-            self.scale_up(workers-count)
+            self.scale_up(workers - count)
         elif count > workers:
-            self.scale_down(count-workers)
+            self.scale_down(count - workers)
         else:
             print(f'Number of workers: {workers}')
 
@@ -632,7 +615,7 @@ class AzureMLCluster(Cluster):
     def scale_up(self, workers=1):
         for i in range(workers):
             estimator = Estimator(
-                 'dask_cloudprovider/providers/azure/setup'
+                'dask_cloudprovider/providers/azure/setup'
                 , compute_target=self.compute_target
                 , entry_script='start_worker.py' # pass scheduler ip from parent run
                 , environment_definition=self.environment_definition
@@ -646,20 +629,20 @@ class AzureMLCluster(Cluster):
 
     # scale down
     def scale_down(self, workers=1):
-         for i in range(workers):
-                if self.workers_list:
-                    child_run=self.workers_list.pop(0) #deactive oldest workers
-                    child_run.complete() # complete() will mark the run "Complete", but won't kill the process
-                    child_run.cancel()
-                else:
-                    print("All scaled workers are removed.")
-                    
+        for i in range(workers):
+            if self.workers_list:
+                child_run = self.workers_list.pop(0) #deactive oldest workers
+                child_run.complete() # complete() will mark the run "Complete", but won't kill the process
+                child_run.cancel()
+            else:
+                print("All scaled workers are removed.")
+
     # close cluster
     async def _close(self):
-        if(self.status=="closed"):
+        if(self.status == "closed"):
             return
         while self.workers_list:
-            child_run=self.workers_list.pop()
+            child_run = self.workers_list.pop()
             child_run.complete()
             child_run.cancel()
 
@@ -668,11 +651,11 @@ class AzureMLCluster(Cluster):
             self.run.cancel()
 
         await super()._close()
-        self.status="closed"
+        self.status = "closed"
         self.__print_message("Scheduler and workers are disconnected.")
 
     def close(self):
-        """ Close the cluster. All Azure ML Runs corresponding to the scheduler 
+        """ Close the cluster. All Azure ML Runs corresponding to the scheduler
         and worker processes will be completed. The Azure ML Compute Target will
         return to its minimum number of nodes after its idle time before scaledown.
 
