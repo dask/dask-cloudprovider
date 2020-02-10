@@ -3,7 +3,6 @@ import logging
 from azureml.core import Experiment
 from azureml.train.estimator import Estimator
 from azureml.core.runconfig import MpiConfiguration
-# from IPython.core.display import HTML
 import time, os, socket, sys
 
 from distributed.deploy.cluster import Cluster
@@ -161,6 +160,7 @@ class AzureMLCluster(Cluster):
         self.jupyter = jupyter
         self.jupyter_port = jupyter_port
         self.dashboard_port = dashboard_port
+        self.scheduler_ip_port = None   ### INIT FOR HOLDING THE ADDRESS FOR THE SCHEDULER
         
         ### DATASTORES
         self.datastores = datastores
@@ -168,6 +168,9 @@ class AzureMLCluster(Cluster):
 
         ### FUTURE EXTENSIONS
         self.kwargs = kwargs
+
+        ### RUNNING IN MATRIX OR LOCAL
+        self.same_vnet = False    ### ASSUMES LOCAL RUN INSTEAD OF VNET
 
         ### GET RUNNING LOOP
         self._loop_runner = LoopRunner(loop=None, asynchronous=asynchronous)
@@ -211,8 +214,6 @@ class AzureMLCluster(Cluster):
         if self.code_store is None:
             self.code_store = self.config.get("code_store")
 
-        print(self.experiment_name)
-
         ### PARAMETERS TO START THE CLUSTER
         self.scheduler_params = {}
         self.worker_params = {}
@@ -253,6 +254,20 @@ class AzureMLCluster(Cluster):
     def __get_estimator(self):
         raise NotImplementedError('This method has not been implemented yet.')
 
+    async def __check_if_scheduler_ip_reachable(self):
+        """
+        Private method to determine if running in the cloud within the same VNET
+        and the scheduler node is reachable
+        """
+        try:
+            ip, port = self.scheduler_ip_port.split(':')
+            socket.create_connection((ip, port), 5)
+            self.same_vnet = True
+            print('Same VNET')
+        except socket.timeout:
+            print('Not on the same vnet')
+            self.same_vnet = False
+
     async def create_cluster(self):
         # set up environment
         self.__print_message('Setting up cluster')
@@ -286,7 +301,8 @@ class AzureMLCluster(Cluster):
             raise Exception('Failed to start the AzureML cluster.')
 
         print('\n\n')
-            
+
+        ### SET FLAGS    
         self.scheduler_ip_port = run.get_metrics()["scheduler"]
         self.worker_params['--scheduler_ip_port'] = self.scheduler_ip_port
         self.__print_message(f'Scheduler: {run.get_metrics()["scheduler"]}')
@@ -294,13 +310,15 @@ class AzureMLCluster(Cluster):
         
         ### REQUIRED BY dask.distributed.deploy.cluster.Cluster
         self.scheduler_comm = rpc(run.get_metrics()["scheduler"])
-        asyncio.ensure_future(super()._start())
+        # asyncio.ensure_future(super()._start())
+        await self.sync(super()._start)
+        await self.sync(self.__check_if_scheduler_ip_reachable)
         
         self.__print_message(f'Scaling to {self.initial_node_count} workers')
         if self.initial_node_count > 1:
             self.scale(self.initial_node_count)   # LOGIC TO KEEP PROPER TRACK OF WORKERS IN `scale`
         self.__print_message(f'Scaling is done')
-
+        
     def connect_cluster(self):
         if not self.run:
             sys.exit("Run doesn't exist!")
@@ -576,3 +594,4 @@ class AzureMLCluster(Cluster):
         cluster.close()
         """
         self.sync(self._close)
+
