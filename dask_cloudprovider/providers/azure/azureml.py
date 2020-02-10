@@ -90,6 +90,7 @@ class AzureMLCluster(Cluster):
     admin_ssh_key: str (optional)
         Location of the SSH secret key used when creating the AzureML Compute.
         The key should be passordless if run from a Jupyter notebook.
+        The ``id_rsa`` file needs to have 0700 permissions set.
         Required for runs that are not on the same VNET. Defaults to empty string. 
         Throws Exception if machine not on the same VNET.
 
@@ -363,27 +364,26 @@ class AzureMLCluster(Cluster):
         ### REQUIRED BY dask.distributed.deploy.cluster.Cluster
         _scheduler = self.__prepare_rpc_connection_to_headnode()
         self.scheduler_comm = rpc(_scheduler)
-        # asyncio.ensure_future(super()._start())
         await self.sync(self.__setup_port_forwarding)
         await self.sync(super()._start)
         await self.sync(self.__update_links)
         
         self.__print_message('Connections established')
                 
-#         self.__print_message(f'Scaling to {self.initial_node_count} workers')
-#         if self.initial_node_count > 1:
-#             self.scale(self.initial_node_count)   # LOGIC TO KEEP PROPER TRACK OF WORKERS IN `scale`
-#         self.__print_message(f'Scaling is done')
+        self.__print_message(f'Scaling to {self.initial_node_count} workers')
+        if self.initial_node_count > 1:
+            self.scale(self.initial_node_count)   # LOGIC TO KEEP PROPER TRACK OF WORKERS IN `scale`
+        self.__print_message(f'Scaling is done')
         
-    def connect_cluster(self):
-        if not self.run:
-            sys.exit("Run doesn't exist!")
-        if self.run.get_status() == 'Canceled':
-            print('\nRun was canceled')
-        else:
-            print(f'\nSetting up port forwarding...')
-            self.port_forwarding_ComputeVM()
-            print(f'Cluster is ready to use.')
+    # def connect_cluster(self):
+    #     if not self.run:
+    #         sys.exit("Run doesn't exist!")
+    #     if self.run.get_status() == 'Canceled':
+    #         print('\nRun was canceled')
+    #     else:
+    #         print(f'\nSetting up port forwarding...')
+    #         self.port_forwarding_ComputeVM()
+    #         print(f'Cluster is ready to use.')
             
     async def __update_links(self):
         if self.same_vnet:
@@ -394,9 +394,6 @@ class AzureMLCluster(Cluster):
         else:
             self.scheduler_info['dashboard_url'] = f'http://{socket.gethostname()}:{self.dashboard_port}'
             self.scheduler_info['jupyter_url']   = f'http://{socket.gethostname()}:{self.jupyter_port}/?token={self.run.get_metrics()["token"]}'
-                
-#         print(self.scheduler_info['jupyter_url'])
-#         print(self.scheduler_info['dashboard_url'])
 
     async def __setup_port_forwarding(self):
         if self.same_vnet:
@@ -458,25 +455,25 @@ class AzureMLCluster(Cluster):
         else:
             return link
         
-    def _format_workers(self, workers, requested, use_gpu, n_gpus_per_node=None):
+    def _format_nodes(self, nodes, requested, use_gpu, n_gpus_per_node=None):
         if use_gpu:
-            if workers == requested:
-                return f'{workers}'
+            if nodes == requested:
+                return f'{nodes}'
             else:
-                return f'{workers} / {requested}'
+                return f'{nodes} / {requested}'
 
         else:
-            if workers == requested:
-                return f'{workers}'
+            if nodes == requested:
+                return f'{nodes}'
             else:
-                return f'{workers} / {requested}'
+                return f'{nodes} / {requested}'
         
     def _widget_status(self):
         ### reporting proper number of nodes vs workers in a multi-GPU worker scenario
-        workers = len(self.scheduler_info["workers"])
+        nodes = len(self.scheduler_info["workers"])
         
         if self.use_gpu:
-            workers = int(workers / self.n_gpus_per_node)
+            nodes = int(nodes / self.n_gpus_per_node)
             
         if hasattr(self, "worker_spec"):
             requested = sum(
@@ -484,20 +481,22 @@ class AzureMLCluster(Cluster):
                 for each in self.worker_spec.values()
             )
             
-        elif hasattr(self, "workers"):
-            requested = len(self.workers)
+        elif hasattr(self, "nodes"):
+            requested = len(self.nodes)
         else:
-            requested = workers
+            requested = nodes
             
-        workers = self._format_workers(workers, requested, self.use_gpu, self.n_gpus_per_node)
+        nodes = self._format_nodes(nodes, requested, self.use_gpu, self.n_gpus_per_node)
             
         cores = sum(v["nthreads"] for v in self.scheduler_info["workers"].values())        
-        cores_or_gpus = 'GPUs' if self.use_gpu else 'Cores'
+        cores_or_gpus = 'Workers/GPUs' if self.use_gpu else 'Workers/Cores'
         
-        memory = sum(v["memory_limit"] for v in self.scheduler_info["workers"].values())
+        memory = (
+            sum(v['gpu']["memory-total"][0] for v in self.scheduler_info["workers"].values()) if self.use_gpu
+            else sum(v["memory_limit"] for v in self.scheduler_info["workers"].values())
+        )
         memory = format_bytes(memory)
-        
-        
+           
         text = """
 <div>
   <style scoped>
@@ -512,13 +511,13 @@ class AzureMLCluster(Cluster):
     }
   </style>
   <table style="text-align: right;">
-    <tr> <th>Workers</th> <td>%s</td></tr>
+    <tr> <th>Nodes</th> <td>%s</td></tr>
     <tr> <th>%s</th> <td>%s</td></tr>
     <tr> <th>Memory</th> <td>%s</td></tr>
   </table>
 </div>
 """ % (
-            self._format_workers(workers, requested, self.use_gpu, self.n_gpus_per_node),
+            nodes,
             cores_or_gpus,
             cores,
             memory,
@@ -564,10 +563,10 @@ class AzureMLCluster(Cluster):
         status = HTML(self._widget_status(), layout=Layout(min_width="150px"))
 
         if self._supports_scaling:
-            request = IntText(self.initial_node_count, description="Workers", layout=layout)
+            request = IntText(self.initial_node_count, description="Nodes", layout=layout)
             scale = Button(description="Scale", layout=layout)
 
-            minimum = IntText(1, description="Minimum", layout=layout)
+            minimum = IntText(0, description="Minimum", layout=layout)
             maximum = IntText(0, description="Maximum", layout=layout)
             adapt = Button(description="Adapt", layout=layout)
 
