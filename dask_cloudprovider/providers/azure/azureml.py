@@ -548,14 +548,14 @@ class AzureMLCluster(Cluster):
         count=len(self.workers_list)+1 # one more worker in head node
         
         if count < workers:
-            self._scale_up(workers-count)
+            self.scale_up(workers-count)
         elif count > workers:
-            self._scale_down(count-workers)
+            self.scale_down(count-workers)
         else:
             print(f'Number of workers: {workers}')
 
     # scale up
-    def _scale_up(self, workers=1):
+    def scale_up(self, workers=1):
         conda_dependencies = self.environment_definition.python.conda_dependencies
         run_config = RunConfiguration(conda_dependencies=conda_dependencies)
         run_config.target=self.compute_target
@@ -573,7 +573,7 @@ class AzureMLCluster(Cluster):
             self.workers_list.append(child_run)
 
     # scale down
-    def _scale_down(self, workers=1):
+    def scale_down(self, workers=1):
          for i in range(workers):
                 if self.workers_list:
                     child_run=self.workers_list.pop(0) #deactive oldest workers
