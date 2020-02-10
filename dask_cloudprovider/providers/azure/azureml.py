@@ -532,6 +532,15 @@ class AzureMLCluster(Cluster):
         self.__print_message(f"NOTEBOOK: {self.scheduler_info['jupyter_url']}")
 
     def scale(self, workers=1):
+        """ Scale the cluster. We can add or reduce the number workers
+        of a given configuration.
+
+        Example
+        ----------
+        ```python
+        cluster.scale(2)
+        ```
+        """
         if workers <= 0:
             self.close()
             return
@@ -539,14 +548,14 @@ class AzureMLCluster(Cluster):
         count=len(self.workers_list)+1 # one more worker in head node
         
         if count < workers:
-            self.scale_up(workers-count)
+            self._scale_up(workers-count)
         elif count > workers:
-            self.scale_down(count-workers)
+            self._scale_down(count-workers)
         else:
             print(f'Number of workers: {workers}')
 
     # scale up
-    def scale_up(self, workers=1):
+    def _scale_up(self, workers=1):
         conda_dependencies = self.environment_definition.python.conda_dependencies
         run_config = RunConfiguration(conda_dependencies=conda_dependencies)
         run_config.target=self.compute_target
@@ -564,7 +573,7 @@ class AzureMLCluster(Cluster):
             self.workers_list.append(child_run)
 
     # scale down
-    def scale_down(self, workers=1):
+    def _scale_down(self, workers=1):
          for i in range(workers):
                 if self.workers_list:
                     child_run=self.workers_list.pop(0) #deactive oldest workers
