@@ -32,13 +32,13 @@ class AzureMLCluster(Cluster):
     Parameters
     ----------
     workspace: azureml.core.Workspace (required)
-        Azure ML Workspace - see https://aka.ms/azureml/workspace
+        Azure ML Workspace - see https://aka.ms/azureml/workspace.
 
     compute_target: azureml.core.ComputeTarget (required)
-        Azure ML Compute Target - see https://aka.ms/azureml/computetarget
+        Azure ML Compute Target - see https://aka.ms/azureml/computetarget.
 
     environment_definition: azureml.core.Environment (required)
-        Azure ML Environment - see https://aka.ms/azureml/environments
+        Azure ML Environment - see https://aka.ms/azureml/environments.
 
     experiment_name: str (optional)
         The name of the Azure ML Experiment used to control the cluster. 
@@ -91,7 +91,7 @@ class AzureMLCluster(Cluster):
     Example | ``AzureMLCluster`` for Dask Client.
     See https://aka.ms/azureml/dask.
     ----------
-    ```
+    ```python
     from azureml.core import Workspace
     from dask.distributed import Client
     from dask_cloudprovider import AzureMLCluster
@@ -108,7 +108,7 @@ class AzureMLCluster(Cluster):
     Example | ``AzureMLCluster`` for interactive JupyterLab session. 
     See https://aka.ms/azureml/dask.
     ----------
-    ```
+    ```python
     from azureml.core import Workspace
     from dask_cloudprovider import AzureMLCluster
 
@@ -327,7 +327,9 @@ class AzureMLCluster(Cluster):
 
         Example
         ----------
+        ```python
         print(cluster.dashboard_link)
+        ```
         """
         try:
             link = self.scheduler_info['dashboard_url']
@@ -343,7 +345,9 @@ class AzureMLCluster(Cluster):
 
         Example
         ----------
+        ```python
         print(cluster.jupyter_link)
+        ```
         """
         try:
             link = self.scheduler_info['jupyter_url']
