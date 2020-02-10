@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from azureml.core import Experiment
+from azureml.core import Experiment, ScriptRunConfig, RunConfiguration
 from azureml.train.estimator import Estimator
 from azureml.core.runconfig import MpiConfiguration
 import time, os, socket, sys
@@ -547,18 +547,20 @@ class AzureMLCluster(Cluster):
 
     # scale up
     def scale_up(self, workers=1):
-        for i in range(workers):
-            estimator = Estimator(
-                 'dask_cloudprovider/providers/azure/setup'
-                , compute_target=self.compute_target
-                , entry_script='start_worker.py' # pass scheduler ip from parent run
-                , environment_definition=self.environment_definition
-                , script_params=self.worker_params
-                , node_count=1
-                , distributed_training=MpiConfiguration()
-            )
+        conda_dependencies = self.environment_definition.python.conda_dependencies
+        run_config = RunConfiguration(conda_dependencies=conda_dependencies)
+        run_config.target=self.compute_target
+        scheduler_ip=self.run.get_metrics()["scheduler"]
+        args=[f'scheduler_ip_port={scheduler_ip}', f'use_gpu={self.use_gpu}', f'n_gpus_per_node={self.n_gpus_per_node}']
+                    
+        child_run_config=ScriptRunConfig(
+            source_directory='dask_cloudprovider/providers/azure/setup', 
+            script='start_worker.py', 
+            arguments=args,
+            run_config=run_config)
 
-            child_run = Experiment(self.workspace, self.experiment_name).submit(estimator)
+        for i in range(workers):
+            child_run=self.run.submit_child(child_run_config)
             self.workers_list.append(child_run)
 
     # scale down
