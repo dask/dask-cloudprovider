@@ -577,6 +577,8 @@ class AzureMLCluster(Cluster):
 
         Example
         ----------
+        ```python
         cluster.close()
+        ```
         """
         self.sync(self._close)
