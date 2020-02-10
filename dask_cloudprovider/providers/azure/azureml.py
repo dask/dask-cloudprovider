@@ -31,13 +31,13 @@ class AzureMLCluster(Cluster):
     Parameters
     ----------
     workspace: azureml.core.Workspace (required)
-        Azure ML Workspace - see https://aka.ms/azureml/workspace.
+        Azure ML Workspace - see https://aka.ms/azureml/workspace
 
     compute_target: azureml.core.ComputeTarget (required)
-        Azure ML Compute Target - see https://aka.ms/azureml/computetarget.
+        Azure ML Compute Target - see https://aka.ms/azureml/computetarget
 
     environment_definition: azureml.core.Environment (required)
-        Azure ML Environment - see https://aka.ms/azureml/environments.
+        Azure ML Environment - see https://aka.ms/azureml/environments
 
     experiment_name: str (optional)
         The name of the Azure ML Experiment used to control the cluster. 
@@ -73,6 +73,11 @@ class AzureMLCluster(Cluster):
         Port on headnode to use for hosting Dask dashboard. 
 
         Defaults to ``9001``.
+        
+    scheduler_port: int (optional)
+        Port to map the scheduler port to via SSH-tunnel if machine not on the same VNET. 
+
+        Defaults to ``9002``.
 
     datastores: List[str] (optional)
         List of Azure ML Datastores to be mounted on the headnode - 
@@ -90,7 +95,7 @@ class AzureMLCluster(Cluster):
     Example | ``AzureMLCluster`` for Dask Client.
     See https://aka.ms/azureml/dask.
     ----------
-    ```python
+    ```
     from azureml.core import Workspace
     from dask.distributed import Client
     from dask_cloudprovider import AzureMLCluster
@@ -107,7 +112,7 @@ class AzureMLCluster(Cluster):
     Example | ``AzureMLCluster`` for interactive JupyterLab session. 
     See https://aka.ms/azureml/dask.
     ----------
-    ```python
+    ```
     from azureml.core import Workspace
     from dask_cloudprovider import AzureMLCluster
 
@@ -136,6 +141,7 @@ class AzureMLCluster(Cluster):
         , jupyter=None                  # start Jupyter lab process on headnode
         , jupyter_port=None             # port to forward the Jupyter process to
         , dashboard_port=None           # port to forward Dask dashboard to
+        , scheduler_port=None           # port to map the scheduler port to for 'local' runs
         , datastores=None               # datastores specs
         , code_store=None               # name of the code store if specified
         , asynchronous=True             # flag to run jobs in an asynchronous way
@@ -160,6 +166,7 @@ class AzureMLCluster(Cluster):
         self.jupyter = jupyter
         self.jupyter_port = jupyter_port
         self.dashboard_port = dashboard_port
+        self.scheduler_port = scheduler_port
         self.scheduler_ip_port = None   ### INIT FOR HOLDING THE ADDRESS FOR THE SCHEDULER
         
         ### DATASTORES
@@ -170,7 +177,7 @@ class AzureMLCluster(Cluster):
         self.kwargs = kwargs
 
         ### RUNNING IN MATRIX OR LOCAL
-        self.same_vnet = False    ### ASSUMES LOCAL RUN INSTEAD OF VNET
+        self.same_vnet = None
 
         ### GET RUNNING LOOP
         self._loop_runner = LoopRunner(loop=None, asynchronous=asynchronous)
@@ -207,6 +214,9 @@ class AzureMLCluster(Cluster):
 
         if self.dashboard_port is None:
             self.dashboard_port = self.config.get("dashboard_port")
+            
+        if self.scheduler_port is None:
+            self.scheduler_port = self.config.get("scheduler_port")
 
         if self.datastores is None:
             self.datastores = self.config.get("datastores")
@@ -345,9 +355,7 @@ class AzureMLCluster(Cluster):
 
         Example
         ----------
-        ```python
         print(cluster.dashboard_link)
-        ```
         """
         try:
             link = self.scheduler_info['dashboard_url']
@@ -363,9 +371,7 @@ class AzureMLCluster(Cluster):
 
         Example
         ----------
-        ```python
         print(cluster.jupyter_link)
-        ```
         """
         try:
             link = self.scheduler_info['jupyter_url']
@@ -595,9 +601,6 @@ class AzureMLCluster(Cluster):
 
         Example
         ----------
-        ```python
         cluster.close()
-        ```
         """
         self.sync(self._close)
-
