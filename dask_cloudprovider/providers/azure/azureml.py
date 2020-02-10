@@ -251,7 +251,7 @@ class AzureMLCluster(Cluster):
         print(f'{pre_post} {msg} {pre_post}'.center(length, filler))
 
     def __get_estimator(self):
-        return None
+        raise NotImplementedError('This method has not been implemented yet.')
 
     async def create_cluster(self):
         # set up environment
