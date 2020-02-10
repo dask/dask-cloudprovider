@@ -1,4 +1,4 @@
-from azureml.core import Experiment
+from azureml.core import Experiment, ScriptRunConfig, RunConfiguration
 from azureml.train.estimator import Estimator
 from azureml.core.runconfig import MpiConfiguration
 import time, os, socket, sys, subprocess
@@ -157,7 +157,7 @@ class AzureMLCluster(Cluster):
         , admin_ssh_key=None            # path to private SSH key used to log in to the AzureML Training Cluster for 'local' runs
         , datastores=None               # datastores specs
         , code_store=None               # name of the code store if specified
-        , asynchronous=True             # flag to run jobs in an asynchronous way
+        , asynchronous=False            # flag to run jobs in an asynchronous way
         , **kwargs):
         ### REQUIRED PARAMETERS
         self.workspace = workspace
@@ -598,6 +598,15 @@ class AzureMLCluster(Cluster):
         self.__print_message(f"NOTEBOOK: {self.scheduler_info['jupyter_url']}")
 
     def scale(self, workers=1):
+        """ Scale the cluster. We can add or reduce the number workers
+        of a given configuration
+
+        Example
+        ----------
+        ```python
+        cluster.scale(2)
+        ```
+        """
         if workers <= 0:
             self.close()
             return
@@ -613,18 +622,20 @@ class AzureMLCluster(Cluster):
 
     # scale up
     def scale_up(self, workers=1):
-        for i in range(workers):
-            estimator = Estimator(
-                'dask_cloudprovider/providers/azure/setup'
-                , compute_target=self.compute_target
-                , entry_script='start_worker.py' # pass scheduler ip from parent run
-                , environment_definition=self.environment_definition
-                , script_params=self.worker_params
-                , node_count=1
-                , distributed_training=MpiConfiguration()
-            )
+        conda_dependencies = self.environment_definition.python.conda_dependencies
+        run_config = RunConfiguration(conda_dependencies=conda_dependencies)
+        run_config.target=self.compute_target
+        scheduler_ip=self.run.get_metrics()["scheduler"]
+        args=[f'scheduler_ip_port={scheduler_ip}', f'use_gpu={self.use_gpu}', f'n_gpus_per_node={self.n_gpus_per_node}']                    
 
-            child_run = Experiment(self.workspace, self.experiment_name).submit(estimator)
+        child_run_config=ScriptRunConfig(
+            source_directory='dask_cloudprovider/providers/azure/setup',
+            script='start_worker.py',
+            arguments=args,
+            run_config=run_config)
+
+        for i in range(workers):
+            child_run=self.run.submit_child(child_run_config)
             self.workers_list.append(child_run)
 
     # scale down
