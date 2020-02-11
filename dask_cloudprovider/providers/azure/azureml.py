@@ -7,6 +7,7 @@ from distributed.deploy.cluster import Cluster
 from distributed.core import rpc
 
 import dask
+import pathlib
 
 from distributed.utils import (
     LoopRunner,
@@ -200,6 +201,8 @@ class AzureMLCluster(Cluster):
         self._loop_runner = LoopRunner(loop=None, asynchronous=asynchronous)
         self.loop = self._loop_runner.loop
 
+        self.abs_path = pathlib.Path(__file__).parent.absolute()
+
         ### INITIALIZE CLUSTER
         super().__init__(asynchronous=asynchronous)
 
@@ -320,7 +323,7 @@ class AzureMLCluster(Cluster):
         self.__print_message('Submitting the experiment')
         exp = Experiment(self.workspace, self.experiment_name)
         estimator = Estimator(
-            os.path.join(os.path.dirname(__file__), 'setup')
+            os.path.join(self.abs_path, 'setup')
             , compute_target=self.compute_target
             , entry_script='start_scheduler.py'
             , environment_definition=self.environment_definition
@@ -647,7 +650,7 @@ class AzureMLCluster(Cluster):
         args=[f'scheduler_ip_port={scheduler_ip}', f'use_gpu={self.use_gpu}', f'n_gpus_per_node={self.n_gpus_per_node}']                    
 
         child_run_config=ScriptRunConfig(
-            source_directory='dask_cloudprovider/providers/azure/setup',
+            source_directory=os.path.join(self.abs_path, 'setup'),
             script='start_worker.py',
             arguments=args,
             run_config=run_config)
