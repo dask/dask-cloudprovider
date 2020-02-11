@@ -423,6 +423,7 @@ class AzureMLCluster(Cluster):
                     , stdout=subprocess.PIPE
                     , stderr=subprocess.STDOUT
                 )
+            )
 
     @property
     def dashboard_link(self):
