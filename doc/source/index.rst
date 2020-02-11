@@ -56,8 +56,19 @@ with all the IAM roles, security groups, and so on that it needs to function.
    ⚠ All AWS resources created by ``FargateCluster`` should be removed on
    garbage collection. If the process is killed harshly this will not happen.
 
-You can also create Dask clusters using EC2 based ECS clusters using
-``ECSCluster``.
+Note that in many cases you will want to specify a custom Docker image to ``FargateCluster`` so that Dask has the packages it needs to execute your workflow. 
+
+.. code-block:: python
+
+   from dask_cloudprovider import FargateCluster
+   cluster = FargateCluster(image="<hub-user>/<repo-name>[:<tag>]")
+
+..
+One strategy to ensure that package versions match between your custom environment and the Docker container is to create your environment from an ``environment.yml`` file, export the exact package list for that environment using ``conda list --export > package-list.txt``, and then use the pinned package versions contained in ``package-list.txt`` in your Dockerfile.  You could use the default `Dask Dockerfile`_ as a template and simply add your pinned additional packages. 
+
+.. _`Dask Dockerfile`: https://github.com/dask/dask-docker/blob/master/base/Dockerfile
+
+You can also create Dask clusters using EC2 based ECS clusters using ``ECSCluster``.
 
 Creating the ECS cluster is out of scope for this library but you can pass in
 the ARN of an existing one like this:
