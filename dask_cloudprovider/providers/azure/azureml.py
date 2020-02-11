@@ -138,6 +138,7 @@ class AzureMLCluster(Cluster):
     print(cluster.dashboard_link)
     ```
     """
+
     def __init__(
         self
         , workspace                     # AzureML workspace object
@@ -412,6 +413,7 @@ class AzureMLCluster(Cluster):
                 f" {self.admin_username}@{scheduler_public_ip} -p {scheduler_public_port}"
             )
 
+
             portforward_log = open("portforward_out_log.txt", 'w')
             portforward_proc = (
                 subprocess
@@ -421,7 +423,6 @@ class AzureMLCluster(Cluster):
                     , stdout=subprocess.PIPE
                     , stderr=subprocess.STDOUT
                 )
-            )
 
     @property
     def dashboard_link(self):
@@ -455,6 +456,7 @@ class AzureMLCluster(Cluster):
             return link
 
     def _format_nodes(self, nodes, requested, use_gpu, n_gpus_per_node=None):
+
         if use_gpu:
             if nodes == requested:
                 return f'{nodes}'
@@ -473,7 +475,6 @@ class AzureMLCluster(Cluster):
 
         if self.use_gpu:
             nodes = int(nodes / self.n_gpus_per_node)
-
         if hasattr(self, "worker_spec"):
             requested = sum(
                 1 if "group" not in each else len(each["group"])
@@ -614,6 +615,15 @@ class AzureMLCluster(Cluster):
         self.__print_message(f"NOTEBOOK: {self.scheduler_info['jupyter_url']}")
 
     def scale(self, workers=1):
+        """ Scale the cluster. We can add or reduce the number workers
+        of a given configuration
+
+        Example
+        ----------
+        ```python
+        cluster.scale(2)
+        ```
+        """
         if workers <= 0:
             self.close()
             return
@@ -629,18 +639,20 @@ class AzureMLCluster(Cluster):
 
     # scale up
     def scale_up(self, workers=1):
-        for i in range(workers):
-            estimator = Estimator(
-                'dask_cloudprovider/providers/azure/setup'
-                , compute_target=self.compute_target
-                , entry_script='start_worker.py' # pass scheduler ip from parent run
-                , environment_definition=self.environment_definition
-                , script_params=self.worker_params
-                , node_count=1
-                , distributed_training=MpiConfiguration()
-            )
+        conda_dependencies = self.environment_definition.python.conda_dependencies
+        run_config = RunConfiguration(conda_dependencies=conda_dependencies)
+        run_config.target=self.compute_target
+        scheduler_ip=self.run.get_metrics()["scheduler"]
+        args=[f'scheduler_ip_port={scheduler_ip}', f'use_gpu={self.use_gpu}', f'n_gpus_per_node={self.n_gpus_per_node}']                    
 
-            child_run = Experiment(self.workspace, self.experiment_name).submit(estimator)
+        child_run_config=ScriptRunConfig(
+            source_directory='dask_cloudprovider/providers/azure/setup',
+            script='start_worker.py',
+            arguments=args,
+            run_config=run_config)
+
+        for i in range(workers):
+            child_run=self.run.submit_child(child_run_config)
             self.workers_list.append(child_run)
 
     # scale down
@@ -667,7 +679,7 @@ class AzureMLCluster(Cluster):
             self.run.cancel()
 
         await super()._close()
-        # self.status = "closed"
+        self.status = "closed"
         self.__print_message("Scheduler and workers are disconnected.")
 
     def close(self):
