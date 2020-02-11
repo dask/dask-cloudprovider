@@ -300,7 +300,7 @@ class AzureMLCluster(Cluster):
             socket.create_connection((ip, port), 5)
             self.same_vnet = True
             self.__print_message('On the same VNET')
-        except socket.timeout:
+        except (ConnectionRefusedError, socket.timeout) as e:
             self.__print_message('Not on the same VNET')
             self.same_vnet = False
 
