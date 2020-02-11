@@ -320,7 +320,7 @@ class AzureMLCluster(Cluster):
         self.__print_message('Submitting the experiment')
         exp = Experiment(self.workspace, self.experiment_name)
         estimator = Estimator(
-            'dask_cloudprovider/providers/azure/setup'
+            os.path.join(os.path.dirname(__file__), 'setup')
             , compute_target=self.compute_target
             , entry_script='start_scheduler.py'
             , environment_definition=self.environment_definition
