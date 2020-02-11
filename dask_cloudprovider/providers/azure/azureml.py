@@ -160,7 +160,7 @@ class AzureMLCluster(Cluster):
                                         # AzureML Training Cluster for 'local' runs
         , datastores=None               # datastores specs
         , code_store=None               # name of the code store if specified
-        , asynchronous=True             # flag to run jobs in an asynchronous way
+        , asynchronous=False            # flag to run jobs in an asynchronous way
         , **kwargs
     ):
         ### REQUIRED PARAMETERS
