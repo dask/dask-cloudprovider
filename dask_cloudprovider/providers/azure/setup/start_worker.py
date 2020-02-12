@@ -35,29 +35,25 @@ if __name__ == '__main__':
     parser.add_argument("--n_gpus_per_node",   default=0)
 
     args, unparsed = parser.parse_known_args()
-    dict={x.split("=")[0]: x.split("=")[1] for x in unparsed}
-
-    print("dict is ", dict)
-    scheduler_ip=dict['scheduler_ip_port']
     
     ### CONFIGURE GPU RUN
-    GPU_run = True if dict['use_gpu'] == 'True' else False
-    if GPU_run:
-        n_gpus_per_node = eval(dict['n_gpus_per_node'])
+    GPU_run = args.use_gpu
 
-    node_ip = socket.gethostbyname(socket.gethostname())
-    
-    print("- scheduler ip: ", scheduler_ip)
-    print("- Current node ip: ", node_ip)
+    if GPU_run:
+        n_gpus_per_node = eval(args.n_gpus_per_node)
+        
+    print("- scheduler is ", args.scheduler_ip_port)
     print("- args: ", args)
     print("- unparsed: ", unparsed)
     print("- my rank is ", rank)
 
+    ip = socket.gethostbyname(socket.gethostname())
+    
     if not GPU_run:
-        cmd = "dask-worker " + scheduler_ip 
+        cmd = "dask-worker " + args.scheduler_ip_port 
     else:
         os.environ["CUDA_VISIBLE_DEVICES"] = str(list(range(n_gpus_per_node))).strip("[]")
-        cmd = "dask-cuda-worker " + scheduler_ip + " --memory-limit 0"
+        cmd = "dask-cuda-worker " + args.scheduler_ip_port + " --memory-limit 0"
                 
     worker_log = open("worker_{rank}_log.txt".format(rank=rank), "w")
     worker_proc = subprocess.Popen(cmd.split(), universal_newlines=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
