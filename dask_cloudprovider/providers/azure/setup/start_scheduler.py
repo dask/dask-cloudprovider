@@ -100,14 +100,15 @@ if __name__ == '__main__':
         
         ### CHECK IF SPECIFIED code_store EXISTS IN dataReferences
         code_store_mounted = ""
+        workspace_name = run.experiment.workspace.name.lower()
+        run_id = run.get_details()['runId']
         
         if code_store is not None:
             if code_store in run.get_details()['runDefinition']['dataReferences'].keys():
-                workspace_name = run.experiment.workspace.name.lower()
-                run_id = run.get_details()['runId']
-                code_mount_name = run.get_details()['runDefinition']['dataReferences'][code_store]['dataStoreName']  #### HARDCODED 'codes' for now
-
-                code_store_mounted = f'/mnt/batch/tasks/shared/LS_root/jobs/{workspace_name}/azureml/{run_id}/mounts/{code_mount_name}'            
+                code_mount_name = run.get_details()['runDefinition']['dataReferences'][code_store]['dataStoreName']
+                code_store_mounted = f'/mnt/batch/tasks/shared/LS_root/jobs/{workspace_name}/azureml/{run_id}/mounts/{code_mount_name}'
+        else:
+            code_store_mounted = f'/mnt/batch/tasks/shared/LS_root/jobs/{workspace_name}/azureml/{run_id}/mounts/workspaceblobstore'
     
         if args.jupyter:
             cmd = (f' jupyter lab --ip 0.0.0.0 --port {args.jupyter_port}' + \
