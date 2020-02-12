@@ -89,7 +89,7 @@ class AzureMLCluster(Cluster):
 
     admin_ssh_key: str (optional)
         Location of the SSH secret key used when creating the AzureML Compute.
-        The key should be passordless if run from a Jupyter notebook.
+        The key should be passwordless if run from a Jupyter notebook.
         The ``id_rsa`` file needs to have 0700 permissions set.
         Required for runs that are not on the same VNET. Defaults to empty string.
         Throws Exception if machine not on the same VNET.
@@ -704,9 +704,9 @@ class AzureMLCluster(Cluster):
     # scale up
     def scale_up(self, workers=1):
         run_config = RunConfiguration()
-
         run_config.target=self.compute_target
-        run_config.environment = self.environment_definition
+        run_config.environment=self.environment_definition
+
         scheduler_ip=self.run.get_metrics()["scheduler"]
         args=[f'--scheduler_ip_port={scheduler_ip}', f'--use_gpu={self.use_gpu}', f'--n_gpus_per_node={self.n_gpus_per_node}']                    
 
