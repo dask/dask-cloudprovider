@@ -297,12 +297,15 @@ class AzureMLCluster(Cluster):
         """
         try:
             ip, port = self.scheduler_ip_port.split(':')
-            socket.create_connection((ip, port), 5)
+            socket.create_connection((ip, port), 10)
             self.same_vnet = True
             self.__print_message('On the same VNET')
-        except (ConnectionRefusedError, socket.timeout) as e:
+        except socket.timeout as e:
+
             self.__print_message('Not on the same VNET')
             self.same_vnet = False
+        except ConnectionRefusedError as e:
+            pass
 
     def __prepare_rpc_connection_to_headnode(self):
         if not self.same_vnet:
@@ -358,10 +361,8 @@ class AzureMLCluster(Cluster):
 
         ### CHECK IF ON THE SAME VNET
         while(self.same_vnet is None):
-            try:
-                await self.sync(self.__check_if_scheduler_ip_reachable)
-            except socket.timeout:
-                time.sleep(1)
+            await self.sync(self.__check_if_scheduler_ip_reachable)
+            time.sleep(1)
 
         ### REQUIRED BY dask.distributed.deploy.cluster.Cluster
         _scheduler = self.__prepare_rpc_connection_to_headnode()
