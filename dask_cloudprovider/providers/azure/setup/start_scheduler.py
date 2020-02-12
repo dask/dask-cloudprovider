@@ -105,7 +105,7 @@ if __name__ == '__main__':
             if code_store in run.get_details()['runDefinition']['dataReferences'].keys():
                 workspace_name = run.experiment.workspace.name.lower()
                 run_id = run.get_details()['runId']
-                code_mount_name = run.get_details()['runDefinition']['dataReferences']['codes']['dataStoreName']  #### HARDCODED 'codes' for now
+                code_mount_name = run.get_details()['runDefinition']['dataReferences'][code_store]['dataStoreName']  #### HARDCODED 'codes' for now
 
                 code_store_mounted = f'/mnt/batch/tasks/shared/LS_root/jobs/{workspace_name}/azureml/{run_id}/mounts/{code_mount_name}'            
     
