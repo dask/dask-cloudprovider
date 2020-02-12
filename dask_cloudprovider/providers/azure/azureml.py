@@ -83,7 +83,7 @@ class AzureMLCluster(Cluster):
 
     admin_ssh_key: str (optional)
         Location of the SSH secret key used when creating the AzureML Compute.
-        The key should be passordless if run from a Jupyter notebook.
+        The key should be passwordless if run from a Jupyter notebook.
         The ``id_rsa`` file needs to have 0700 permissions set.
         Required for runs that are not on the same VNET. Defaults to empty string.
         Throws Exception if machine not on the same VNET.
