@@ -8,7 +8,6 @@ from distributed.core import rpc
 
 import dask
 import pathlib
-import logger
 
 from distributed.utils import (
     LoopRunner,
@@ -17,8 +16,6 @@ from distributed.utils import (
     ignoring,
     format_bytes
 )
-
-logger = logging.getLogger(__name__)
 
 class AzureMLCluster(Cluster):
     """ Deploy a Dask cluster using Azure ML
@@ -476,7 +473,7 @@ class AzureMLCluster(Cluster):
             )
 
             for port in self.additional_ports:
-                cmd += cmd += f" -L 0.0.0.0:{port[1]}:{scheduler_ip}:{port[0]}"
+                cmd += f" -L 0.0.0.0:{port[1]}:{scheduler_ip}:{port[0]}"
 
             cmd += f" {self.admin_username}@{scheduler_public_ip} -p {scheduler_public_port}"
 
@@ -706,11 +703,12 @@ class AzureMLCluster(Cluster):
 
     # scale up
     def scale_up(self, workers=1):
-        run_config = RunConfiguration();
+        run_config = RunConfiguration()
         run_config.target=self.compute_target
         run_config.environment=self.environment_definition
+
         scheduler_ip=self.run.get_metrics()["scheduler"]
-        args=[f'scheduler_ip_port={scheduler_ip}', f'use_gpu={self.use_gpu}', f'n_gpus_per_node={self.n_gpus_per_node}']                    
+        args=[f'--scheduler_ip_port={scheduler_ip}', f'--use_gpu={self.use_gpu}', f'--n_gpus_per_node={self.n_gpus_per_node}']                    
 
         child_run_config=ScriptRunConfig(
             source_directory=os.path.join(self.abs_path, 'setup'),
