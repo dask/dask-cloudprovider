@@ -301,6 +301,7 @@ class AzureMLCluster(Cluster):
             self.same_vnet = True
             self.__print_message('On the same VNET')
         except socket.timeout as e:
+
             self.__print_message('Not on the same VNET')
             self.same_vnet = False
         except ConnectionRefusedError as e:
@@ -360,7 +361,6 @@ class AzureMLCluster(Cluster):
 
         ### CHECK IF ON THE SAME VNET
         while(self.same_vnet is None):
-            print('Checking connection...')
             await self.sync(self.__check_if_scheduler_ip_reachable)
             time.sleep(1)
 
