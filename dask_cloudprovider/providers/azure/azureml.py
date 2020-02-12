@@ -8,7 +8,6 @@ from distributed.core import rpc
 
 import dask
 import pathlib
-import logger
 
 from distributed.utils import (
     LoopRunner,
@@ -17,8 +16,6 @@ from distributed.utils import (
     ignoring,
     format_bytes
 )
-
-logger = logging.getLogger(__name__)
 
 class AzureMLCluster(Cluster):
     """ Deploy a Dask cluster using Azure ML
