@@ -1,4 +1,4 @@
-from azureml.core import Experiment
+from azureml.core import Experiment, RunConfiguration, ScriptRunConfig
 from azureml.train.estimator import Estimator
 from azureml.core.runconfig import MpiConfiguration
 import time, os, socket, subprocess
@@ -8,6 +8,7 @@ from distributed.core import rpc
 
 import dask
 import pathlib
+import logger
 
 from distributed.utils import (
     LoopRunner,
@@ -17,6 +18,7 @@ from distributed.utils import (
     format_bytes
 )
 
+logger = logging.getLogger(__name__)
 
 class AzureMLCluster(Cluster):
     """ Deploy a Dask cluster using Azure ML
@@ -73,6 +75,13 @@ class AzureMLCluster(Cluster):
         Port to map the scheduler port to via SSH-tunnel if machine not on the same VNET.
 
         Defaults to ``9002``.
+
+    additional_ports: list[tuple[int, int]] (optional)
+        Additional ports to forward. This requires a list of tuples where the first element
+        is the port to open on the headnode while the second element is the port to map to
+        or forward via the SSH-tunnel.
+
+        Defaults to ``[]``.
 
     admin_username: str (optional)
         Username of the admin account for the AzureML Compute.
@@ -155,6 +164,7 @@ class AzureMLCluster(Cluster):
         , jupyter_port=None             # port to forward the Jupyter process to
         , dashboard_port=None           # port to forward Dask dashboard to
         , scheduler_port=None           # port to map the scheduler port to for 'local' runs
+        , additional_ports=None         # list of tuples of additional ports to forward
         , admin_username=None           # username to log in to the AzureML Training Cluster for 'local' runs
         , admin_ssh_key=None            # path to private SSH key used to log in to the
                                         # AzureML Training Cluster for 'local' runs
@@ -183,6 +193,48 @@ class AzureMLCluster(Cluster):
         self.jupyter_port = jupyter_port
         self.dashboard_port = dashboard_port
         self.scheduler_port = scheduler_port
+
+        if additional_ports is not None:
+            if type(additional_ports) != list:
+                error_message = (
+                    f'The additional_ports parameter is of {type(additional_ports)}'
+                    ' type but needs to be a list of int tuples.'
+                    ' Check the documentation.'
+                )
+                raise TypeError(error_message)
+
+            if len(additional_ports) > 0:
+                if type(additional_ports[0]) != tuple:
+                    error_message = (
+                        f'The additional_ports elements are of {type(additional_ports[0])}'
+                        ' type but needs to be a list of int tuples.'
+                        ' Check the documentation.'
+                    )
+                    raise TypeError(error_message)
+
+                ### check if all elements are tuples of length two and int type
+                all_correct = True
+                for el in additional_ports:
+                    if (
+                        type(el) != tuple 
+                        or len(el) != 2
+                    ):
+                        all_correct = False
+                        break
+
+                    if (type(el[0]), type(el[1])) != (int, int):
+                        all_correct = False
+                        break
+
+                if not all_correct:
+                    error_message = (
+                        f'At least one of the elements of the additional_ports parameter'
+                        ' is wrong. Make sure it is a list of int tuples.'
+                        ' Check the documentation.'
+                    )
+                    raise TypeError(error_message)
+        self.additional_ports = additional_ports
+
         self.admin_username = admin_username
         self.admin_ssh_key = admin_ssh_key
         self.scheduler_ip_port = None   ### INIT FOR HOLDING THE ADDRESS FOR THE SCHEDULER
@@ -237,6 +289,9 @@ class AzureMLCluster(Cluster):
 
         if self.scheduler_port is None:
             self.scheduler_port = self.config.get("scheduler_port")
+
+        if self.additional_ports is None:
+            self.additional_ports = self.config.get("additional_ports")
 
         if self.admin_username is None:
             self.admin_username = self.config.get("admin_username")
@@ -398,13 +453,17 @@ class AzureMLCluster(Cluster):
     async def __setup_port_forwarding(self):
         dashboard_address = self.run.get_metrics()["dashboard"]
         jupyter_address = self.run.get_metrics()["jupyter"]
+        scheduler_ip = self.run.get_metrics()["scheduler"].split(':')[0]
 
         if self.same_vnet:
             os.system(f'killall socat') # kill all socat processes - cleans up previous port forward setups
             os.system(f'setsid socat tcp-listen:{self.dashboard_port},reuseaddr,fork tcp:{dashboard_address} &')
             os.system(f'setsid socat tcp-listen:{self.jupyter_port},reuseaddr,fork tcp:{jupyter_address} &')
+
+            ### map additional ports
+            for port in self.additional_ports:
+                os.system(f'setsid socat tcp-listen:{self.port[1]},reuseaddr,fork tcp:{scheduler_ip}:{port[0]} &')
         else:
-            scheduler_ip = self.run.get_metrics()["scheduler"].split(':')[0]
             scheduler_public_ip = self.compute_target.list_nodes()[0]['publicIpAddress']
             scheduler_public_port = self.compute_target.list_nodes()[0]['port']
 
@@ -414,9 +473,12 @@ class AzureMLCluster(Cluster):
                 f" -L 0.0.0.0:{self.jupyter_port}:{scheduler_ip}:8888"
                 f" -L 0.0.0.0:{self.dashboard_port}:{scheduler_ip}:8787"
                 f" -L 0.0.0.0:{self.scheduler_port}:{scheduler_ip}:8786"
-                f" {self.admin_username}@{scheduler_public_ip} -p {scheduler_public_port}"
             )
 
+            for port in self.additional_ports:
+                cmd += cmd += f" -L 0.0.0.0:{port[1]}:{scheduler_ip}:{port[0]}"
+
+            cmd += f" {self.admin_username}@{scheduler_public_ip} -p {scheduler_public_port}"
 
             portforward_log = open("portforward_out_log.txt", 'w')
             portforward_proc = (
