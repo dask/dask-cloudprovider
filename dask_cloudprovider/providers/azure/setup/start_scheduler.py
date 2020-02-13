@@ -37,7 +37,6 @@ if __name__ == '__main__':
     parser.add_argument("--scheduler_port",  default=8786)
     parser.add_argument("--use_gpu",         default=False)
     parser.add_argument("--n_gpus_per_node", default=0)
-    # parser.add_argument("--script")
 
     args, unparsed = parser.parse_known_args()
     
@@ -57,8 +56,6 @@ if __name__ == '__main__':
             "jupyter"    : ip + ':' + str(args.jupyter_port),
             "token"      : args.jupyter_token,
             "code_store" : args.code_store
-#             "datastores" : args.datastores
-            # "datastore"  : args.data_store
             }
     else:
         data = None
@@ -68,9 +65,7 @@ if __name__ == '__main__':
     scheduler  = data["scheduler"]
     dashboard  = data["dashboard"]
     jupyter    = data["jupyter"]
-#     datastores = data['datastores']
     code_store = data["code_store"]
-    # datastore = data["datastore"]
     token      = data["token"]
 
     print("- scheduler is ", scheduler)
