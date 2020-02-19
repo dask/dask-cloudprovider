@@ -101,7 +101,7 @@ class AzureMLCluster(Cluster):
         see https://aka.ms/azureml/data and https://aka.ms/azureml/datastores.
 
         Defaults to ``[]``. To mount all datastores in the workspace,
-        set to ``[ws.datastores[datastore] for datastore in ws.datastores``.
+        set to ``[ws.datastores[datastore] for datastore in ws.datastores]``.
 
     asynchronous: bool (optional)
         Flag to run jobs asynchronously.
