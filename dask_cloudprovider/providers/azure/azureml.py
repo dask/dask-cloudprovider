@@ -556,7 +556,7 @@ class AzureMLCluster(Cluster):
         cores_or_gpus = 'Workers/GPUs' if self.use_gpu else 'Workers/vCPUs'
 
         memory = (
-            sum(sum(v['gpu']["memory-total"]) for v in self.scheduler_info["workers"].values()) if self.use_gpu
+            sum(v['gpu']["memory-total"][0] for v in self.scheduler_info["workers"].values()) if self.use_gpu
             else sum(v["memory_limit"] for v in self.scheduler_info["workers"].values())
         )
         memory = format_bytes(memory)
