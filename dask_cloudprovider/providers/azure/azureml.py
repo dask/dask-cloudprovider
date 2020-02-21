@@ -1,4 +1,5 @@
 from azureml.core import Experiment, RunConfiguration, ScriptRunConfig
+from azureml.core.compute import AmlCompute
 from azureml.train.estimator import Estimator
 from azureml.core.runconfig import MpiConfiguration
 import time, os, socket, subprocess
@@ -42,16 +43,6 @@ class AzureMLCluster(Cluster):
         The initial number of nodes for the Dask Cluster.
 
         Defaults to ``1``.
-
-    use_gpu: bool (optional)
-        Flag indicating whether to setup cluster for using GPUs.
-
-        Defaults to ``False``.
-
-    n_gpus_per_node: int (optional)
-        Number of GPUs per node in the Azure ML Compute Target.
-
-        Defaults to ``0``.
 
     jupyter: bool (optional)
         Flag to start JupyterLab session on the headnode of the cluster.
@@ -154,9 +145,7 @@ class AzureMLCluster(Cluster):
         , experiment_name=None          # name of the experiment to start
         , initial_node_count=None       # initial node count, must be less than
                                         # or equal to AzureML compute object max nodes
-                                        # will default to max nodes if more than
-        , use_gpu=None                  # flag to indicate GPU vs CPU cluster
-        , n_gpus_per_node=None          # number of GPUs per node if use_GPU flag set
+                                        # will default to max nodes if more than specified nodes
         , jupyter=None                  # start Jupyter lab process on headnode
         , jupyter_port=None             # port to forward the Jupyter process to
         , dashboard_port=None           # port to forward Dask dashboard to
@@ -182,8 +171,13 @@ class AzureMLCluster(Cluster):
         self.initial_node_count = initial_node_count
 
         ### GPU RUN INFO
-        self.use_gpu = use_gpu
-        self.n_gpus_per_node = n_gpus_per_node
+        self.workspace_vm_sizes = AmlCompute.supported_vmsizes(self.workspace)
+        self.workspace_vm_sizes = [(e['name'].lower(), e['gpus']) for e in self.workspace_vm_sizes]
+        self.workspace_vm_sizes = dict(self.workspace_vm_sizes)
+
+        self.compute_target_vm_size = self.compute_target.serialize()['properties']['status']['vmSize'].lower()
+        self.n_gpus_per_node = self.workspace_vm_sizes[self.compute_target_vm_size]
+        self.use_gpu = True if self.n_gpus_per_node > 0 else False
 
         ### JUPYTER AND PORT FORWARDING
         self.jupyter = jupyter
@@ -268,12 +262,6 @@ class AzureMLCluster(Cluster):
 
         if self.initial_node_count is None:
             self.initial_node_count = self.config.get("initial_node_count")
-
-        if self.use_gpu is None:
-            self.use_gpu = self.config.get("use_gpu")
-
-        if self.n_gpus_per_node is None:
-            self.n_gpus_per_node = self.config.get("n_gpus_per_node")
 
         if self.jupyter is None:
             self.jupyter = self.config.get("jupyter")

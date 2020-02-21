@@ -33,8 +33,6 @@ cloudprovider:
   azure:
     experiment_name: "dask-cloudprovider" # default name of the Experiment to submit
     initial_node_count: 1 # Initial node count
-    use_gpu: False # Flag to indicate GPU vs CPU usage
-    n_gpus_per_node: 0 # Number of GPUs per node (if use_gpu == True)
     jupyter: False # by default start the Jupyter lab instance on the headnode
     jupyter_port: 9000 # default Jupyter lab port on the headnode
     dashboard_port: 9001 # default Dask dashboard port on the headnode
