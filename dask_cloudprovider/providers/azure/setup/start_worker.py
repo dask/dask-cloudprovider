@@ -42,13 +42,15 @@ if __name__ == '__main__':
         n_gpus_per_node = eval(args.n_gpus_per_node)
 
     attempt = 0
+    ip = None
+
     while ip == None:
         try:
             ip = socket.gethostbyname(socket.gethostname())
         except socket.timeout:
             time.sleep(1)
             print(f'attempt: {attempt}, ip: {ip}')
-            pass
+            # pass
         attempt += 1
         
     print("- scheduler is ", args.scheduler_ip_port)
