@@ -666,11 +666,6 @@ class AzureMLCluster(Cluster):
 
         return box
 
-    def print_links_ComputeVM(self):
-        self.__print_message(f"DASHBOARD: {self.scheduler_info['dashboard_url']}")
-
-        self.__print_message(f"NOTEBOOK: {self.scheduler_info['jupyter_url']}")
-
     def scale(self, workers=1):
         """ Scale the cluster. We can add or reduce the number workers
         of a given configuration
