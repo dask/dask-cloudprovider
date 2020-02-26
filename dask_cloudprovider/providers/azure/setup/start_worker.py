@@ -37,9 +37,7 @@ if __name__ == '__main__':
     
     ### CONFIGURE GPU RUN
     GPU_run = eval(args.use_gpu)
-
-    if GPU_run:
-        n_gpus_per_node = eval(args.n_gpus_per_node)
+    n_gpus_per_node = eval(args.n_gpus_per_node)
 
     attempt = 0
     ip = None
@@ -58,7 +56,6 @@ if __name__ == '__main__':
     print("- unparsed: ", unparsed)
     print("- my rank is ", rank)
     print("- my ip is: ", ip)
-    print("- n_gpus_per_node: ", n_gpus_per_node)
     
     if not GPU_run:
         cmd = "dask-worker " + args.scheduler_ip_port 
