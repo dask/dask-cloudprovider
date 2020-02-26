@@ -30,7 +30,6 @@ if __name__ == '__main__':
     ### PARSE ARGUMENTS
     parser = argparse.ArgumentParser()
     parser.add_argument("--jupyter",         default=False)
-    parser.add_argument("--code_store",      default=None)
     parser.add_argument("--jupyter_token",   default=uuid.uuid1().hex)
     parser.add_argument("--jupyter_port",    default=8888)
     parser.add_argument("--dashboard_port",  default=8787)
@@ -55,7 +54,6 @@ if __name__ == '__main__':
             "dashboard"  : ip + ':' + str(args.dashboard_port),
             "jupyter"    : ip + ':' + str(args.jupyter_port),
             "token"      : args.jupyter_token,
-            "code_store" : args.code_store
             }
     else:
         data = None
@@ -65,7 +63,6 @@ if __name__ == '__main__':
     scheduler  = data["scheduler"]
     dashboard  = data["dashboard"]
     jupyter    = data["jupyter"]
-    code_store = data["code_store"]
     token      = data["token"]
 
     print("- scheduler is ", scheduler)
@@ -93,22 +90,15 @@ if __name__ == '__main__':
         run.log('jupyter', jupyter)
         run.log('token', token)
         
-        ### CHECK IF SPECIFIED code_store EXISTS IN dataReferences
-        # code_store_mounted = ""
         workspace_name = run.experiment.workspace.name.lower()
         run_id = run.get_details()['runId']
         
-        # if code_store is not None:
-        #     if code_store in run.get_details()['runDefinition']['dataReferences'].keys():
-        #         code_mount_name = run.get_details()['runDefinition']['dataReferences'][code_store]['dataStoreName']
-        #         code_store_mounted = f'/mnt/batch/tasks/shared/LS_root/jobs/{workspace_name}/azureml/{run_id}/mounts/{code_mount_name}'
-        # else:
-        code_store_mounted = f'/mnt/batch/tasks/shared/LS_root/jobs/{workspace_name}/azureml/{run_id}/mounts/'
+        mount_point = f'/mnt/batch/tasks/shared/LS_root/jobs/{workspace_name}/azureml/{run_id}/mounts/'
     
         if args.jupyter:
             cmd = (f' jupyter lab --ip 0.0.0.0 --port {args.jupyter_port}' + \
                               f' --NotebookApp.token={token}')
-            cmd += f' --notebook-dir={code_store_mounted}'# if len(code_store_mounted) > 0 else  ""
+            cmd += f' --notebook-dir={mount_point}'
             cmd += f' --allow-root --no-browser'
     
             jupyter_log = open("jupyter_log.txt", "a")
