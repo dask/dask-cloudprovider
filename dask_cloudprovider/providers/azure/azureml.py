@@ -166,7 +166,6 @@ class AzureMLCluster(Cluster):
         , admin_ssh_key=None            # path to private SSH key used to log in to the
                                         # AzureML Training Cluster for 'local' runs
         , datastores=None               # datastores specs
-        , code_store=None               # name of the code store if specified
         , asynchronous=False            # flag to run jobs in an asynchronous way
         , **kwargs
     ):
@@ -238,7 +237,6 @@ class AzureMLCluster(Cluster):
 
         ### DATASTORES
         self.datastores = datastores
-        self.code_store = code_store
 
         ### FUTURE EXTENSIONS
         self.kwargs = kwargs
@@ -299,17 +297,12 @@ class AzureMLCluster(Cluster):
         if self.datastores is None:
             self.datastores = self.config.get("datastores")
 
-        if self.code_store is None:
-            self.code_store = self.config.get("code_store")
-
         ### PARAMETERS TO START THE CLUSTER
         self.scheduler_params = {}
         self.worker_params = {}
 
         ### scheduler and worker parameters
         self.scheduler_params['--jupyter'] = True
-        if self.code_store is not None:
-            self.scheduler_params['--code_store'] = self.code_store
 
         if self.use_gpu:
             self.scheduler_params['--use_gpu'] = True
