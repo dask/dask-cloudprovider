@@ -46,6 +46,52 @@ Fargate/ECS
 The ``FargateCluster`` will create a new Fargate ECS cluster by default along
 with all the IAM roles, security groups, and so on that it needs to function.
 
+Here is the minimal IAM policy that you need to create the cluster:
+
+.. code-block:: json
+
+	{
+		"Statement": [
+			{
+				"Action": [
+					"ec2:AuthorizeSecurityGroupIngress",
+					"ec2:CreateSecurityGroup",
+					"ec2:CreateTags",
+					"ec2:DescribeNetworkInterfaces",
+					"ec2:DescribeSubnets",
+					"ec2:DescribeVpcs",
+					"ec2:DeleteSecurityGroup",
+					"ecs:CreateCluster",
+					"ecs:DescribeTasks",
+					"ecs:ListAccountSettings",
+					"ecs:RegisterTaskDefinition",
+					"ecs:RunTask",
+					"ecs:StopTask",
+					"ecs:ListClusters",
+					"ecs:DescribeClusters",
+					"ecs:DeleteCluster",
+					"ecs:ListTaskDefinitions",
+					"ecs:DescribeTaskDefinition",
+					"ecs:DeregisterTaskDefinition",
+					"iam:AttachRolePolicy",
+					"iam:CreateRole",
+					"iam:TagRole",
+					"iam:PassRole",
+					"iam:DeleteRole",
+					"iam:ListRoleTags",
+					"iam:ListAttachedRolePolicies",
+					"iam:DetachRolePolicy",
+					"logs:DescribeLogGroups"
+				],
+				"Effect": "Allow",
+				"Resource": [
+					"*"
+				]
+			}
+		],
+		"Version": "2012-10-17"
+	} 
+
 .. code-block:: python
 
    from dask_cloudprovider import FargateCluster
