@@ -46,52 +46,6 @@ Fargate/ECS
 The ``FargateCluster`` will create a new Fargate ECS cluster by default along
 with all the IAM roles, security groups, and so on that it needs to function.
 
-Here is the minimal IAM policy that you need to create the cluster:
-
-.. code-block:: json
-
-	{
-		"Statement": [
-			{
-				"Action": [
-					"ec2:AuthorizeSecurityGroupIngress",
-					"ec2:CreateSecurityGroup",
-					"ec2:CreateTags",
-					"ec2:DescribeNetworkInterfaces",
-					"ec2:DescribeSubnets",
-					"ec2:DescribeVpcs",
-					"ec2:DeleteSecurityGroup",
-					"ecs:CreateCluster",
-					"ecs:DescribeTasks",
-					"ecs:ListAccountSettings",
-					"ecs:RegisterTaskDefinition",
-					"ecs:RunTask",
-					"ecs:StopTask",
-					"ecs:ListClusters",
-					"ecs:DescribeClusters",
-					"ecs:DeleteCluster",
-					"ecs:ListTaskDefinitions",
-					"ecs:DescribeTaskDefinition",
-					"ecs:DeregisterTaskDefinition",
-					"iam:AttachRolePolicy",
-					"iam:CreateRole",
-					"iam:TagRole",
-					"iam:PassRole",
-					"iam:DeleteRole",
-					"iam:ListRoleTags",
-					"iam:ListAttachedRolePolicies",
-					"iam:DetachRolePolicy",
-					"logs:DescribeLogGroups"
-				],
-				"Effect": "Allow",
-				"Resource": [
-					"*"
-				]
-			}
-		],
-		"Version": "2012-10-17"
-	} 
-
 .. code-block:: python
 
    from dask_cloudprovider import FargateCluster
@@ -126,6 +80,91 @@ the ARN of an existing one like this:
 
 All the other required resources such as roles, task definitions, tasks, etc
 will be created automatically like in ``FargateCluster``.
+
+IAM Permissions
+~~~~~~~~~~~~~~~
+
+To create a ``FargateCluster`` the cluster manager will need to various AWS resources ranging from IAM roles to VPCs to ECS tasks. Depending on your use case you may want the cluster to create all of these for you, or you may wish to specify them youself ahead of time.
+
+Here is the full minimal IAM policy that you need to create the whole cluster:
+
+.. code-block:: json
+   
+   {
+       "Statement": [
+           {
+               "Action": [
+                   "ec2:AuthorizeSecurityGroupIngress",
+                   "ec2:CreateSecurityGroup",
+                   "ec2:CreateTags",
+                   "ec2:DescribeNetworkInterfaces",
+                   "ec2:DescribeSubnets",
+                   "ec2:DescribeVpcs",
+                   "ec2:DeleteSecurityGroup",
+                   "ecs:CreateCluster",
+                   "ecs:DescribeTasks",
+                   "ecs:ListAccountSettings",
+                   "ecs:RegisterTaskDefinition",
+                   "ecs:RunTask",
+                   "ecs:StopTask",
+                   "ecs:ListClusters",
+                   "ecs:DescribeClusters",
+                   "ecs:DeleteCluster",
+                   "ecs:ListTaskDefinitions",
+                   "ecs:DescribeTaskDefinition",
+                   "ecs:DeregisterTaskDefinition",
+                   "iam:AttachRolePolicy",
+                   "iam:CreateRole",
+                   "iam:TagRole",
+                   "iam:PassRole",
+                   "iam:DeleteRole",
+                   "iam:ListRoleTags",
+                   "iam:ListAttachedRolePolicies",
+                   "iam:DetachRolePolicy",
+                   "logs:DescribeLogGroups"
+               ],
+               "Effect": "Allow",
+               "Resource": [
+                   "*"
+               ]
+           }
+       ],
+       "Version": "2012-10-17"
+   } 
+   
+If you specify all of the resources yourself you will need a minimal policy of:
+
+.. code-block:: json
+   
+   {
+       "Statement": [
+           {
+               "Action": [
+                   "ec2:CreateTags",
+                   "ec2:DescribeNetworkInterfaces",
+                   "ec2:DescribeSubnets",
+                   "ec2:DescribeVpcs",
+                   "ecs:DescribeTasks",
+                   "ecs:ListAccountSettings",
+                   "ecs:RegisterTaskDefinition",
+                   "ecs:RunTask",
+                   "ecs:StopTask",
+                   "ecs:ListClusters",
+                   "ecs:DescribeClusters",
+                   "ecs:ListTaskDefinitions",
+                   "ecs:DescribeTaskDefinition",
+                   "ecs:DeregisterTaskDefinition",
+                   "iam:ListRoleTags",
+                   "logs:DescribeLogGroups"
+               ],
+               "Effect": "Allow",
+               "Resource": [
+                   "*"
+               ]
+           }
+       ],
+       "Version": "2012-10-17"
+   } 
 
 GPU Support
 ~~~~~~~~~~~
