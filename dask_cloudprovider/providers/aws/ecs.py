@@ -5,6 +5,7 @@ import time
 import uuid
 import warnings
 import weakref
+from typing import Dict
 
 from botocore.exceptions import ClientError
 import aiobotocore
@@ -352,7 +353,7 @@ class Worker(Task):
         Other kwargs to be passed to :class:`Task`.
     """
 
-    def __init__(self, scheduler: str, cpu: int, nthreads: int, mem: int, gpu: int, **kwargs):
+    def __init__(self, scheduler: str, cpu: int, nthreads: int, mem: int, gpu: int, resources: Dict[str, int], **kwargs):
         super().__init__(**kwargs)
         self.task_type = "worker"
         self.scheduler = scheduler
@@ -372,8 +373,15 @@ class Worker(Task):
                 "{}GB".format(int(self._mem / 1024)),
                 "--death-timeout",
                 "60",
+                "--resources",
+                self._format_resource(resources),
             ]
         }
+
+    @staticmethod
+    def _format_resource(resources: Dict[str, int]):
+        return " ".join([f"{k}={v}" for k, v in resources.items()])
+
 
 
 class ECSCluster(SpecCluster):
@@ -424,6 +432,9 @@ class ECSCluster(SpecCluster):
         cluster. Fargate is not supported at this time.
 
         Defaults to `None`, no GPUs.
+    worker_resource: dict (optional)
+        The amount of special resource e.g. process in
+        https://distributed.dask.org/en/latest/resources.html#resources-are-applied-separately-to-each-worker-process
     n_workers: int (optional)
         Number of workers to start on cluster creation.
 
@@ -542,6 +553,7 @@ class ECSCluster(SpecCluster):
         worker_nthreads=None,
         worker_mem=None,
         worker_gpu=None,
+        worker_resources=None,
         n_workers=None,
         cluster_arn=None,
         cluster_name_template=None,
