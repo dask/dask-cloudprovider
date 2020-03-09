@@ -586,6 +586,7 @@ class ECSCluster(SpecCluster):
         self._worker_nthreads = worker_nthreads
         self._worker_mem = worker_mem
         self._worker_gpu = worker_gpu
+        self._worker_resources = worker_resources
         self._n_workers = n_workers
         self.cluster_arn = cluster_arn
         self.cluster_name = None
@@ -770,6 +771,7 @@ class ECSCluster(SpecCluster):
             "nthreads": self._worker_nthreads,
             "mem": self._worker_mem,
             "gpu": self._worker_gpu,
+            "resources": self._worker_resources,
             **options,
         }
 
