@@ -45,7 +45,7 @@ if __name__ == '__main__':
     while ip == None:
         try:
             ip = socket.gethostbyname(socket.gethostname())
-        except socket.timeout:
+        except (socket.timeout, socket.gaierror):
             time.sleep(1)
             print(f'attempt: {attempt}, ip: {ip}')
             # pass
