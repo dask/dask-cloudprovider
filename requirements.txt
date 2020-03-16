@@ -1,3 +1,4 @@
 aiobotocore>=0.10.2
 dask>=2.2.0
 distributed>=2.3.1
+azureml-sdk>=1.1.5
