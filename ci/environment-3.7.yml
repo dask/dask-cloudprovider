@@ -31,3 +31,4 @@ dependencies:
     - aiobotocore
     - git+https://github.com/dask/dask
     - git+https://github.com/dask/distributed
+    - azureml-sdk >=1.1.5
