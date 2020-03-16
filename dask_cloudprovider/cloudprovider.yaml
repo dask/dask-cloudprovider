@@ -41,4 +41,3 @@ cloudprovider:
     admin_username: "" # username to log in to the AzureML Training Cluster for 'local' runs
     admin_ssh_key: "" # password to log in to the AzureML Training Cluster for 'local' runs
     datastores: [] # default list of datastores to mount
-    code_store: null # required only if datastores are defined

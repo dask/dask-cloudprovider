@@ -93,7 +93,7 @@ class AzureMLCluster(Cluster):
         see https://aka.ms/azureml/data and https://aka.ms/azureml/datastores.
 
         Defaults to ``[]``. To mount all datastores in the workspace,
-        set to ``list(workspace.datastores)``.
+        set to ``[ws.datastores[datastore] for datastore in ws.datastores]``.
 
     asynchronous: bool (optional)
         Flag to run jobs asynchronously.
@@ -233,7 +233,6 @@ class AzureMLCluster(Cluster):
 
         ### DATASTORES
         self.datastores = datastores
-        self.code_store = code_store
 
         ### FUTURE EXTENSIONS
         self.kwargs = kwargs
@@ -288,17 +287,12 @@ class AzureMLCluster(Cluster):
         if self.datastores is None:
             self.datastores = self.config.get("datastores")
 
-        if self.code_store is None:
-            self.code_store = self.config.get("code_store")
-
         ### PARAMETERS TO START THE CLUSTER
         self.scheduler_params = {}
         self.worker_params = {}
 
         ### scheduler and worker parameters
         self.scheduler_params["--jupyter"] = True
-        if self.code_store is not None:
-            self.scheduler_params["--code_store"] = self.code_store
 
         if self.use_gpu:
             self.scheduler_params["--use_gpu"] = True
@@ -545,7 +539,7 @@ class AzureMLCluster(Cluster):
         nodes = self._format_nodes(nodes, requested, self.use_gpu, self.n_gpus_per_node)
 
         cores = sum(v["nthreads"] for v in self.scheduler_info["workers"].values())
-        cores_or_gpus = "Workers/GPUs" if self.use_gpu else "Workers/vCPUs"
+        cores_or_gpus = 'Workers (GPUs)' if self.use_gpu else 'Workers (vCPUs)'
 
         memory = (
             sum(
@@ -670,11 +664,6 @@ class AzureMLCluster(Cluster):
         pc.start()
 
         return box
-
-    def print_links_ComputeVM(self):
-        self.__print_message(f"DASHBOARD: {self.scheduler_info['dashboard_url']}")
-
-        self.__print_message(f"NOTEBOOK: {self.scheduler_info['jupyter_url']}")
 
     def scale(self, workers=1):
         """ Scale the cluster. We can add or reduce the number workers

@@ -31,13 +31,12 @@ if __name__ == "__main__":
 
     ### PARSE ARGUMENTS
     parser = argparse.ArgumentParser()
-    parser.add_argument("--jupyter", default=False)
-    parser.add_argument("--code_store", default=None)
-    parser.add_argument("--jupyter_token", default=uuid.uuid1().hex)
-    parser.add_argument("--jupyter_port", default=8888)
-    parser.add_argument("--dashboard_port", default=8787)
-    parser.add_argument("--scheduler_port", default=8786)
-    parser.add_argument("--use_gpu", default=False)
+    parser.add_argument("--jupyter",         default=False)
+    parser.add_argument("--jupyter_token",   default=uuid.uuid1().hex)
+    parser.add_argument("--jupyter_port",    default=8888)
+    parser.add_argument("--dashboard_port",  default=8787)
+    parser.add_argument("--scheduler_port",  default=8786)
+    parser.add_argument("--use_gpu",         default=False)
     parser.add_argument("--n_gpus_per_node", default=0)
 
     args, unparsed = parser.parse_known_args()
@@ -53,22 +52,20 @@ if __name__ == "__main__":
     ### SETUP THE HEADNODE
     if rank == 0:
         data = {
-            "scheduler": ip + ":" + str(args.scheduler_port),
-            "dashboard": ip + ":" + str(args.dashboard_port),
-            "jupyter": ip + ":" + str(args.jupyter_port),
-            "token": args.jupyter_token,
-            "code_store": args.code_store,
-        }
+            "scheduler"  : ip + ':' + str(args.scheduler_port),
+            "dashboard"  : ip + ':' + str(args.dashboard_port),
+            "jupyter"    : ip + ':' + str(args.jupyter_port),
+            "token"      : args.jupyter_token,
+            }
     else:
         data = None
 
     ### DISTRIBUTE TO CLUSTER
     data = comm.bcast(data, root=0)
-    scheduler = data["scheduler"]
-    dashboard = data["dashboard"]
-    jupyter = data["jupyter"]
-    code_store = data["code_store"]
-    token = data["token"]
+    scheduler  = data["scheduler"]
+    dashboard  = data["dashboard"]
+    jupyter    = data["jupyter"]
+    token      = data["token"]
 
     print("- scheduler is ", scheduler)
     print("- dashboard is ", dashboard)
@@ -89,23 +86,24 @@ if __name__ == "__main__":
 
         ### RECORD LOGS
         run = Run.get_context()
+
         run.log("headnode", ip)
         run.log("scheduler", scheduler)
         run.log("dashboard", dashboard)
         run.log("jupyter", jupyter)
         run.log("token", token)
 
-        ### CHECK IF SPECIFIED code_store EXISTS IN dataReferences
         workspace_name = run.experiment.workspace.name.lower()
         run_id = run.get_details()["runId"]
-        code_store_mounted = f"/mnt/batch/tasks/shared/LS_root/jobs/{workspace_name}/azureml/{run_id}/mounts/"
+        
+        mount_point = f"/mnt/batch/tasks/shared/LS_root/jobs/{workspace_name}/azureml/{run_id}/mounts/"
 
         if args.jupyter:
             cmd = (
                 f" jupyter lab --ip 0.0.0.0 --port {args.jupyter_port}"
                 f" --NotebookApp.token={token}"
             )
-            cmd += f" --notebook-dir={code_store_mounted}"  # if len(code_store_mounted) > 0 else  ""
+            cmd += f" --notebook-dir={mount_point}"
             cmd += f" --allow-root --no-browser"
 
             jupyter_log = open("jupyter_log.txt", "a")
