@@ -445,8 +445,8 @@ class AzureMLCluster(Cluster):
                 "jupyter_url"
             ] = f"http://{hostname}:{self.jupyter_port}/?token={token}"
 
-        logger.info(f'Dashboard URL: {self.scheduler_info['dashboard_url']}')
-        logger.info(f'Jupyter URL:   {self.scheduler_info['jupyter_url']}')
+        logger.info(f'Dashboard URL: {self.scheduler_info["dashboard_url"]}')
+        logger.info(f'Jupyter URL:   {self.scheduler_info["jupyter_url"]}')
 
     async def __setup_port_forwarding(self):
         dashboard_address = self.run.get_metrics()["dashboard"]
