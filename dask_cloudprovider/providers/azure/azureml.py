@@ -339,7 +339,7 @@ class AzureMLCluster(Cluster):
             logger.info("On the same VNET")
             self.same_vnet = False
         except ConnectionRefusedError as e:
-            logger.warning(e)
+            logger.info(e)
             pass
 
     def __prepare_rpc_connection_to_headnode(self):
