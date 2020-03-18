@@ -2,7 +2,8 @@ from azureml.core import Experiment, RunConfiguration, ScriptRunConfig
 from azureml.core.compute import AmlCompute
 from azureml.train.estimator import Estimator
 from azureml.core.runconfig import MpiConfiguration
-import time, os, socket, subprocess
+
+import time, os, socket, subprocess, logging
 
 from distributed.deploy.cluster import Cluster
 from distributed.core import rpc
@@ -17,6 +18,8 @@ from distributed.utils import (
     ignoring,
     format_bytes,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class AzureMLCluster(Cluster):
@@ -194,6 +197,7 @@ class AzureMLCluster(Cluster):
                     " type but needs to be a list of int tuples."
                     " Check the documentation."
                 )
+                logger.exception(error_message)
                 raise TypeError(error_message)
 
             if len(additional_ports) > 0:

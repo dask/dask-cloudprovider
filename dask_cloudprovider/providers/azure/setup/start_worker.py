@@ -5,6 +5,7 @@ import time
 import socket
 import argparse
 import subprocess
+import logging
 from mpi4py import MPI
 
 
@@ -21,6 +22,7 @@ def flush(proc, proc_log):
 
 
 if __name__ == "__main__":
+    logger = logging.getLogger(__name__)
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
 
@@ -44,15 +46,15 @@ if __name__ == "__main__":
             ip = socket.gethostbyname(socket.gethostname())
         except (socket.timeout, socket.gaierror):
             time.sleep(1)
-            print(f"attempt: {attempt}, ip: {ip}")
+            logger.debug(f"attempt: {attempt}, ip: {ip}")
             # pass
         attempt += 1
 
-    print("- scheduler is ", args.scheduler_ip_port)
-    print("- args: ", args)
-    print("- unparsed: ", unparsed)
-    print("- my rank is ", rank)
-    print("- my ip is: ", ip)
+    logger.debug("- scheduler is ", args.scheduler_ip_port)
+    logger.debug("- args: ", args)
+    logger.debug("- unparsed: ", unparsed)
+    logger.debug("- my rank is ", rank)
+    logger.debug("- my ip is: ", ip)
 
     if not GPU_run:
         cmd = "dask-worker " + args.scheduler_ip_port

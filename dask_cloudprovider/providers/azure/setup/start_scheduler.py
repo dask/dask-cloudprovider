@@ -7,6 +7,7 @@ import socket
 import argparse
 import threading
 import subprocess
+import logging
 
 from mpi4py import MPI
 from azureml.core import Run
@@ -26,6 +27,8 @@ def flush(proc, proc_log):
 
 
 if __name__ == "__main__":
+    logger = logging.getLogger(__name__)
+
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
 
@@ -67,12 +70,12 @@ if __name__ == "__main__":
     jupyter = data["jupyter"]
     token = data["token"]
 
-    print("- scheduler is ", scheduler)
-    print("- dashboard is ", dashboard)
-    print("- args: ", args)
-    print("- unparsed: ", unparsed)
-    print("- my rank is ", rank)
-    print("- my ip is ", ip)
+    logger.debug("- scheduler is ", scheduler)
+    logger.debug("- dashboard is ", dashboard)
+    logger.debug("- args: ", args)
+    logger.debug("- unparsed: ", unparsed)
+    logger.debug("- my rank is ", rank)
+    logger.debug("- my ip is ", ip)
 
     if rank == 0:
         running_jupyter_servers = list(list_running_servers())
