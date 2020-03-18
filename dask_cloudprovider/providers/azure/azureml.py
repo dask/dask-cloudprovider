@@ -401,7 +401,7 @@ class AzureMLCluster(Cluster):
         self.__print_message(f'Scheduler: {run.get_metrics()["scheduler"]}')
         self.run = run
 
-        logger.info(f'Scheduler: {run.get_metrics()['scheduler']}')
+        logger.info(f'Scheduler: {run.get_metrics()["scheduler"]}')
 
         ### CHECK IF ON THE SAME VNET
         while self.same_vnet is None:
