@@ -227,6 +227,7 @@ class AzureMLCluster(Cluster):
                         " Check the documentation."
                     )
                     raise TypeError(error_message)
+
         self.additional_ports = additional_ports
 
         self.admin_username = admin_username
@@ -318,10 +319,8 @@ class AzureMLCluster(Cluster):
             self.initial_node_count = self.max_nodes
 
     def __print_message(self, msg, length=80, filler="#", pre_post=""):
+        logger.info(msg)
         print(f"{pre_post} {msg} {pre_post}".center(length, filler))
-
-    def __get_estimator(self):
-        raise NotImplementedError("This method has not been implemented yet.")
 
     async def __check_if_scheduler_ip_reachable(self):
         """
@@ -333,11 +332,14 @@ class AzureMLCluster(Cluster):
             socket.create_connection((ip, port), 10)
             self.same_vnet = True
             self.__print_message("On the same VNET")
+            logger.info("On the same VNET")
         except socket.timeout as e:
 
             self.__print_message("Not on the same VNET")
+            logger.info("On the same VNET")
             self.same_vnet = False
         except ConnectionRefusedError as e:
+            logger.warning(e)
             pass
 
     def __prepare_rpc_connection_to_headnode(self):
@@ -345,9 +347,12 @@ class AzureMLCluster(Cluster):
             if self.admin_username == "" or self.admin_ssh_key == "":
                 message = "Your machine is not at the same VNET as the cluster. "
                 message += "You need to set admin_username and admin_ssh_key. Check documentation."
+                logger.exception(message)
                 raise Exception(message)
             else:
-                return f"{socket.gethostname()}:{self.scheduler_port}"
+                uri = f"{socket.gethostname()}:{self.scheduler_port}"
+                logger.info(f'Local connection: {uri}')
+                return uri
         else:
             return self.run.get_metrics()["scheduler"]
 
@@ -357,6 +362,7 @@ class AzureMLCluster(Cluster):
 
         # submit run
         self.__print_message("Submitting the experiment")
+
         exp = Experiment(self.workspace, self.experiment_name)
         estimator = Estimator(
             os.path.join(self.abs_path, "setup"),
@@ -373,15 +379,18 @@ class AzureMLCluster(Cluster):
         run = exp.submit(estimator)
 
         self.__print_message("Waiting for scheduler node's IP")
+
         while (
             run.get_status() != "Canceled"
             and run.get_status() != "Failed"
             and "scheduler" not in run.get_metrics()
         ):
             print(".", end="")
+            logger.info("Scheduler not ready")
             time.sleep(5)
 
         if run.get_status() == "Canceled" or run.get_status() == "Failed":
+            logger.exception("Failed to start the AzureML cluster")
             raise Exception("Failed to start the AzureML cluster.")
 
         print("\n\n")
@@ -391,6 +400,8 @@ class AzureMLCluster(Cluster):
         self.worker_params["--scheduler_ip_port"] = self.scheduler_ip_port
         self.__print_message(f'Scheduler: {run.get_metrics()["scheduler"]}')
         self.run = run
+
+        logger.info(f'Scheduler: {run.get_metrics()['scheduler']}')
 
         ### CHECK IF ON THE SAME VNET
         while self.same_vnet is None:
@@ -405,8 +416,8 @@ class AzureMLCluster(Cluster):
         await self.sync(self.__update_links)
 
         self.__print_message("Connections established")
-
         self.__print_message(f"Scaling to {self.initial_node_count} workers")
+
         if self.initial_node_count > 1:
             self.scale(
                 self.initial_node_count
@@ -433,6 +444,9 @@ class AzureMLCluster(Cluster):
             self.scheduler_info[
                 "jupyter_url"
             ] = f"http://{hostname}:{self.jupyter_port}/?token={token}"
+
+        logger.info(f'Dashboard URL: {self.scheduler_info['dashboard_url']}')
+        logger.info(f'Jupyter URL:   {self.scheduler_info['jupyter_url']}')
 
     async def __setup_port_forwarding(self):
         dashboard_address = self.run.get_metrics()["dashboard"]
@@ -690,7 +704,7 @@ class AzureMLCluster(Cluster):
         elif count > workers:
             self.scale_down(count - workers)
         else:
-            print(f"Number of workers: {workers}")
+            self.__print_message(f"Number of workers: {workers}")
 
     # scale up
     def scale_up(self, workers=1):
@@ -724,7 +738,7 @@ class AzureMLCluster(Cluster):
                 child_run.complete()  # complete() will mark the run "Complete", but won't kill the process
                 child_run.cancel()
             else:
-                print("All scaled workers are removed.")
+                self.__print_message("All scaled workers are removed.")
 
     # close cluster
     async def _close(self):
@@ -752,4 +766,4 @@ class AzureMLCluster(Cluster):
         ----------
         cluster.close()
         """
-        self.sync(self._close)
+        return self.sync(self._close)
