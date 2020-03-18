@@ -351,7 +351,7 @@ class AzureMLCluster(Cluster):
                 raise Exception(message)
             else:
                 uri = f"{socket.gethostname()}:{self.scheduler_port}"
-                logger.info(f'Local connection: {uri}')
+                logger.info(f"Local connection: {uri}")
                 return uri
         else:
             return self.run.get_metrics()["scheduler"]
