@@ -89,7 +89,7 @@ Azure
 -----
 
 In order to start using ``dask_cloudprovider.AzureMLCluster`` you need, at a minimum,
-an `Azure subscription <https://docs.microsoft.com/en-us/azure/cloud-adoption-framework/decision-guides/subscriptions/>`_,
+an `Azure subscription <https://azure.microsoft.com/en-us/free/services/machine-learning/>`_,
 an `AzureML workspace <https://docs.microsoft.com/en-us/python/api/azureml-core/azureml.core.workspace.workspace?view=azure-ml-py>`_, and
 a `quota <https://docs.microsoft.com/en-us/azure/azure-resource-manager/management/azure-subscription-service-limits>`_ to create your compute target.
 
