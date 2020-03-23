@@ -175,7 +175,8 @@ and `Linux <https://azure.microsoft.com/en-us/pricing/details/virtual-machines/l
 
 .. code-block:: python
 
-   vm_name = "STANDARD_DS13_V2"
+   # In this example, we will use ``STANDARD_DS12_V2`` VM because it is cheaper than others
+   vm_name = "STANDARD_DS12_V2"
 
    ### UNCOMMENT BELOW FOR LOCAL RUNS
    # with open(admin_ssh_key_pub, "r") as f:
