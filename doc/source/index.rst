@@ -89,7 +89,9 @@ Azure
 -----
 
 In order to start using ``dask_cloudprovider.AzureMLCluster`` you need, at a minimum,
-an Azure subscription, an AzureML workspace, and a quota to create your compute target.
+an `Azure subscription <https://docs.microsoft.com/en-us/azure/cloud-adoption-framework/decision-guides/subscriptions/>`_,
+an `AzureML workspace <https://docs.microsoft.com/en-us/python/api/azureml-core/azureml.core.workspace.workspace?view=azure-ml-py>`_, and
+a `quota <https://docs.microsoft.com/en-us/azure/azure-resource-manager/management/azure-subscription-service-limits>`_ to create your compute target.
 
 Getting started
 ^^^^^^^^^^^^^^^
@@ -117,14 +119,14 @@ more in the AzureML documentation for `Workspace <https://docs.microsoft.com/en-
 
 .. code-block:: python
 
-   subscription_id = '<your-subscription-id-here>'
-   resource_group = '<your-resource-group>'
-   workspace_name = '<your-workspace-name>'
+   subscription_id = "<your-subscription-id-here>"
+   resource_group = "<your-resource-group>"
+   workspace_name = "<your-workspace-name>"
 
    ws = Workspace(
-      workspace_name=workspace_name
-      , subscription_id=subscription_id
-      , resource_group=resource_group
+      workspace_name=workspace_name,
+      subscription_id=subscription_id,
+      resource_group=resource_group
    )
 
 Configure parameters
@@ -134,16 +136,16 @@ Let's keep everything in one place so it's easy to maintain.
 
 .. code-block:: python
 
-   name = 'dask-azureml'
+   name = "dask-azureml"
 
    ### vnet settings
    vnet_rg = ws.resource_group
-   vnet_name = 'dask_azureml_vnet'
-   subnet_name = 'default'
+   vnet_name = "dask_azureml_vnet"
+   subnet_name = "default"
 
    ### azure ml names: ct - compute target, env - environment
-   ct_name  = 'dask-ct'
-   env_name = 'AzureML-Dask-CPU'
+   ct_name  = "dask-ct"
+   env_name = "AzureML-Dask-CPU"
 
 If you are running from an AzureML Compute Instance (Jupyter Lab) you should put both,
 the ``ComputeTarget`` (see `Compute Target <https://docs.microsoft.com/en-us/python/api/azureml-core/azureml.core.compute.computetarget?view=azure-ml-py>`_ documentation page) 
@@ -157,9 +159,9 @@ However, you need to provide some administator name (other than ``admin``) and p
 .. code-block:: python
 
    ### credentials
-   admin_username = name.split('-')[0]   ### dask
-   admin_ssh_key_pub = '<path-to-public-key>'
-   admin_ssh_key_priv = '<path-to-private-key>'
+   admin_username = name.split("-")[0]   ### dask
+   admin_ssh_key_pub = "<path-to-public-key>"
+   admin_ssh_key_priv = "<path-to-private-key>"
 
 The above credentials will be used to create an SSH tunnel between the headnode and your local machine
 so you can communicate with the Dask cluster.
@@ -173,35 +175,35 @@ and `Linux <https://azure.microsoft.com/en-us/pricing/details/virtual-machines/l
 
 .. code-block:: python
 
-   vm_name = 'STANDARD_DS13_V2'
+   vm_name = "STANDARD_DS13_V2"
 
    ### UNCOMMENT BELOW FOR LOCAL RUNS
-   # with open(admin_ssh_key_pub, 'r') as f:
-   #   ssh_key_pub = f.read().strip()
-      
+   # with open(admin_ssh_key_pub, "r") as f:
+   #    ssh_key_pub = f.read().strip()
+
    if ct_name not in ws.compute_targets:
       # create config for Azure ML cluster
       # change properties as needed
       config = AmlCompute.provisioning_configuration(
-           vm_size=vm_name
-         , min_nodes=0
-         , max_nodes=2
-         , vnet_resourcegroup_name=vnet_rg
-         , vnet_name=vnet_name
-         , subnet_name=subnet_name
-         , idle_seconds_before_scaledown=300
+         vm_size=vm_name,
+         min_nodes=0,
+         max_nodes=2,
+         vnet_resourcegroup_name=vnet_rg,
+         vnet_name=vnet_name,
+         subnet_name=subnet_name,
+         idle_seconds_before_scaledown=300,
 
          ### UNCOMMENT BELOW FOR LOCAL RUNS
-         # , admin_username=admin_username               
-         # , admin_user_ssh_key=ssh_key_pub
-         # , remote_login_port_public_access='Enabled' 
+         # admin_username=admin_username,
+         # admin_user_ssh_key=ssh_key_pub,
+         # remote_login_port_public_access='Enabled',
       )
       ct = ComputeTarget.create(ws, ct_name, config)
       ct.wait_for_completion(show_output=True)
    else:
       ct = ws.compute_targets[ct_name]
 
-Of course, if your compute target already exists you can simply call ``ct = ws.compute_targets[ct_name]``.
+If your compute target already exists you can call ``ct = ws.compute_targets[ct_name]``.
 
 Define Environment
 ~~~~~~~~~~~~~~~~~~
@@ -212,7 +214,7 @@ However, the ``Environment`` class allows you to specify your own docker image a
 
 .. code-block:: python
 
-   packages = ['matplotlib']
+   packages = ["matplotlib"]
 
    env = Environment(name=env_name)
 
@@ -227,15 +229,15 @@ To create cluster:
 .. code-block:: python
 
    amlcluster = AzureMLCluster(
-              workspace=ws
-            , compute_target=ct
-            , environment_definition=env
-            , initial_node_count=2
+      workspace=ws,
+      compute_target=ct,
+      environment_definition=env,
+      initial_node_count=2,
 
-            ### UNCOMMENT BELOW FOR LOCAL RUNS
-            # , admin_username=admin_username
-            # , admin_ssh_key=admin_ssh_key_priv
-        )
+      ### UNCOMMENT BELOW FOR LOCAL RUNS
+      # admin_username=admin_username,
+      # admin_ssh_key=admin_ssh_key_priv,
+   )
 
 Once the cluster has started, the Dask Cluster widget will print out two links:
 
