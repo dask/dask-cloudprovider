@@ -103,42 +103,6 @@ class AzureMLCluster(Cluster):
 
     **kwargs: dict
         Additional keyword arguments.
-
-    Example | ``AzureMLCluster`` for Dask Client.
-    See https://aka.ms/azureml/dask.
-    ----------
-    ```
-    from azureml.core import Workspace
-    from dask.distributed import Client
-    from dask_cloudprovider import AzureMLCluster
-
-    ws = Workspace.from_config()
-
-    cluster = AzureMLCluster(ws,
-                             ws.compute_targets['dask-ct'],
-                             ws.environments['dask-env'])
-
-    client = Client(cluster)
-    ```
-
-    Example | ``AzureMLCluster`` for interactive JupyterLab session.
-    See https://aka.ms/azureml/dask.
-    ----------
-    ```
-    from azureml.core import Workspace
-    from dask_cloudprovider import AzureMLCluster
-
-    ws = Workspace.from_config()
-
-    cluster = AzureMLCluster(ws,
-                             ws.compute_targets['dask-ct'],
-                             ws.environments['dask-env'],
-                             datastores=list(ws.datastores),
-                             jupyter=True)
-
-    print(cluster.jupyter_link)
-    print(cluster.dashboard_link)
-    ```
     """
 
     def __init__(
@@ -256,10 +220,10 @@ class AzureMLCluster(Cluster):
 
         if not self.asynchronous:
             self._loop_runner.start()
-            self.sync(self.get_defaults)
-            self.sync(self.create_cluster)
+            self.sync(self.__get_defaults)
+            self.sync(self.__create_cluster)
 
-    async def get_defaults(self):
+    async def __get_defaults(self):
         self.config = dask.config.get("cloudprovider.azure", {})
 
         if self.experiment_name is None:
@@ -356,7 +320,7 @@ class AzureMLCluster(Cluster):
         else:
             return self.run.get_metrics()["scheduler"]
 
-    async def create_cluster(self):
+    async def __create_cluster(self):
         # set up environment
         self.__print_message("Setting up cluster")
 
@@ -497,10 +461,6 @@ class AzureMLCluster(Cluster):
     @property
     def dashboard_link(self):
         """ Link to Dask dashboard.
-
-        Example
-        ----------
-        print(cluster.dashboard_link)
         """
         try:
             link = self.scheduler_info["dashboard_url"]
@@ -513,10 +473,6 @@ class AzureMLCluster(Cluster):
     def jupyter_link(self):
         """ Link to JupyterLab on running on the headnode of the cluster.
         Set ``jupyter=True`` when creating the ``AzureMLCluster``.
-
-        Example
-        ----------
-        print(cluster.jupyter_link)
         """
         try:
             link = self.scheduler_info["jupyter_url"]
@@ -684,14 +640,7 @@ class AzureMLCluster(Cluster):
         return box
 
     def scale(self, workers=1):
-        """ Scale the cluster. We can add or reduce the number workers
-        of a given configuration
-
-        Example
-        ----------
-        ```python
-        cluster.scale(2)
-        ```
+        """ Scale the cluster. Scales to a maximum of the workers available in the cluster.
         """
         if workers <= 0:
             self.close()
@@ -708,6 +657,8 @@ class AzureMLCluster(Cluster):
 
     # scale up
     def scale_up(self, workers=1):
+        """ Scale up the number of workers.
+        """
         run_config = RunConfiguration()
         run_config.target = self.compute_target
         run_config.environment = self.environment_definition
@@ -732,6 +683,8 @@ class AzureMLCluster(Cluster):
 
     # scale down
     def scale_down(self, workers=1):
+        """ Scale down the number of workers. Scales to minimum of 1.
+        """
         for i in range(workers):
             if self.workers_list:
                 child_run = self.workers_list.pop(0)  # deactive oldest workers
@@ -761,9 +714,5 @@ class AzureMLCluster(Cluster):
         """ Close the cluster. All Azure ML Runs corresponding to the scheduler
         and worker processes will be completed. The Azure ML Compute Target will
         return to its minimum number of nodes after its idle time before scaledown.
-
-        Example
-        ----------
-        cluster.close()
         """
         return self.sync(self._close)

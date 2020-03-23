@@ -64,6 +64,7 @@ instance/
 
 # Sphinx documentation
 docs/_build/
+doc/_build/
 
 # PyBuilder
 target/
@@ -103,3 +104,9 @@ ENV/
 
 # vscode
 .vscode/
+
+# MAC
+.DS_Store
+
+# any untitled Jupyter notebooks
+Untitled*.ipynb
