@@ -29,6 +29,7 @@ if __name__ == "__main__":
     ### PARSE ARGUMENTS
     parser = argparse.ArgumentParser()
     parser.add_argument("--scheduler_ip_port", default=None)
+    parser.add_argument("--worker_death_timeout", default=30) # 30 seconds
     parser.add_argument("--use_gpu", default=False)
     parser.add_argument("--n_gpus_per_node", default=0)
 
@@ -40,6 +41,8 @@ if __name__ == "__main__":
 
     attempt = 0
     ip = None
+
+    run = Run.get_context()
 
     while ip is None:
         try:
@@ -62,7 +65,12 @@ if __name__ == "__main__":
         os.environ["CUDA_VISIBLE_DEVICES"] = str(list(range(n_gpus_per_node))).strip(
             "[]"
         )
-        cmd = "dask-cuda-worker " + args.scheduler_ip_port + " --memory-limit 0"
+        cmd = (
+            "dask-cuda-worker " + 
+            args.scheduler_ip_port + 
+            " --memory-limit 0 " +
+            " --death_timeout " +
+            args.worker_death_timeout
 
     worker_log = open("worker_{rank}_log.txt".format(rank=rank), "w")
     worker_proc = subprocess.Popen(
@@ -73,3 +81,7 @@ if __name__ == "__main__":
     )
 
     flush(worker_proc, worker_log)
+
+    ## kill the run if the worker dies
+    run.complete()
+    run.cancel()

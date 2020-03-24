@@ -39,6 +39,7 @@ if __name__ == "__main__":
     parser.add_argument("--jupyter_port", default=8888)
     parser.add_argument("--dashboard_port", default=8787)
     parser.add_argument("--scheduler_port", default=8786)
+    parser.add_argument("--scheduler_idle_timeout", default=300)  # 5 mins
     parser.add_argument("--use_gpu", default=False)
     parser.add_argument("--n_gpus_per_node", default=0)
 
@@ -56,6 +57,7 @@ if __name__ == "__main__":
     if rank == 0:
         data = {
             "scheduler": ip + ":" + str(args.scheduler_port),
+            "scheduler_idle_timeout": str(args.scheduler_idle_timeout),
             "dashboard": ip + ":" + str(args.dashboard_port),
             "jupyter": ip + ":" + str(args.jupyter_port),
             "token": args.jupyter_token,
@@ -66,11 +68,13 @@ if __name__ == "__main__":
     ### DISTRIBUTE TO CLUSTER
     data = comm.bcast(data, root=0)
     scheduler = data["scheduler"]
+    scheduler_timeout = data['scheduler_idle_timeout']
     dashboard = data["dashboard"]
     jupyter = data["jupyter"]
     token = data["token"]
 
     logger.debug("- scheduler is ", scheduler)
+    logger.debut("- scheduler timeout is ", scheduler_timeout)
     logger.debug("- dashboard is ", dashboard)
     logger.debug("- args: ", args)
     logger.debug("- unparsed: ", unparsed)
@@ -79,7 +83,7 @@ if __name__ == "__main__":
 
     if rank == 0:
         running_jupyter_servers = list(list_running_servers())
-        print(running_jupyter_servers)
+        logger.debug("- running jupyter servers", running_jupyter_servers)
 
         ### if any jupyter processes running
         ### KILL'EM ALL!!!
@@ -92,6 +96,7 @@ if __name__ == "__main__":
 
         run.log("headnode", ip)
         run.log("scheduler", scheduler)
+        run.log("scheduler_idle_timeout", scheduler_idle_timeout)
         run.log("dashboard", dashboard)
         run.log("jupyter", jupyter)
         run.log("token", token)
@@ -130,10 +135,12 @@ if __name__ == "__main__":
 
         cmd = (
             "dask-scheduler "
-            + "--port "
+            + " --port "
             + scheduler.split(":")[1]
             + " --dashboard-address "
             + dashboard
+            + " --idle-timeout "
+            + scheduler_idle_timeout
         )
         scheduler_log = open("scheduler_log.txt", "w")
         scheduler_proc = subprocess.Popen(
@@ -164,3 +171,8 @@ if __name__ == "__main__":
         worker_flush.start()
 
         flush(scheduler_proc, scheduler_log)
+
+        ## If dask-scheduler process times out on idle -- kill the run
+        ## the below kills the run thus scheduler, works and the jupyter process
+        run.cancel()
+        run.complete()

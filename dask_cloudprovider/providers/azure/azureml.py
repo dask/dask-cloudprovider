@@ -116,6 +116,8 @@ class AzureMLCluster(Cluster):
         jupyter_port=None,
         dashboard_port=None,
         scheduler_port=None,
+        scheduler_idle_timeout=None,
+        worker_death_timeout=None,
         additional_ports=None,
         admin_username=None,
         admin_ssh_key=None,
@@ -244,6 +246,12 @@ class AzureMLCluster(Cluster):
         if self.scheduler_port is None:
             self.scheduler_port = self.config.get("scheduler_port")
 
+        if self.scheduler_idle_timeout is None:
+            self.scheduler_idle_timeout = self.config.get("scheduler_idle_timeout")
+
+        if self.worker_death_timeout is None:
+            self.worker_death_timeout = self.config.get("worker_death_timeout")
+
         if self.additional_ports is None:
             self.additional_ports = self.config.get("additional_ports")
 
@@ -261,7 +269,9 @@ class AzureMLCluster(Cluster):
         self.worker_params = {}
 
         ### scheduler and worker parameters
-        self.scheduler_params["--jupyter"] = True
+        self.scheduler_params["--jupyter"] = self.jupyter
+        self.scheduler_params["--scheduler_idle_timeout"] = self.scheduler_idle_timeout
+        self.worker_params["--worker_death_timeout"] = self.worker_death_timeout
 
         if self.use_gpu:
             self.scheduler_params["--use_gpu"] = True
@@ -668,6 +678,7 @@ class AzureMLCluster(Cluster):
             f"--scheduler_ip_port={scheduler_ip}",
             f"--use_gpu={self.use_gpu}",
             f"--n_gpus_per_node={self.n_gpus_per_node}",
+            f"--worker_death_timeout={self.worker_death_timeout}"
         ]
 
         child_run_config = ScriptRunConfig(
