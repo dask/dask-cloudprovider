@@ -240,13 +240,7 @@ we will use a AzureML curated environment for running Dask CPU cluster, the `Azu
 However, the ``Environment`` class allows you to specify your own docker image and additional packages to install.
 
 .. code-block:: python
-
-   packages = ["matplotlib"]
-
    env = ws.environments[env_name]
-
-   for package in packages:
-      env.python.conda_dependencies.add_pip_package(package)
 
 Create cluster
 ~~~~~~~~~~~~~~
