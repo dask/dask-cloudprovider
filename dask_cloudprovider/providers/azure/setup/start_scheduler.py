@@ -68,13 +68,13 @@ if __name__ == "__main__":
     ### DISTRIBUTE TO CLUSTER
     data = comm.bcast(data, root=0)
     scheduler = data["scheduler"]
-    scheduler_timeout = data['scheduler_idle_timeout']
+    scheduler_idle_timeout = data['scheduler_idle_timeout']
     dashboard = data["dashboard"]
     jupyter = data["jupyter"]
     token = data["token"]
 
     logger.debug("- scheduler is ", scheduler)
-    logger.debug("- scheduler timeout is ", scheduler_timeout)
+    logger.debug("- scheduler timeout is ", scheduler_idle_timeout)
     logger.debug("- dashboard is ", dashboard)
     logger.debug("- args: ", args)
     logger.debug("- unparsed: ", unparsed)
