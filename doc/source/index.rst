@@ -206,6 +206,32 @@ and `Linux <https://azure.microsoft.com/en-us/pricing/details/virtual-machines/l
 
 If your compute target already exists you can call ``ct = ws.compute_targets[ct_name]``.
 
+Setting up vnet
+"""""""""""""""
+If you do not have a VNET created there are two ways to create one.
+
+1. Using `https://azure.portal.com <https://azure.portal.com>`_:
+
+   a. On the home page click on `+ Create a resource` on the top-left portion of the page.
+   b. Search for `Virtual Network`.
+   c. Click on `Create` and follow the instructions: select the `Subscription` and the 
+      `Resource group` you will create the vnet in, and provide a `Name` and the `Location`. 
+      **NOTE:** keep the location the same as your AzureML Workspace e.g. if your AzureML Workspace 
+      location is `eastus` you should create the Virtual Network in `East US`.
+   d. Click `Review+Create` and follow through with the rest of the instructions.
+
+2. Using Azure CLI:
+
+   a. Install the AzureCLI; instructions are here: 
+      `https://docs.microsoft.com/en-us/cli/azure/install-azure-cli?view=azure-cli-latest 
+      <https://docs.microsoft.com/en-us/cli/azure/install-azure-cli?view=azure-cli-latest>`_
+   b. Open terminal and login to your Azure Subscription: ``az login``. This should 
+      automatically log you in into your Azure subscription. **NOTE:** If you have more than 
+      one subscription you will need to set the right subscription to use:
+      ``az account set --subscription "<name-of-sub-to-use>"``
+   c. Create the virtual network: 
+      ``az network vnet create -g <resource-group> -n <vnet-name> --location <location> --subnet-name default``
+
 Define Environment
 ~~~~~~~~~~~~~~~~~~
 
