@@ -155,6 +155,8 @@ class AzureMLCluster(Cluster):
         self.jupyter_port = jupyter_port
         self.dashboard_port = dashboard_port
         self.scheduler_port = scheduler_port
+        self.scheduler_idle_timeout = scheduler_idle_timeout
+        self.worker_death_timeout = worker_death_timeout
 
         if additional_ports is not None:
             if type(additional_ports) != list:
