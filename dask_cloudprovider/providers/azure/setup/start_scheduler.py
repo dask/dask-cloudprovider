@@ -74,7 +74,7 @@ if __name__ == "__main__":
     token = data["token"]
 
     logger.debug("- scheduler is ", scheduler)
-    logger.debut("- scheduler timeout is ", scheduler_timeout)
+    logger.debug("- scheduler timeout is ", scheduler_timeout)
     logger.debug("- dashboard is ", dashboard)
     logger.debug("- args: ", args)
     logger.debug("- unparsed: ", unparsed)
