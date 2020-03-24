@@ -208,7 +208,7 @@ If your compute target already exists you can call ``ct = ws.compute_targets[ct_
 
 Setting up vnet
 """""""""""""""
-If you do not have a VNET created there are two ways to create one.
+If you do not have a virtual network yet there are two ways to create one.
 
 1. Using `https://azure.portal.com <https://azure.portal.com>`_:
 
@@ -243,7 +243,7 @@ However, the ``Environment`` class allows you to specify your own docker image a
 
    packages = ["matplotlib"]
 
-   env = Environment(name=env_name)
+   env = ws.environments[env_name]
 
    for package in packages:
       env.python.conda_dependencies.add_pip_package(package)
