@@ -82,7 +82,3 @@ if __name__ == "__main__":
     )
 
     flush(worker_proc, worker_log)
-
-    ## kill the run if the worker dies
-    run.complete()
-    run.cancel()
