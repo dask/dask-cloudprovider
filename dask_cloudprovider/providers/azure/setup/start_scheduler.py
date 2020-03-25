@@ -188,5 +188,9 @@ if __name__ == "__main__":
     logger.debug(f'Will cancel the run in {worker_death_timeout}')
     time.sleep(int(worker_death_timeout))
 
+    if jupyter_proc:
+        jupyter_proc.kill()
+    worker_proc.kill()
+
     run.complete()
     run.cancel()

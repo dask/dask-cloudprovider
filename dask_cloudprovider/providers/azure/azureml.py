@@ -643,6 +643,7 @@ class AzureMLCluster(Cluster):
         self._cached_widget = box
 
         def update():
+            self.close_when_disconnect()
             status.value = self._widget_status()
 
         pc = PeriodicCallback(update, 500, io_loop=self.loop)
@@ -650,7 +651,11 @@ class AzureMLCluster(Cluster):
         pc.start()
 
         return box
-
+    
+    def close_when_disconnect(self):
+        if self.run.get_status() == "Canceled" or self.run.get_status() == "Completed" or self.run.get_status() == "Failed":
+            self.scale_down(len(self.workers_list))
+                    
     def scale(self, workers=1):
         """ Scale the cluster. Scales to a maximum of the workers available in the cluster.
         """
