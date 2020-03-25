@@ -71,6 +71,7 @@ if __name__ == "__main__":
             " --memory-limit 0 " +
             " --death_timeout " +
             args.worker_death_timeout
+        )
 
     worker_log = open("worker_{rank}_log.txt".format(rank=rank), "w")
     worker_proc = subprocess.Popen(
