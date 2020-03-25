@@ -7,7 +7,7 @@ import argparse
 import subprocess
 import logging
 from mpi4py import MPI
-
+from azureml.core import Run
 
 def flush(proc, proc_log):
     while True:
