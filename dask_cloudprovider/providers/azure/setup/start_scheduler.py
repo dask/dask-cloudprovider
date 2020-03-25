@@ -185,6 +185,6 @@ if __name__ == "__main__":
 
         ## If dask-scheduler process times out on idle -- kill the run
         ## the below kills the run thus scheduler, works and the jupyter process
-        time.sleep(worker_death_timeout)
+        time.sleep(int(worker_death_timeout))
         run.cancel()
         run.complete()
