@@ -58,6 +58,7 @@ if __name__ == "__main__":
         data = {
             "scheduler": ip + ":" + str(args.scheduler_port),
             "scheduler_idle_timeout": str(args.scheduler_idle_timeout),
+            "worker_death_timeout": str(args.worker_death_timeout),
             "dashboard": ip + ":" + str(args.dashboard_port),
             "jupyter": ip + ":" + str(args.jupyter_port),
             "token": args.jupyter_token,
@@ -69,12 +70,14 @@ if __name__ == "__main__":
     data = comm.bcast(data, root=0)
     scheduler = data["scheduler"]
     scheduler_idle_timeout = data['scheduler_idle_timeout']
+    worker_death_timeout = data['worker_death_timeout']
     dashboard = data["dashboard"]
     jupyter = data["jupyter"]
     token = data["token"]
 
     logger.debug("- scheduler is ", scheduler)
     logger.debug("- scheduler timeout is ", scheduler_idle_timeout)
+    logger.debug("- worker timeout is ", worker_death_timeout)
     logger.debug("- dashboard is ", dashboard)
     logger.debug("- args: ", args)
     logger.debug("- unparsed: ", unparsed)
@@ -97,6 +100,7 @@ if __name__ == "__main__":
         run.log("headnode", ip)
         run.log("scheduler", scheduler)
         run.log("scheduler_idle_timeout", scheduler_idle_timeout)
+        run.log("worker_death_timeout", worker_death_timeout)
         run.log("dashboard", dashboard)
         run.log("jupyter", jupyter)
         run.log("token", token)
@@ -157,7 +161,12 @@ if __name__ == "__main__":
             os.environ["CUDA_VISIBLE_DEVICES"] = str(
                 list(range(n_gpus_per_node))
             ).strip("[]")
-            cmd = "dask-cuda-worker " + scheduler + " --memory-limit 0"
+            cmd = (
+                "dask-cuda-worker " + 
+                scheduler + 
+                " --memory-limit 0 " +
+                " --death_timeout " +
+                worker_death_timeout
 
         worker_log = open("worker_{rank}_log.txt".format(rank=rank), "w")
         worker_proc = subprocess.Popen(
@@ -174,5 +183,6 @@ if __name__ == "__main__":
 
         ## If dask-scheduler process times out on idle -- kill the run
         ## the below kills the run thus scheduler, works and the jupyter process
+        time.sleep(worker_death_timeout)
         run.cancel()
         run.complete()
