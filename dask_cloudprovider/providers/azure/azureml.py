@@ -116,6 +116,8 @@ class AzureMLCluster(Cluster):
         jupyter_port=None,
         dashboard_port=None,
         scheduler_port=None,
+        scheduler_idle_timeout=None,
+        worker_death_timeout=None,
         additional_ports=None,
         admin_username=None,
         admin_ssh_key=None,
@@ -153,6 +155,8 @@ class AzureMLCluster(Cluster):
         self.jupyter_port = jupyter_port
         self.dashboard_port = dashboard_port
         self.scheduler_port = scheduler_port
+        self.scheduler_idle_timeout = scheduler_idle_timeout
+        self.worker_death_timeout = worker_death_timeout
 
         if additional_ports is not None:
             if type(additional_ports) != list:
@@ -244,6 +248,12 @@ class AzureMLCluster(Cluster):
         if self.scheduler_port is None:
             self.scheduler_port = self.config.get("scheduler_port")
 
+        if self.scheduler_idle_timeout is None:
+            self.scheduler_idle_timeout = self.config.get("scheduler_idle_timeout")
+
+        if self.worker_death_timeout is None:
+            self.worker_death_timeout = self.config.get("worker_death_timeout")
+
         if self.additional_ports is None:
             self.additional_ports = self.config.get("additional_ports")
 
@@ -261,7 +271,9 @@ class AzureMLCluster(Cluster):
         self.worker_params = {}
 
         ### scheduler and worker parameters
-        self.scheduler_params["--jupyter"] = True
+        self.scheduler_params["--jupyter"] = self.jupyter
+        self.scheduler_params["--scheduler_idle_timeout"] = self.scheduler_idle_timeout
+        self.worker_params["--worker_death_timeout"] = self.worker_death_timeout
 
         if self.use_gpu:
             self.scheduler_params["--use_gpu"] = True
@@ -631,6 +643,7 @@ class AzureMLCluster(Cluster):
         self._cached_widget = box
 
         def update():
+            self.close_when_disconnect()
             status.value = self._widget_status()
 
         pc = PeriodicCallback(update, 500, io_loop=self.loop)
@@ -638,7 +651,11 @@ class AzureMLCluster(Cluster):
         pc.start()
 
         return box
-
+    
+    def close_when_disconnect(self):
+        if self.run.get_status() == "Canceled" or self.run.get_status() == "Completed" or self.run.get_status() == "Failed":
+            self.scale_down(len(self.workers_list))
+                    
     def scale(self, workers=1):
         """ Scale the cluster. Scales to a maximum of the workers available in the cluster.
         """
@@ -668,6 +685,7 @@ class AzureMLCluster(Cluster):
             f"--scheduler_ip_port={scheduler_ip}",
             f"--use_gpu={self.use_gpu}",
             f"--n_gpus_per_node={self.n_gpus_per_node}",
+            f"--worker_death_timeout={self.worker_death_timeout}"
         ]
 
         child_run_config = ScriptRunConfig(
