@@ -69,7 +69,7 @@ if __name__ == "__main__":
             "dask-cuda-worker " + 
             args.scheduler_ip_port + 
             " --memory-limit 0 " +
-            " --death_timeout " +
+            " --death-timeout " +
             args.worker_death_timeout
         )
 

@@ -166,7 +166,7 @@ if __name__ == "__main__":
             "dask-cuda-worker " + 
             scheduler + 
             " --memory-limit 0 " +
-            " --death_timeout " +
+            " --death-timeout " +
             worker_death_timeout
         )
 
