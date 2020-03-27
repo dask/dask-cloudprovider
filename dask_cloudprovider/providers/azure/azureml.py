@@ -651,11 +651,15 @@ class AzureMLCluster(Cluster):
         pc.start()
 
         return box
-    
+
     def close_when_disconnect(self):
-        if self.run.get_status() == "Canceled" or self.run.get_status() == "Completed" or self.run.get_status() == "Failed":
+        if (
+            self.run.get_status() == "Canceled"
+            or self.run.get_status() == "Completed"
+            or self.run.get_status() == "Failed"
+        ):
             self.scale_down(len(self.workers_list))
-                    
+
     def scale(self, workers=1):
         """ Scale the cluster. Scales to a maximum of the workers available in the cluster.
         """
@@ -685,7 +689,7 @@ class AzureMLCluster(Cluster):
             f"--scheduler_ip_port={scheduler_ip}",
             f"--use_gpu={self.use_gpu}",
             f"--n_gpus_per_node={self.n_gpus_per_node}",
-            f"--worker_death_timeout={self.worker_death_timeout}"
+            f"--worker_death_timeout={self.worker_death_timeout}",
         ]
 
         child_run_config = ScriptRunConfig(
