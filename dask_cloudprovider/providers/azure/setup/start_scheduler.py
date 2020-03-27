@@ -70,8 +70,8 @@ if __name__ == "__main__":
     ### DISTRIBUTE TO CLUSTER
     data = comm.bcast(data, root=0)
     scheduler = data["scheduler"]
-    scheduler_idle_timeout = data['scheduler_idle_timeout']
-    worker_death_timeout = data['worker_death_timeout']
+    scheduler_idle_timeout = data["scheduler_idle_timeout"]
+    worker_death_timeout = data["worker_death_timeout"]
     dashboard = data["dashboard"]
     jupyter = data["jupyter"]
     token = data["token"]
@@ -127,9 +127,7 @@ if __name__ == "__main__":
             stderr=subprocess.STDOUT,
         )
 
-        jupyter_flush = threading.Thread(
-            target=flush, args=(jupyter_proc, jupyter_log)
-        )
+        jupyter_flush = threading.Thread(target=flush, args=(jupyter_proc, jupyter_log))
         jupyter_flush.start()
 
         while not list(list_running_servers()):
@@ -159,15 +157,15 @@ if __name__ == "__main__":
     if not GPU_run:
         cmd = "dask-worker " + scheduler
     else:
-        os.environ["CUDA_VISIBLE_DEVICES"] = str(
-            list(range(n_gpus_per_node))
-        ).strip("[]")
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(list(range(n_gpus_per_node))).strip(
+            "[]"
+        )
         cmd = (
-            "dask-cuda-worker " + 
-            scheduler + 
-            " --memory-limit 0 " +
-            " --death-timeout " +
-            worker_death_timeout
+            "dask-cuda-worker "
+            + scheduler
+            + " --memory-limit 0 "
+            + " --death-timeout "
+            + worker_death_timeout
         )
 
     worker_log = open("worker_{rank}_log.txt".format(rank=rank), "w")
@@ -185,7 +183,7 @@ if __name__ == "__main__":
 
     ## If dask-scheduler process times out on idle -- kill the run
     ## the below kills the run thus scheduler, works and the jupyter process
-    logger.debug(f'Will cancel the run in {worker_death_timeout}')
+    logger.debug(f"Will cancel the run in {worker_death_timeout}")
     time.sleep(int(worker_death_timeout))
 
     if jupyter_proc:
