@@ -398,7 +398,8 @@ class AzureMLCluster(Cluster):
         await self.sync(super()._start)
         await self.sync(self.__update_links)
 
-        self.__print_message("Connections established")
+        self.__print_message("Connections established")        
+        self.log_event("Running")
         self.__print_message(f"Scaling to {self.initial_node_count} workers")
 
         if self.initial_node_count > 1:
@@ -738,14 +739,14 @@ class AzureMLCluster(Cluster):
         await super()._close()
         self.status = "closed"
         self.__print_message("Scheduler and workers are disconnected.")
-        self.log_event()
+        self.log_event("Closed")
     
-    def log_event(self):
+    def log_event(self, status):
         cluster_end_time = time.time()
         component_name = "DaskCloudProvider"
         name = "AzureMLCluster"
         duration_ms = cluster_end_time - self.cluster_start_time
-        completion_status = "Closed"
+        completion_status = status
         logger = get_event_logger()
         white_listed_properties = [component_name, name, duration_ms, completion_status]
         track_event = _Event(
