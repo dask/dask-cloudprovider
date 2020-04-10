@@ -2,6 +2,9 @@ from azureml.core import Experiment, RunConfiguration, ScriptRunConfig
 from azureml.core.compute import AmlCompute
 from azureml.train.estimator import Estimator
 from azureml.core.runconfig import MpiConfiguration
+from azureml.telemetry import get_event_logger
+from azureml.telemetry.contracts\
+    import Event as _Event, RequiredFields as _RequiredFields, StandardFields as _StandardFields
 
 import time, os, socket, subprocess, logging
 
@@ -133,6 +136,10 @@ class AzureMLCluster(Cluster):
 
         ### EXPERIMENT DEFINITION
         self.experiment_name = experiment_name
+        self.tags = {"tag" : "azureml-dask"}
+        
+        ### TELEMETRY
+        self.cluster_start_time = time.time()
 
         ### ENVIRONMENT AND VARIABLES
         self.initial_node_count = initial_node_count
@@ -352,7 +359,7 @@ class AzureMLCluster(Cluster):
             inputs=self.datastores,
         )
 
-        run = exp.submit(estimator)
+        run = exp.submit(estimator, tags=self.tags)
 
         self.__print_message("Waiting for scheduler node's IP")
 
@@ -700,7 +707,7 @@ class AzureMLCluster(Cluster):
         )
 
         for i in range(workers):
-            child_run = self.run.submit_child(child_run_config)
+            child_run = self.run.submit_child(child_run_config, tags=self.tags)
             self.workers_list.append(child_run)
 
     # scale down
@@ -727,10 +734,25 @@ class AzureMLCluster(Cluster):
         if self.run:
             self.run.complete()
             self.run.cancel()
-
         await super()._close()
         self.status = "closed"
         self.__print_message("Scheduler and workers are disconnected.")
+        self.log_event()
+    
+    def log_event(self):
+        cluster_end_time = time.time()
+        component_name = "DaskCloudProvider"
+        name = "AzureMLCluster"
+        duration_ms = cluster_end_time - self.cluster_start_time
+        completion_status = "Closed"
+        logger = get_event_logger()
+        white_listed_properties = [component_name, name, duration_ms, completion_status]
+        track_event = _Event(
+                name='{}.{}.Finish'.format(component_name, name),
+                required_fields=_RequiredFields(component_name=component_name),
+                standard_fields=_StandardFields(duration=duration_ms, task_result=completion_status)
+            )
+        logger.log_event(track_event, white_listed_properties)
 
     def close(self):
         """ Close the cluster. All Azure ML Runs corresponding to the scheduler
