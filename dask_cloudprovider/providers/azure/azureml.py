@@ -455,7 +455,8 @@ class AzureMLCluster(Cluster):
         else:
             scheduler_public_ip = self.compute_target.list_nodes()[0]["publicIpAddress"]
             scheduler_public_port = self.compute_target.list_nodes()[0]["port"]
-
+            self.__print_message(f"scheduler_public_ip: {}".format(scheduler_public_ip))
+            self.__print_message(f"scheduler_public_port: {}".format(scheduler_public_port))
             cmd = (
                 "ssh -vvv -o StrictHostKeyChecking=no -N"
                 f" -i {self.admin_ssh_key}"
@@ -468,7 +469,7 @@ class AzureMLCluster(Cluster):
                 cmd += f" -L 0.0.0.0:{port[1]}:{scheduler_ip}:{port[0]}"
 
             cmd += f" {self.admin_username}@{scheduler_public_ip} -p {scheduler_public_port}"
-
+            self.__print_message(f"cmd: {}".format(cmd))
             portforward_log = open("portforward_out_log.txt", "w")
             portforward_proc = subprocess.Popen(
                 cmd.split(),
