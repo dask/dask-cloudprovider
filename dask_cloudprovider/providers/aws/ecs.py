@@ -34,9 +34,9 @@ class Task:
     Parameters
     ----------
 
-    clients: Dict[str, aiobotocore.client.Client]
-        References to the boto clients created by the cluster. These will be
-        used to interact with the AWS API.
+    client: Callable[str]
+        Function to create an aiobotocore client on demand
+        These will be used to interact with the AWS API.
 
     cluster_arn: str
         The ARN of the ECS cluster to launch the task in.
@@ -84,7 +84,7 @@ class Task:
 
     def __init__(
         self,
-        clients,
+        client,
         cluster_arn,
         task_definition_arn,
         vpc_subnets,
@@ -99,10 +99,10 @@ class Task:
         **kwargs
     ):
         self.lock = asyncio.Lock()
+        self._client = client
         self.name = name
         self.address = None
         self.external_address = None
-        self._clients = clients
         self.cluster_arn = cluster_arn
         self.task_definition_arn = task_definition_arn
         self.task = None
@@ -145,19 +145,21 @@ class Task:
         return self.fargate
 
     async def _is_long_arn_format_enabled(self):
-        [response] = (
-            await self._clients["ecs"].list_account_settings(
-                name="taskLongArnFormat", effectiveSettings=True
-            )
-        )["settings"]
+        async with self._client("ecs") as ecs:
+            [response] = (
+                await ecs.list_account_settings(
+                    name="taskLongArnFormat", effectiveSettings=True
+                )
+            )["settings"]
         return response["value"] == "enabled"
 
     async def _update_task(self):
-        [self.task] = (
-            await self._clients["ecs"].describe_tasks(
-                cluster=self.cluster_arn, tasks=[self.task_arn]
-            )
-        )["tasks"]
+        async with self._client("ecs") as ecs:
+            [self.task] = (
+                await ecs.describe_tasks(
+                    cluster=self.cluster_arn, tasks=[self.task_arn]
+                )
+            )["tasks"]
 
     async def _set_address_from_logs(self):
         timeout = Timeout(
@@ -197,33 +199,34 @@ class Task:
                     if await self._is_long_arn_format_enabled()
                     else {}
                 )  # Tags are only supported if you opt into long arn format so we need to check for that
-                response = await self._clients["ecs"].run_task(
-                    cluster=self.cluster_arn,
-                    taskDefinition=self.task_definition_arn,
-                    overrides={
-                        "containerOverrides": [
-                            {
-                                "name": "dask-{}".format(self.task_type),
-                                "environment": dict_to_aws(
-                                    self.environment, key_string="name"
-                                ),
-                                **self._overrides,
+                async with self._client("ecs") as ecs:
+                    response = await ecs.run_task(
+                        cluster=self.cluster_arn,
+                        taskDefinition=self.task_definition_arn,
+                        overrides={
+                            "containerOverrides": [
+                                {
+                                    "name": "dask-{}".format(self.task_type),
+                                    "environment": dict_to_aws(
+                                        self.environment, key_string="name"
+                                    ),
+                                    **self._overrides,
+                                }
+                            ]
+                        },
+                        count=1,
+                        launchType="FARGATE" if self.fargate else "EC2",
+                        networkConfiguration={
+                            "awsvpcConfiguration": {
+                                "subnets": self._vpc_subnets,
+                                "securityGroups": self._security_groups,
+                                "assignPublicIp": "ENABLED"
+                                if self._use_public_ip
+                                else "DISABLED",
                             }
-                        ]
-                    },
-                    count=1,
-                    launchType="FARGATE" if self.fargate else "EC2",
-                    networkConfiguration={
-                        "awsvpcConfiguration": {
-                            "subnets": self._vpc_subnets,
-                            "securityGroups": self._security_groups,
-                            "assignPublicIp": "ENABLED"
-                            if self._use_public_ip
-                            else "DISABLED",
-                        }
-                    },
-                    **kwargs
-                )
+                        },
+                        **kwargs
+                    )
 
                 if not response.get("tasks"):
                     raise RuntimeError(response)  # print entire response
@@ -250,9 +253,10 @@ class Task:
             for detail in eni["details"]
             if detail["name"] == "networkInterfaceId"
         ]
-        eni = await self._clients["ec2"].describe_network_interfaces(
-            NetworkInterfaceIds=[network_interface_id]
-        )
+        async with self._client("ec2") as ec2:
+            eni = await ec2.describe_network_interfaces(
+                NetworkInterfaceIds=[network_interface_id]
+            )
         [interface] = eni["NetworkInterfaces"]
         if self._use_public_ip:
             self.public_ip = interface["Association"]["PublicIp"]
@@ -262,9 +266,8 @@ class Task:
 
     async def close(self, **kwargs):
         if self.task:
-            await self._clients["ecs"].stop_task(
-                cluster=self.cluster_arn, task=self.task_arn
-            )
+            async with self._client("ecs") as ecs:
+                await ecs.stop_task(cluster=self.cluster_arn, task=self.task_arn)
             await self._update_task()
             while self.task["lastStatus"] in ["RUNNING"]:
                 await asyncio.sleep(1)
@@ -290,18 +293,19 @@ class Task:
 
         while True:
             try:
-                if next_token:
-                    l = await self._clients["logs"].get_log_events(
-                        logGroupName=self.log_group,
-                        logStreamName=self._log_stream_name,
-                        nextToken=next_token,
-                    )
-                else:
-                    l = await self._clients["logs"].get_log_events(
-                        logGroupName=self.log_group,
-                        logStreamName=self._log_stream_name,
-                        startTime=read_from,
-                    )
+                async with self._client("logs") as logs:
+                    if next_token:
+                        l = await logs.get_log_events(
+                            logGroupName=self.log_group,
+                            logStreamName=self._log_stream_name,
+                            nextToken=next_token,
+                        )
+                    else:
+                        l = await logs.get_log_events(
+                            logGroupName=self.log_group,
+                            logStreamName=self._log_stream_name,
+                            startTime=read_from,
+                        )
                 if next_token != l["nextForwardToken"]:
                     next_token = l["nextForwardToken"]
                 else:
@@ -561,7 +565,6 @@ class ECSCluster(SpecCluster):
         region_name=None,
         **kwargs
     ):
-        self._clients = None
         self._fargate_scheduler = fargate_scheduler
         self._fargate_workers = fargate_workers
         self.image = image
@@ -592,7 +595,16 @@ class ECSCluster(SpecCluster):
         self._aws_secret_access_key = aws_secret_access_key
         self._region_name = region_name
         self._lock = asyncio.Lock()
+        self.session = aiobotocore.get_session()
         super().__init__(**kwargs)
+
+    def _client(self, name: str):
+        return self.session.create_client(
+            name,
+            aws_access_key_id=self._aws_access_key_id,
+            aws_secret_access_key=self._aws_secret_access_key,
+            region_name=self._region_name,
+        )
 
     async def _start(self,):
         while self.status == "starting":
@@ -609,12 +621,6 @@ class ECSCluster(SpecCluster):
             self._skip_cleanup = self.config.get("skip_cleanup")
         if not self._skip_cleanup:
             await _cleanup_stale_resources()
-
-        self._clients = await self._get_clients(
-            aws_access_key_id=self._aws_access_key_id,
-            aws_secret_access_key=self._aws_secret_access_key,
-            region_name=self._region_name,
-        )
 
         if self._fargate_scheduler is None:
             self._fargate_scheduler = self.config.get("fargate_scheduler")
@@ -668,11 +674,10 @@ class ECSCluster(SpecCluster):
             )
 
         if self.cluster_name is None:
-            [cluster_info] = (
-                await self._clients["ecs"].describe_clusters(
-                    clusters=[self.cluster_arn]
-                )
-            )["clusters"]
+            async with self._client("ecs") as ecs:
+                [cluster_info] = (
+                    await ecs.describe_clusters(clusters=[self.cluster_arn])
+                )["clusters"]
             self.cluster_name = cluster_info["clusterName"]
 
         if self._execution_role_arn is None:
@@ -730,7 +735,7 @@ class ECSCluster(SpecCluster):
         )
 
         options = {
-            "clients": self._clients,
+            "client": self._client,
             "cluster_arn": self.cluster_arn,
             "vpc_subnets": self._vpc_subnets,
             "security_groups": self._security_groups,
@@ -770,20 +775,6 @@ class ECSCluster(SpecCluster):
     def tags(self):
         return {**self._tags, **DEFAULT_TAGS, "cluster": self.cluster_name}
 
-    async def _get_clients(self, **kwargs):
-        session = aiobotocore.get_session()
-        weakref.finalize(self, self.sync, self._close_clients)
-        return {
-            "ec2": session.create_client("ec2", **kwargs),
-            "ecs": session.create_client("ecs", **kwargs),
-            "iam": session.create_client("iam", **kwargs),
-            "logs": session.create_client("logs", **kwargs),
-        }
-
-    async def _close_clients(self):
-        for client in self._clients.values():
-            await client.close()
-
     async def _create_cluster(self):
         if not self._fargate_scheduler or not self._fargate_workers:
             raise RuntimeError("You must specify a cluster when not using Fargate.")
@@ -796,30 +787,71 @@ class ECSCluster(SpecCluster):
             self._cluster_name_template
         )
         self.cluster_name = self.cluster_name.format(uuid=str(uuid.uuid4())[:10])
-        response = await self._clients["ecs"].create_cluster(
-            clusterName=self.cluster_name, tags=dict_to_aws(self.tags)
-        )
+        async with self._client("ecs") as ecs:
+            response = await ecs.create_cluster(
+                clusterName=self.cluster_name, tags=dict_to_aws(self.tags)
+            )
         weakref.finalize(self, self.sync, self._delete_cluster)
         return response["cluster"]["clusterArn"]
 
     async def _delete_cluster(self):
-        async for page in self._clients["ecs"].get_paginator("list_tasks").paginate(
-            cluster=self.cluster_arn, desiredStatus="RUNNING"
-        ):
-            for task in page["taskArns"]:
-                await self._clients["ecs"].stop_task(
-                    cluster=self.cluster_arn, task=task
-                )
-        await self._clients["ecs"].delete_cluster(cluster=self.cluster_arn)
+        async with self._client("ecs") as ecs:
+            async for page in ecs.get_paginator("list_tasks").paginate(
+                cluster=self.cluster_arn, desiredStatus="RUNNING"
+            ):
+                for task in page["taskArns"]:
+                    await ecs.stop_task(cluster=self.cluster_arn, task=task)
+            await ecs.delete_cluster(cluster=self.cluster_arn)
 
     @property
     def _execution_role_name(self):
         return "{}-{}".format(self.cluster_name, "execution-role")
 
     async def _create_execution_role(self):
-        response = await self._clients["iam"].create_role(
-            RoleName=self._execution_role_name,
-            AssumeRolePolicyDocument="""{
+        async with self._client("iam") as iam:
+            response = await iam.create_role(
+                RoleName=self._execution_role_name,
+                AssumeRolePolicyDocument="""{
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                        "Effect": "Allow",
+                        "Principal": {
+                            "Service": "ecs-tasks.amazonaws.com"
+                        },
+                        "Action": "sts:AssumeRole"
+                        }
+                    ]
+                    }""",
+                Description="A role for ECS to use when executing",
+                Tags=dict_to_aws(self.tags, upper=True),
+            )
+            await iam.attach_role_policy(
+                RoleName=self._execution_role_name,
+                PolicyArn="arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly",
+            )
+            await iam.attach_role_policy(
+                RoleName=self._execution_role_name,
+                PolicyArn="arn:aws:iam::aws:policy/CloudWatchLogsFullAccess",
+            )
+            await iam.attach_role_policy(
+                RoleName=self._execution_role_name,
+                PolicyArn="arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceRole",
+            )
+            weakref.finalize(
+                self, self.sync, self._delete_role, self._execution_role_name
+            )
+            return response["Role"]["Arn"]
+
+    @property
+    def _task_role_name(self):
+        return "{}-{}".format(self.cluster_name, "task-role")
+
+    async def _create_task_role(self):
+        async with self._client("iam") as iam:
+            response = await iam.create_role(
+                RoleName=self._task_role_name,
+                AssumeRolePolicyDocument="""{
                 "Version": "2012-10-17",
                 "Statement": [
                     {
@@ -831,184 +863,157 @@ class ECSCluster(SpecCluster):
                     }
                 ]
                 }""",
-            Description="A role for ECS to use when executing",
-            Tags=dict_to_aws(self.tags, upper=True),
-        )
-        await self._clients["iam"].attach_role_policy(
-            RoleName=self._execution_role_name,
-            PolicyArn="arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly",
-        )
-        await self._clients["iam"].attach_role_policy(
-            RoleName=self._execution_role_name,
-            PolicyArn="arn:aws:iam::aws:policy/CloudWatchLogsFullAccess",
-        )
-        await self._clients["iam"].attach_role_policy(
-            RoleName=self._execution_role_name,
-            PolicyArn="arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceRole",
-        )
-        weakref.finalize(self, self.sync, self._delete_role, self._execution_role_name)
-        return response["Role"]["Arn"]
-
-    @property
-    def _task_role_name(self):
-        return "{}-{}".format(self.cluster_name, "task-role")
-
-    async def _create_task_role(self):
-        response = await self._clients["iam"].create_role(
-            RoleName=self._task_role_name,
-            AssumeRolePolicyDocument="""{
-            "Version": "2012-10-17",
-            "Statement": [
-                {
-                "Effect": "Allow",
-                "Principal": {
-                    "Service": "ecs-tasks.amazonaws.com"
-                },
-                "Action": "sts:AssumeRole"
-                }
-            ]
-            }""",
-            Description="A role for dask tasks to use when executing",
-            Tags=dict_to_aws(self.tags, upper=True),
-        )
-
-        for policy in self._task_role_policies:
-            await self._clients["iam"].attach_role_policy(
-                RoleName=self._task_role_name, PolicyArn=policy
+                Description="A role for dask tasks to use when executing",
+                Tags=dict_to_aws(self.tags, upper=True),
             )
 
-        weakref.finalize(self, self.sync, self._delete_role, self._task_role_name)
-        return response["Role"]["Arn"]
+            for policy in self._task_role_policies:
+                await iam.attach_role_policy(
+                    RoleName=self._task_role_name, PolicyArn=policy
+                )
+
+            weakref.finalize(self, self.sync, self._delete_role, self._task_role_name)
+            return response["Role"]["Arn"]
 
     async def _delete_role(self, role):
-        attached_policies = (
-            await self._clients["iam"].list_attached_role_policies(RoleName=role)
-        )["AttachedPolicies"]
-        for policy in attached_policies:
-            await self._clients["iam"].detach_role_policy(
-                RoleName=role, PolicyArn=policy["PolicyArn"]
-            )
-        await self._clients["iam"].delete_role(RoleName=role)
+        async with self._client("iam") as iam:
+            attached_policies = (await iam.list_attached_role_policies(RoleName=role))[
+                "AttachedPolicies"
+            ]
+            for policy in attached_policies:
+                await iam.detach_role_policy(
+                    RoleName=role, PolicyArn=policy["PolicyArn"]
+                )
+            await iam.delete_role(RoleName=role)
 
     async def _create_cloudwatch_logs_group(self):
         log_group_name = "dask-ecs"
-        if log_group_name not in [
-            group["logGroupName"]
-            for group in (await self._clients["logs"].describe_log_groups())[
-                "logGroups"
-            ]
-        ]:
-            await self._clients["logs"].create_log_group(
-                logGroupName=log_group_name, tags=self.tags
-            )
-            await self._clients["logs"].put_retention_policy(
-                logGroupName=log_group_name,
-                retentionInDays=self._cloudwatch_logs_default_retention,
-            )
+        async with self._client("logs") as logs:
+            if log_group_name not in [
+                group["logGroupName"]
+                for group in (await logs.describe_log_groups())["logGroups"]
+            ]:
+                await logs.create_log_group(logGroupName=log_group_name, tags=self.tags)
+                await logs.put_retention_policy(
+                    logGroupName=log_group_name,
+                    retentionInDays=self._cloudwatch_logs_default_retention,
+                )
         # Note: Not cleaning up the logs here as they may be useful after the cluster is destroyed
         return log_group_name
 
     async def _get_default_vpc(self):
-        vpcs = (await self._clients["ec2"].describe_vpcs())["Vpcs"]
-        [vpc] = [vpc for vpc in vpcs if vpc["IsDefault"]]
-        return vpc["VpcId"]
+        async with self._client("ec2") as ec2:
+            vpcs = (await ec2.describe_vpcs())["Vpcs"]
+            [vpc] = [vpc for vpc in vpcs if vpc["IsDefault"]]
+            return vpc["VpcId"]
 
     async def _get_vpc_subnets(self):
-        vpcs = (await self._clients["ec2"].describe_vpcs())["Vpcs"]
-        [vpc] = [vpc for vpc in vpcs if vpc["VpcId"] == self._vpc]
-        subnets = (await self._clients["ec2"].describe_subnets())["Subnets"]
-        return [
-            subnet["SubnetId"] for subnet in subnets if subnet["VpcId"] == vpc["VpcId"]
-        ]
+        async with self._client("ec2") as ec2:
+            vpcs = (await ec2.describe_vpcs())["Vpcs"]
+            [vpc] = [vpc for vpc in vpcs if vpc["VpcId"] == self._vpc]
+            subnets = (await ec2.describe_subnets())["Subnets"]
+            return [
+                subnet["SubnetId"]
+                for subnet in subnets
+                if subnet["VpcId"] == vpc["VpcId"]
+            ]
 
     async def _create_security_groups(self):
-        response = await self._clients["ec2"].create_security_group(
-            Description="A security group for dask-ecs",
-            GroupName=self.cluster_name,
-            VpcId=self._vpc,
-            DryRun=False,
-        )
-        await self._clients["ec2"].authorize_security_group_ingress(
-            GroupId=response["GroupId"],
-            IpPermissions=[
-                {
-                    "IpProtocol": "TCP",
-                    "FromPort": 8786,
-                    "ToPort": 8787,
-                    "IpRanges": [{"CidrIp": "0.0.0.0/0", "Description": "Anywhere"}],
-                    "Ipv6Ranges": [{"CidrIpv6": "::/0", "Description": "Anywhere"}],
-                },
-                {
-                    "IpProtocol": "TCP",
-                    "FromPort": 0,
-                    "ToPort": 65535,
-                    "UserIdGroupPairs": [{"GroupId": response["GroupId"]}],
-                },
-            ],
-            DryRun=False,
-        )
-        await self._clients["ec2"].create_tags(
-            Resources=[response["GroupId"]], Tags=dict_to_aws(self.tags, upper=True)
-        )
-        weakref.finalize(self, self.sync, self._delete_security_groups)
-        return [response["GroupId"]]
+        async with self._client("ec2") as ec2:
+            response = await ec2.create_security_group(
+                Description="A security group for dask-ecs",
+                GroupName=self.cluster_name,
+                VpcId=self._vpc,
+                DryRun=False,
+            )
+
+            await ec2.authorize_security_group_ingress(
+                GroupId=response["GroupId"],
+                IpPermissions=[
+                    {
+                        "IpProtocol": "TCP",
+                        "FromPort": 8786,
+                        "ToPort": 8787,
+                        "IpRanges": [
+                            {"CidrIp": "0.0.0.0/0", "Description": "Anywhere"}
+                        ],
+                        "Ipv6Ranges": [{"CidrIpv6": "::/0", "Description": "Anywhere"}],
+                    },
+                    {
+                        "IpProtocol": "TCP",
+                        "FromPort": 0,
+                        "ToPort": 65535,
+                        "UserIdGroupPairs": [{"GroupId": response["GroupId"]}],
+                    },
+                ],
+                DryRun=False,
+            )
+            # await ec2.create_tags(
+            #     Resources=[response["GroupId"]], Tags=dict_to_aws(self.tags, upper=True)
+            #  )
+
+            weakref.finalize(self, self.sync, self._delete_security_groups)
+            return [response["GroupId"]]
 
     async def _delete_security_groups(self):
         timeout = Timeout(
             30, "Unable to delete AWS security group " + self.cluster_name, warn=True
         )
-        while timeout.run():
-            try:
-                await self._clients["ec2"].delete_security_group(
-                    GroupName=self.cluster_name, DryRun=False
-                )
-            except Exception:
-                await asyncio.sleep(2)
-            break
+        async with self._client("ec2") as ec2:
+            while timeout.run():
+                try:
+                    await ec2.delete_security_group(
+                        GroupName=self.cluster_name, DryRun=False
+                    )
+                except Exception:
+                    await asyncio.sleep(2)
+                break
 
     async def _create_scheduler_task_definition_arn(self):
-        response = await self._clients["ecs"].register_task_definition(
-            family="{}-{}".format(self.cluster_name, "scheduler"),
-            taskRoleArn=self._task_role_arn,
-            executionRoleArn=self._execution_role_arn,
-            networkMode="awsvpc",
-            containerDefinitions=[
-                {
-                    "name": "dask-scheduler",
-                    "image": self.image,
-                    "cpu": self._scheduler_cpu,
-                    "memory": self._scheduler_mem,
-                    "memoryReservation": self._scheduler_mem,
-                    "essential": True,
-                    "command": [
-                        "dask-scheduler",
-                        "--idle-timeout",
-                        self._scheduler_timeout,
-                    ],
-                    "logConfiguration": {
-                        "logDriver": "awslogs",
-                        "options": {
-                            "awslogs-region": self._clients["ecs"].meta.region_name,
-                            "awslogs-group": self.cloudwatch_logs_group,
-                            "awslogs-stream-prefix": self._cloudwatch_logs_stream_prefix,
-                            "awslogs-create-group": "true",
+        async with self._client("ecs") as ecs:
+            response = await ecs.register_task_definition(
+                family="{}-{}".format(self.cluster_name, "scheduler"),
+                taskRoleArn=self._task_role_arn,
+                executionRoleArn=self._execution_role_arn,
+                networkMode="awsvpc",
+                containerDefinitions=[
+                    {
+                        "name": "dask-scheduler",
+                        "image": self.image,
+                        "cpu": self._scheduler_cpu,
+                        "memory": self._scheduler_mem,
+                        "memoryReservation": self._scheduler_mem,
+                        "essential": True,
+                        "command": [
+                            "dask-scheduler",
+                            "--idle-timeout",
+                            self._scheduler_timeout,
+                        ],
+                        "logConfiguration": {
+                            "logDriver": "awslogs",
+                            "options": {
+                                "awslogs-region": ecs.meta.region_name,
+                                "awslogs-group": self.cloudwatch_logs_group,
+                                "awslogs-stream-prefix": self._cloudwatch_logs_stream_prefix,
+                                "awslogs-create-group": "true",
+                            },
                         },
-                    },
-                }
-            ],
-            volumes=[],
-            requiresCompatibilities=["FARGATE"] if self._fargate_scheduler else [],
-            cpu=str(self._scheduler_cpu),
-            memory=str(self._scheduler_mem),
-            tags=dict_to_aws(self.tags),
-        )
+                    }
+                ],
+                volumes=[],
+                requiresCompatibilities=["FARGATE"] if self._fargate_scheduler else [],
+                cpu=str(self._scheduler_cpu),
+                memory=str(self._scheduler_mem),
+                tags=dict_to_aws(self.tags),
+            )
         weakref.finalize(self, self.sync, self._delete_scheduler_task_definition_arn)
         return response["taskDefinition"]["taskDefinitionArn"]
 
     async def _delete_scheduler_task_definition_arn(self):
-        await self._clients["ecs"].deregister_task_definition(
-            taskDefinition=self.scheduler_task_definition_arn
-        )
+        async with self._client("ecs") as ecs:
+            await ecs.deregister_task_definition(
+                taskDefinition=self.scheduler_task_definition_arn
+            )
 
     async def _create_worker_task_definition_arn(self):
         resource_requirements = []
@@ -1016,53 +1021,55 @@ class ECSCluster(SpecCluster):
             resource_requirements.append(
                 {"type": "GPU", "value": str(self._worker_gpu)}
             )
-        response = await self._clients["ecs"].register_task_definition(
-            family="{}-{}".format(self.cluster_name, "worker"),
-            taskRoleArn=self._task_role_arn,
-            executionRoleArn=self._execution_role_arn,
-            networkMode="awsvpc",
-            containerDefinitions=[
-                {
-                    "name": "dask-worker",
-                    "image": self.image,
-                    "cpu": self._worker_cpu,
-                    "memory": self._worker_mem,
-                    "memoryReservation": self._worker_mem,
-                    "resourceRequirements": resource_requirements,
-                    "essential": True,
-                    "command": [
-                        "dask-cuda-worker" if self._worker_gpu else "dask-worker",
-                        "--nthreads",
-                        "{}".format(max(int(self._worker_cpu / 1024), 1)),
-                        "--memory-limit",
-                        "{}MB".format(int(self._worker_mem)),
-                        "--death-timeout",
-                        "60",
-                    ],
-                    "logConfiguration": {
-                        "logDriver": "awslogs",
-                        "options": {
-                            "awslogs-region": self._clients["ecs"].meta.region_name,
-                            "awslogs-group": self.cloudwatch_logs_group,
-                            "awslogs-stream-prefix": self._cloudwatch_logs_stream_prefix,
-                            "awslogs-create-group": "true",
+        async with self._client("ecs") as ecs:
+            response = await ecs.register_task_definition(
+                family="{}-{}".format(self.cluster_name, "worker"),
+                taskRoleArn=self._task_role_arn,
+                executionRoleArn=self._execution_role_arn,
+                networkMode="awsvpc",
+                containerDefinitions=[
+                    {
+                        "name": "dask-worker",
+                        "image": self.image,
+                        "cpu": self._worker_cpu,
+                        "memory": self._worker_mem,
+                        "memoryReservation": self._worker_mem,
+                        "resourceRequirements": resource_requirements,
+                        "essential": True,
+                        "command": [
+                            "dask-cuda-worker" if self._worker_gpu else "dask-worker",
+                            "--nthreads",
+                            "{}".format(max(int(self._worker_cpu / 1024), 1)),
+                            "--memory-limit",
+                            "{}MB".format(int(self._worker_mem)),
+                            "--death-timeout",
+                            "60",
+                        ],
+                        "logConfiguration": {
+                            "logDriver": "awslogs",
+                            "options": {
+                                "awslogs-region": ecs.meta.region_name,
+                                "awslogs-group": self.cloudwatch_logs_group,
+                                "awslogs-stream-prefix": self._cloudwatch_logs_stream_prefix,
+                                "awslogs-create-group": "true",
+                            },
                         },
-                    },
-                }
-            ],
-            volumes=[],
-            requiresCompatibilities=["FARGATE"] if self._fargate_workers else [],
-            cpu=str(self._worker_cpu),
-            memory=str(self._worker_mem),
-            tags=dict_to_aws(self.tags),
-        )
+                    }
+                ],
+                volumes=[],
+                requiresCompatibilities=["FARGATE"] if self._fargate_workers else [],
+                cpu=str(self._worker_cpu),
+                memory=str(self._worker_mem),
+                tags=dict_to_aws(self.tags),
+            )
         weakref.finalize(self, self.sync, self._delete_worker_task_definition_arn)
         return response["taskDefinition"]["taskDefinitionArn"]
 
     async def _delete_worker_task_definition_arn(self):
-        await self._clients["ecs"].deregister_task_definition(
-            taskDefinition=self.worker_task_definition_arn
-        )
+        async with self._client("ecs") as ecs:
+            await ecs.deregister_task_definition(
+                taskDefinition=self.worker_task_definition_arn
+            )
 
     def logs(self):
         async def get_logs(task):
