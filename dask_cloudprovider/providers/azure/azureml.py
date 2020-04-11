@@ -462,6 +462,9 @@ class AzureMLCluster(Cluster):
 
             cmd += f" {self.admin_username}@{scheduler_public_ip} -p {scheduler_public_port}"
 
+            print(cmd)
+
+
             portforward_log = open("portforward_out_log.txt", "w")
             portforward_proc = subprocess.Popen(
                 cmd.split(),
@@ -470,7 +473,6 @@ class AzureMLCluster(Cluster):
                 stderr=subprocess.STDOUT,
             )
 
-            print(cmd)
 
             print('Waiting for ssh tunnel...')
             time.sleep(90)   #### WAIT FOR THE CONNECTION TO ESTABLISH
