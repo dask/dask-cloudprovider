@@ -390,7 +390,8 @@ class AzureMLCluster(Cluster):
         while self.same_vnet is None:
             await self.sync(self.__check_if_scheduler_ip_reachable)
             time.sleep(1)
-
+               
+        self.log_event("Running")
         ### REQUIRED BY dask.distributed.deploy.cluster.Cluster
         _scheduler = self.__prepare_rpc_connection_to_headnode()
         self.scheduler_comm = rpc(_scheduler)
@@ -398,8 +399,7 @@ class AzureMLCluster(Cluster):
         await self.sync(super()._start)
         await self.sync(self.__update_links)
 
-        self.__print_message("Connections established")        
-        self.log_event("Running")
+        self.__print_message("Connections established") 
         self.__print_message(f"Scaling to {self.initial_node_count} workers")
 
         if self.initial_node_count > 1:
