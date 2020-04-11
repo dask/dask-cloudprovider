@@ -470,6 +470,8 @@ class AzureMLCluster(Cluster):
                 stderr=subprocess.STDOUT,
             )
 
+            print(cmd)
+
             print('Waiting for ssh tunnel...')
             time.sleep(30)   #### WAIT FOR THE CONNECTION TO ESTABLISH
 
