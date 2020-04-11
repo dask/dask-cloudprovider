@@ -470,6 +470,10 @@ class AzureMLCluster(Cluster):
                 stderr=subprocess.STDOUT,
             )
 
+            print('Waiting for ssh tunnel...')
+            time.sleep(30)   #### WAIT FOR THE CONNECTION TO ESTABLISH
+
+
     @property
     def dashboard_link(self):
         """ Link to Dask dashboard.
