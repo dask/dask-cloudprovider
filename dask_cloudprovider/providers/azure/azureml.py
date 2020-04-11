@@ -473,7 +473,8 @@ class AzureMLCluster(Cluster):
             print(cmd)
 
             print('Waiting for ssh tunnel...')
-            time.sleep(30)   #### WAIT FOR THE CONNECTION TO ESTABLISH
+            time.sleep(90)   #### WAIT FOR THE CONNECTION TO ESTABLISH
+            print('Trying to connect')
 
 
     @property
