@@ -11,6 +11,8 @@ from distributed.core import rpc
 import dask
 import pathlib
 
+import threading
+
 from distributed.utils import (
     LoopRunner,
     PeriodicCallback,
@@ -20,6 +22,21 @@ from distributed.utils import (
 )
 
 logger = logging.getLogger(__name__)
+done = False  # FLAG FOR STOPPING THE port_forward_logger THREAD
+
+
+def port_forward_logger(portforward_proc):
+    portforward_log = open("portforward_out_log.txt", "w")
+
+    while True:
+        portforward_out = portforward_proc.stdout.readline()
+        if portforward_proc != "":
+            portforward_log.write(portforward_out)
+            portforward_log.flush()
+
+        if done:
+            break
+    return
 
 
 class AzureMLCluster(Cluster):
@@ -462,22 +479,18 @@ class AzureMLCluster(Cluster):
 
             cmd += f" {self.admin_username}@{scheduler_public_ip} -p {scheduler_public_port}"
 
-            print(cmd)
-
-
-            portforward_log = open("portforward_out_log.txt", "w")
-            portforward_proc = subprocess.Popen(
+            self.portforward_proc = subprocess.Popen(
                 cmd.split(),
                 universal_newlines=True,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
             )
 
-
-            print('Waiting for ssh tunnel...')
-            time.sleep(90)   #### WAIT FOR THE CONNECTION TO ESTABLISH
-            print('Trying to connect')
-
+            ### Starting thread to keep the SSH tunnel open on Windows
+            portforward_logg = threading.Thread(
+                target=port_forward_logger, args=[self.portforward_proc]
+            )
+            portforward_logg.start()
 
     @property
     def dashboard_link(self):
@@ -740,6 +753,10 @@ class AzureMLCluster(Cluster):
         await super()._close()
         self.status = "closed"
         self.__print_message("Scheduler and workers are disconnected.")
+
+        ### STOP LOGGING SSH
+        self.portforward_proc.terminate()
+        done = True
 
     def close(self):
         """ Close the cluster. All Azure ML Runs corresponding to the scheduler
