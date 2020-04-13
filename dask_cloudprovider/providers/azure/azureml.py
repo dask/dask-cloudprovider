@@ -450,7 +450,7 @@ class AzureMLCluster(Cluster):
             scheduler_public_port = self.compute_target.list_nodes()[0]["port"]
 
             cmd = (
-                "ssh -vvv -o StrictHostKeyChecking=no "
+                "ssh -vvv -N -o StrictHostKeyChecking=no "
                 f" -i {os.path.expanduser(self.admin_ssh_key)}"
                 f" -L 0.0.0.0:{self.jupyter_port}:{scheduler_ip}:8888"
                 f" -L 0.0.0.0:{self.dashboard_port}:{scheduler_ip}:8787"
