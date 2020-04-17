@@ -13,15 +13,8 @@ import json
 import os
 from pathlib import Path
 
-AZUREML_DIR = Path('~').expanduser() / '.azureml'
-AZUREML_DIR.mkdir(exist_ok=True)
-CLIENTINFO = AZUREML_DIR / 'clientinfo.json'
-
-NAME = 'AzureMLCluster-DASK'
-VERSION = '0.1'
-
-with CLIENTINFO.open(mode='w') as f:
-    json.dump(dict(name=NAME, version=VERSION), f)
+from azureml._base_sdk_common.user_agent import append
+append('AzureMLCluster-DASK', '0.1')
 
 from mpi4py import MPI
 from azureml.core import Run
