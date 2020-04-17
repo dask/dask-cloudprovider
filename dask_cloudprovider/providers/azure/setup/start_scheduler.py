@@ -13,9 +13,6 @@ import json
 import os
 from pathlib import Path
 
-from azureml._base_sdk_common.user_agent import append
-append('AzureMLCluster-DASK', '0.1')
-
 from mpi4py import MPI
 from azureml.core import Run
 from notebook.notebookapp import list_running_servers

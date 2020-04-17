@@ -25,6 +25,10 @@ logger = logging.getLogger(__name__)
 done = False  # FLAG FOR STOPPING THE port_forward_logger THREAD
 
 
+from azureml._base_sdk_common.user_agent import append
+append('AzureMLCluster-DASK', '0.1')
+
+
 def port_forward_logger(portforward_proc):
     portforward_log = open("portforward_out_log.txt", "w")
 
@@ -173,6 +177,7 @@ class AzureMLCluster(Cluster):
         self.dashboard_port = dashboard_port
         self.scheduler_port = scheduler_port
         self.scheduler_idle_timeout = scheduler_idle_timeout
+        self.portforward_proc = None
         self.worker_death_timeout = worker_death_timeout
 
         if additional_ports is not None:
@@ -754,9 +759,10 @@ class AzureMLCluster(Cluster):
         self.status = "closed"
         self.__print_message("Scheduler and workers are disconnected.")
 
-        ### STOP LOGGING SSH
-        self.portforward_proc.terminate()
-        done = True
+        if self.portforward_proc is not None:
+            ### STOP LOGGING SSH
+            self.portforward_proc.terminate()
+            done = True
 
     def close(self):
         """ Close the cluster. All Azure ML Runs corresponding to the scheduler
