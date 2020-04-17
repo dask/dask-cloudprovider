@@ -6,6 +6,9 @@ from azureml.telemetry import get_event_logger
 from azureml.telemetry.contracts\
     import Event as _Event, RequiredFields as _RequiredFields, StandardFields as _StandardFields
 
+import json
+import os
+from pathlib import Path
 import time, os, socket, subprocess, logging
 
 from distributed.deploy.cluster import Cluster
@@ -339,13 +342,25 @@ class AzureMLCluster(Cluster):
         else:
             return self.run.get_metrics()["scheduler"]
 
+    def __config_client_info(self):        
+        AZUREML_DIR = Path('~').expanduser() / '.azureml'
+        AZUREML_DIR.mkdir(exist_ok=True)
+        CLIENTINFO = AZUREML_DIR / 'clientinfo.json'
+
+        NAME = 'dask-clodprovider-azureml-cluster'
+        VERSION = '0.1.0'
+
+        with CLIENTINFO.open(mode='w') as f:
+            json.dump(dict(name=NAME, version=VERSION), f)
+ 
     async def __create_cluster(self):
         # set up environment
         self.__print_message("Setting up cluster")
 
         # submit run
         self.__print_message("Submitting the experiment")
-
+        self.__config_client_info()
+        
         exp = Experiment(self.workspace, self.experiment_name)
         estimator = Estimator(
             os.path.join(self.abs_path, "setup"),
