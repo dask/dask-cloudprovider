@@ -343,15 +343,8 @@ class AzureMLCluster(Cluster):
             return self.run.get_metrics()["scheduler"]
 
     def __config_client_info(self):        
-        AZUREML_DIR = Path('~').expanduser() / '.azureml'
-        AZUREML_DIR.mkdir(exist_ok=True)
-        CLIENTINFO = AZUREML_DIR / 'clientinfo.json'
-
-        NAME = 'dask-clodprovider-azureml-cluster'
-        VERSION = '0.1.0'
-
-        with CLIENTINFO.open(mode='w') as f:
-            json.dump(dict(name=NAME, version=VERSION), f)
+        from azureml._base_sdk_common.user_agent import append
+        append('AzureML-Dask-Cluster', '0.1.0')
  
     async def __create_cluster(self):
         # set up environment
