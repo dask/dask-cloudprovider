@@ -745,7 +745,7 @@ class ECSCluster(SpecCluster):
             "environment": self._environment,
             "tags": self.tags,
             "find_address_timeout": self._find_address_timeout,
-            "use_private_ip": self._use_private_ip
+            "use_private_ip": self._use_private_ip,
         }
         scheduler_options = {
             "task_definition_arn": self.scheduler_task_definition_arn,
