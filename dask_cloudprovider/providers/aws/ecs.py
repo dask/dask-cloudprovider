@@ -96,6 +96,7 @@ class Task:
         tags,
         find_address_timeout,
         name=None,
+        use_private_ip=False,
         **kwargs
     ):
         self.lock = asyncio.Lock()
@@ -120,6 +121,7 @@ class Task:
         self.environment = environment or {}
         self.tags = tags
         self._find_address_timeout = find_address_timeout
+        self._use_private_ip = use_private_ip
         self.kwargs = kwargs
         self.status = "created"
 
@@ -135,14 +137,7 @@ class Task:
 
     @property
     def _use_public_ip(self):
-        # Fargate needs public IP for image pull, EC2 doesn't support public IP, therefore
-        # we will assume for now that we will use a public IP when in Fargate mode and not
-        # when in EC2 mode.
-
-        # TODO Fargate can also use a NAT to pull the image so we could allow this to be false
-        # when in Fargate provided there is a NAT
-
-        return self.fargate
+        return not self._use_private_ip
 
     async def _is_long_arn_format_enabled(self):
         async with self._client("ecs") as ecs:
@@ -525,6 +520,10 @@ class ECSCluster(SpecCluster):
         and this operation takes a while.
 
         Default ``False``.
+    use_private_ip: bool (optional)
+        Avoid using a public IP address, e.g. with a private subnet VPC.
+
+        Default ``False``.
     **kwargs: dict
         Additional keyword arguments to pass to ``SpecCluster``.
 
@@ -563,6 +562,7 @@ class ECSCluster(SpecCluster):
         aws_access_key_id=None,
         aws_secret_access_key=None,
         region_name=None,
+        use_private_ip=False,
         **kwargs
     ):
         self._fargate_scheduler = fargate_scheduler
@@ -591,6 +591,7 @@ class ECSCluster(SpecCluster):
         self._tags = tags
         self._find_address_timeout = find_address_timeout
         self._skip_cleanup = skip_cleanup
+        self._use_private_ip = use_private_ip
         self._aws_access_key_id = aws_access_key_id
         self._aws_secret_access_key = aws_secret_access_key
         self._region_name = region_name
@@ -744,6 +745,7 @@ class ECSCluster(SpecCluster):
             "environment": self._environment,
             "tags": self.tags,
             "find_address_timeout": self._find_address_timeout,
+            "use_private_ip": self._use_private_ip
         }
         scheduler_options = {
             "task_definition_arn": self.scheduler_task_definition_arn,
