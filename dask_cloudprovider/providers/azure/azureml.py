@@ -746,8 +746,6 @@ class AzureMLCluster(Cluster):
 
     # close cluster
     async def _close(self):
-        await super()._close()
-
         if self.status == "closed":
             return
         while self.workers_list:
@@ -766,6 +764,9 @@ class AzureMLCluster(Cluster):
             ### STOP LOGGING SSH
             self.portforward_proc.terminate()
             done = True
+
+        time.sleep(30)
+        await super()._close()
 
     def close(self):
         """ Close the cluster. All Azure ML Runs corresponding to the scheduler
