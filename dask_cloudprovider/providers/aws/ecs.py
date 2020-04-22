@@ -73,6 +73,12 @@ class Task:
         Configurable timeout in seconds for finding the task IP from the
         cloudwatch logs.
 
+    name: str (optional)
+        Name for used for the --name argument to dask-worker command line
+
+    use_private_ip: bool (optional)
+        Whether to use a private IP (if True) or public IP (if False). Default is False.
+
     kwargs:
         Any additional kwargs which may need to be stored for later use.
 
@@ -137,7 +143,7 @@ class Task:
 
     @property
     def _use_public_ip(self):
-        return not self._use_private_ip
+        return self.fargate and not self._use_private_ip
 
     async def _is_long_arn_format_enabled(self):
         async with self._client("ecs") as ecs:
@@ -521,7 +527,7 @@ class ECSCluster(SpecCluster):
 
         Default ``False``.
     use_private_ip: bool (optional)
-        Avoid using a public IP address, e.g. with a private subnet VPC.
+        If True, use a private IP, if False use public IPs.
 
         Default ``False``.
     **kwargs: dict
