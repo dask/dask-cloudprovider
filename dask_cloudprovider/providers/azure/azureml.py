@@ -24,9 +24,11 @@ from distributed.utils import (
 logger = logging.getLogger(__name__)
 done = False  # FLAG FOR STOPPING THE port_forward_logger THREAD
 
-
-from azureml._base_sdk_common.user_agent import append
-append('AzureMLCluster-DASK', '0.1')
+try:
+    from azureml._base_sdk_common.user_agent import append  
+    append('AzureMLCluster-DASK', '0.1')
+except:
+    pass
 
 
 def port_forward_logger(portforward_proc):
@@ -744,6 +746,8 @@ class AzureMLCluster(Cluster):
 
     # close cluster
     async def _close(self):
+        await super()._close()
+
         if self.status == "closed":
             return
         while self.workers_list:
@@ -755,7 +759,6 @@ class AzureMLCluster(Cluster):
             self.run.complete()
             self.run.cancel()
 
-        await super()._close()
         self.status = "closed"
         self.__print_message("Scheduler and workers are disconnected.")
 
