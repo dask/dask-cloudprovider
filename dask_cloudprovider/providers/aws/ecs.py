@@ -74,7 +74,7 @@ class Task:
         cloudwatch logs.
 
     name: str (optional)
-        Name for used for the --name argument to dask-worker command line
+        Name for the task. Currently used for the --namecommand line argument to dask-worker.
 
     use_private_ip: bool (optional)
         Whether to use a private IP (if True) or public IP (if False). Default is False.
