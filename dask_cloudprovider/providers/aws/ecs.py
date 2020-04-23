@@ -5,6 +5,7 @@ import time
 import uuid
 import warnings
 import weakref
+from typing import List
 
 from botocore.exceptions import ClientError
 import aiobotocore
@@ -356,7 +357,15 @@ class Worker(Task):
         Other kwargs to be passed to :class:`Task`.
     """
 
-    def __init__(self, scheduler: str, cpu: int, mem: int, gpu: int, **kwargs):
+    def __init__(
+        self,
+        scheduler: str,
+        cpu: int,
+        mem: int,
+        gpu: int,
+        extra_args: List[str],
+        **kwargs
+    ):
         super().__init__(**kwargs)
         self.task_type = "worker"
         self.scheduler = scheduler
@@ -375,7 +384,7 @@ class Worker(Task):
                 "{}GB".format(int(self._mem / 1024)),
                 "--death-timeout",
                 "60",
-            ]
+            ] + (list() if not extra_args else extra_args)
         }
 
 
@@ -411,6 +420,10 @@ class ECSCluster(SpecCluster):
         The scheduler task will exit after this amount of time if there are no clients connected.
 
         Defaults to ``5 minutes``.
+    scheduler_extra_args: List[str] (optional)
+        Any extra command line arguments to pass to dask-scheduler, e.g. ``["--tls-cert", "/path/to/cert.pem"]``
+
+        Defaults to `None`, no extra command line arguments.
     worker_cpu: int (optional)
         The amount of CPU to request for worker tasks in milli-cpu (1/1024).
 
@@ -427,6 +440,11 @@ class ECSCluster(SpecCluster):
         cluster. Fargate is not supported at this time.
 
         Defaults to `None`, no GPUs.
+
+    worker_extra_args: List[str] (optional)
+        Any extra command line arguments to pass to dask-worker, e.g. ``["--tls-cert", "/path/to/cert.pem"]``
+
+        Defaults to `None`, no extra command line arguments.
     n_workers: int (optional)
         Number of workers to start on cluster creation.
 
@@ -541,9 +559,11 @@ class ECSCluster(SpecCluster):
         scheduler_cpu=None,
         scheduler_mem=None,
         scheduler_timeout=None,
+        scheduler_extra_args=None,
         worker_cpu=None,
         worker_mem=None,
         worker_gpu=None,
+        worker_extra_args=None,
         n_workers=None,
         cluster_arn=None,
         cluster_name_template=None,
@@ -571,9 +591,12 @@ class ECSCluster(SpecCluster):
         self._scheduler_cpu = scheduler_cpu
         self._scheduler_mem = scheduler_mem
         self._scheduler_timeout = scheduler_timeout
+        self._scheduler_extra_args = scheduler_extra_args
         self._worker_cpu = worker_cpu
         self._worker_mem = worker_mem
         self._worker_gpu = worker_gpu
+        self._worker_extra_args = worker_extra_args
+        self._worker_extra_args = worker_extra_args
         self._n_workers = n_workers
         self.cluster_arn = cluster_arn
         self.cluster_name = None
@@ -656,11 +679,17 @@ class ECSCluster(SpecCluster):
         if self._scheduler_timeout is None:
             self._scheduler_timeout = self.config.get("scheduler_timeout")
 
+        if self._scheduler_extra_args is None:
+            self._scheduler_extra_args = self.config.get("scheduler_extra_args")
+
         if self._worker_cpu is None:
             self._worker_cpu = self.config.get("worker_cpu")
 
         if self._worker_mem is None:
             self._worker_mem = self.config.get("worker_mem")
+
+        if self._worker_extra_args is None:
+            self._worker_extra_args = self.config.get("worker_extra_args")
 
         if self._n_workers is None:
             self._n_workers = self.config.get("n_workers")
@@ -756,6 +785,7 @@ class ECSCluster(SpecCluster):
             "cpu": self._worker_cpu,
             "mem": self._worker_mem,
             "gpu": self._worker_gpu,
+            "extra_args": self._worker_extra_args,
             **options,
         }
 
@@ -988,7 +1018,7 @@ class ECSCluster(SpecCluster):
                             "dask-scheduler",
                             "--idle-timeout",
                             self._scheduler_timeout,
-                        ],
+                        ] + (list() if not self._scheduler_extra_args else self._scheduler_extra_args),
                         "logConfiguration": {
                             "logDriver": "awslogs",
                             "options": {
@@ -1044,7 +1074,7 @@ class ECSCluster(SpecCluster):
                             "{}MB".format(int(self._worker_mem)),
                             "--death-timeout",
                             "60",
-                        ],
+                        ] + (list() if not self._worker_extra_args else self._worker_extra_args),
                         "logConfiguration": {
                             "logDriver": "awslogs",
                             "options": {
