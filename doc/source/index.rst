@@ -100,6 +100,7 @@ Here is the full minimal IAM policy that you need to create the whole cluster:
                    "ec2:DescribeNetworkInterfaces",
                    "ec2:DescribeSubnets",
                    "ec2:DescribeVpcs",
+                   "ec2:DescribeSecurityGroups",
                    "ec2:DeleteSecurityGroup",
                    "ecs:CreateCluster",
                    "ecs:DescribeTasks",
@@ -115,13 +116,17 @@ Here is the full minimal IAM policy that you need to create the whole cluster:
                    "ecs:DeregisterTaskDefinition",
                    "iam:AttachRolePolicy",
                    "iam:CreateRole",
+                   "iam:CreateServiceLinkedRole",
                    "iam:TagRole",
                    "iam:PassRole",
                    "iam:DeleteRole",
                    "iam:ListRoleTags",
+                   "iam:ListRoles",
                    "iam:ListAttachedRolePolicies",
                    "iam:DetachRolePolicy",
-                   "logs:DescribeLogGroups"
+                   "logs:DescribeLogGroups",
+                   "logs:CreateLogGroup",
+                   "logs:PutRetentionPolicy"
                ],
                "Effect": "Allow",
                "Resource": [
