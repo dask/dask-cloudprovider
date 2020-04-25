@@ -1,6 +1,7 @@
 from . import config
 from .providers.aws.ecs import ECSCluster, FargateCluster
-from .providers.azure.azureml import AzureMLCluster, AzureMLSSHCluster
+from .providers.azure.azureml import AzureMLCluster
+from .providers.azure.azuremlssh import AzureMLSSHCluster
 
 __all__ = ["ECSCluster", "FargateCluster", "AzureMLCluster", "AzureMLSSHCluster"]
 
