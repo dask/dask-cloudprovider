@@ -26,7 +26,11 @@ from distributed.utils import (
 )
 
 logger = logging.getLogger(__name__)
-
+try:
+    from azureml._base_sdk_common.user_agent import append
+    append('AzureMLCluster-DASK', '0.1')
+except:
+    pass
 
 class AzureMLCluster(Cluster):
     """ Deploy a Dask cluster using Azure ML
