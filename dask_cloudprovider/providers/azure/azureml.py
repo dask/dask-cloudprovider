@@ -731,7 +731,7 @@ class AzureMLCluster(Cluster):
         for i in range(workers):
             if self.workers_list:
                 child_run = self.workers_list.pop(0)  # deactive oldest workers
-                child_run.complete()  # complete() will mark the run "Complete", but won't kill the process
+                child_run.cancel()  # complete() will mark the run "Complete", but won't kill the process
             else:
                 self.__print_message("All scaled workers are removed.")
 
@@ -742,11 +742,11 @@ class AzureMLCluster(Cluster):
         self.__print_message("Disconnecting all workers.")
         while self.workers_list:
             child_run = self.workers_list.pop()
-            child_run.complete()
+            child_run.cancel()
 
         self.__print_message("Disconnecting scheduler.")
         if self.run:
-            self.run.complete()
+            self.run.cancel()
 
         self.status = "closed"
         self.__print_message("Scheduler and workers are disconnected.")
