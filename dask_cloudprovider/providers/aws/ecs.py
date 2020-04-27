@@ -597,7 +597,6 @@ class ECSCluster(SpecCluster):
         self._worker_mem = worker_mem
         self._worker_gpu = worker_gpu
         self._worker_extra_args = worker_extra_args
-        self._worker_extra_args = worker_extra_args
         self._n_workers = n_workers
         self.cluster_arn = cluster_arn
         self.cluster_name = None
@@ -681,7 +680,10 @@ class ECSCluster(SpecCluster):
             self._scheduler_timeout = self.config.get("scheduler_timeout")
 
         if self._scheduler_extra_args is None:
-            self._scheduler_extra_args = self.config.get("scheduler_extra_args")
+            comma_separated_args = self.config.get("scheduler_extra_args")
+            self._scheduler_extra_args = (
+                comma_separated_args.split(",") if comma_separated_args else None
+            )
 
         if self._worker_cpu is None:
             self._worker_cpu = self.config.get("worker_cpu")
@@ -690,7 +692,10 @@ class ECSCluster(SpecCluster):
             self._worker_mem = self.config.get("worker_mem")
 
         if self._worker_extra_args is None:
-            self._worker_extra_args = self.config.get("worker_extra_args")
+            comma_separated_args = self.config.get("worker_extra_args")
+            self._worker_extra_args = (
+                comma_separated_args.split(",") if comma_separated_args else None
+            )
 
         if self._n_workers is None:
             self._n_workers = self.config.get("n_workers")
