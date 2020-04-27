@@ -739,14 +739,15 @@ class AzureMLCluster(Cluster):
     async def _close(self):
         if self.status == "closed":
             return
+        self.__print_message("Disconnecting all workers.")
         while self.workers_list:
             child_run = self.workers_list.pop()
             child_run.complete()
 
+        self.__print_message("Disconnecting scheduler.")
         if self.run:
             self.run.complete()
-                    
-        await super()._close()
+
         self.status = "closed"
         self.__print_message("Scheduler and workers are disconnected.")
         self.log_event("Closed")
