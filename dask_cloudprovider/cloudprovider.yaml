@@ -4,9 +4,11 @@ cloudprovider:
     fargate_workers: False # Use fargate mode for the workers
     scheduler_cpu: 1024 # Millicpu (1024ths of a CPU core)
     scheduler_mem: 4096 # Memory in MB
+#   scheduler_extra_args: "--tls-cert,/path/to/cert.pem,--tls-key,/path/to/cert.key,--tls-ca-file,/path/to/ca.key"
     worker_cpu: 4096 # Millicpu (1024ths of a CPU core)
     worker_mem: 16384 # Memory in MB
     worker_gpu: 0 # Number of GPUs for each worker
+#   worker_extra_args: "--tls-cert,/path/to/cert.pem,--tls-key,/path/to/cert.key,--tls-ca-file,/path/to/ca.key"
     n_workers: 0 # Number of workers to start the cluster with
     scheduler_timeout: "5 minutes" # Length of inactivity to wait before closing the cluster
 
