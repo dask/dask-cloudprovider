@@ -17,6 +17,7 @@ cloudprovider:
     execution_role_arn: "" # Arn of existing execution role to use (if not set one will be created)
     task_role_arn: "" # Arn of existing task role to use (if not set one will be created)
     task_role_policies: [] # List of policy arns to attach to tasks (e.g S3 read only access)
+#   platform_version: "LATEST" # Fargate platformVersion string like "1.4.0" or "LATEST"
 
     cloudwatch_logs_group: "" # Name of existing cloudwatch logs group to use (if not set one will be created)
     cloudwatch_logs_stream_prefix: "{cluster_name}" # Stream prefix template
