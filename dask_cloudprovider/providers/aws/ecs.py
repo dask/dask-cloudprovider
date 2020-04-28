@@ -73,9 +73,16 @@ class Task:
         Configurable timeout in seconds for finding the task IP from the
         cloudwatch logs.
 
+    name: str (optional)
+        Name for the task. Currently used for the --namecommand line argument to dask-worker.
+
     platform_version: str (optional)
         Version of the AWS Fargate platform to use, e.g. "1.4.0" or "LATEST". This
         setting has no effect for the EC2 launch type.
+
+    fargate_use_private_ip: bool (optional)
+        Whether to use a private IP (if True) or public IP (if False) with Fargate.
+        Defaults to False, i.e. public IP.
 
     kwargs:
         Any additional kwargs which may need to be stored for later use.
@@ -101,6 +108,7 @@ class Task:
         find_address_timeout,
         name=None,
         platform_version=None,
+        fargate_use_private_ip=False,
         **kwargs
     ):
         self.lock = asyncio.Lock()
@@ -126,6 +134,7 @@ class Task:
         self.tags = tags
         self._find_address_timeout = find_address_timeout
         self.platform_version = platform_version
+        self._fargate_use_private_ip = fargate_use_private_ip
         self.kwargs = kwargs
         self.status = "created"
 
@@ -141,14 +150,7 @@ class Task:
 
     @property
     def _use_public_ip(self):
-        # Fargate needs public IP for image pull, EC2 doesn't support public IP, therefore
-        # we will assume for now that we will use a public IP when in Fargate mode and not
-        # when in EC2 mode.
-
-        # TODO Fargate can also use a NAT to pull the image so we could allow this to be false
-        # when in Fargate provided there is a NAT
-
-        return self.fargate
+        return self.fargate and not self._fargate_use_private_ip
 
     async def _is_long_arn_format_enabled(self):
         async with self._client("ecs") as ecs:
@@ -538,6 +540,10 @@ class ECSCluster(SpecCluster):
         setting has no effect for the EC2 launch type.
 
         Defaults to ``None``
+    fargate_use_private_ip: bool (optional)
+        Whether to use a private IP (if True) or public IP (if False) with Fargate.
+        
+        Default ``False``.
     **kwargs: dict
         Additional keyword arguments to pass to ``SpecCluster``.
 
@@ -577,6 +583,7 @@ class ECSCluster(SpecCluster):
         aws_secret_access_key=None,
         region_name=None,
         platform_version=None,
+        fargate_use_private_ip=False,
         **kwargs
     ):
         self._fargate_scheduler = fargate_scheduler
@@ -605,6 +612,7 @@ class ECSCluster(SpecCluster):
         self._tags = tags
         self._find_address_timeout = find_address_timeout
         self._skip_cleanup = skip_cleanup
+        self._fargate_use_private_ip = fargate_use_private_ip
         self._aws_access_key_id = aws_access_key_id
         self._aws_secret_access_key = aws_secret_access_key
         self._region_name = region_name
@@ -763,6 +771,7 @@ class ECSCluster(SpecCluster):
             "tags": self.tags,
             "find_address_timeout": self._find_address_timeout,
             "platform_version": self._platform_version,
+            "fargate_use_private_ip": self._fargate_use_private_ip,
         }
         scheduler_options = {
             "task_definition_arn": self.scheduler_task_definition_arn,
