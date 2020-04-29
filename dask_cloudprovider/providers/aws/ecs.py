@@ -77,6 +77,10 @@ class Task:
     name: str (optional)
         Name for the task. Currently used for the --namecommand line argument to dask-worker.
 
+    platform_version: str (optional)
+        Version of the AWS Fargate platform to use, e.g. "1.4.0" or "LATEST". This
+        setting has no effect for the EC2 launch type.
+
     fargate_use_private_ip: bool (optional)
         Whether to use a private IP (if True) or public IP (if False) with Fargate.
         Defaults to False, i.e. public IP.
@@ -104,6 +108,7 @@ class Task:
         tags,
         find_address_timeout,
         name=None,
+        platform_version=None,
         fargate_use_private_ip=False,
         **kwargs
     ):
@@ -129,6 +134,7 @@ class Task:
         self.environment = environment or {}
         self.tags = tags
         self._find_address_timeout = find_address_timeout
+        self.platform_version = platform_version
         self._fargate_use_private_ip = fargate_use_private_ip
         self.kwargs = kwargs
         self.status = "created"
@@ -202,6 +208,8 @@ class Task:
                     if await self._is_long_arn_format_enabled()
                     else {}
                 )  # Tags are only supported if you opt into long arn format so we need to check for that
+                if self.platform_version and self.fargate:
+                    kwargs["platformVersion"] = self.platform_version
                 async with self._client("ecs") as ecs:
                     response = await ecs.run_task(
                         cluster=self.cluster_arn,
@@ -546,6 +554,11 @@ class ECSCluster(SpecCluster):
         and this operation takes a while.
 
         Default ``False``.
+    platform_version: str (optional)
+        Version of the AWS Fargate platform to use, e.g. "1.4.0" or "LATEST". This
+        setting has no effect for the EC2 launch type.
+
+        Defaults to ``None``
     fargate_use_private_ip: bool (optional)
         Whether to use a private IP (if True) or public IP (if False) with Fargate.
         
@@ -590,6 +603,7 @@ class ECSCluster(SpecCluster):
         aws_access_key_id=None,
         aws_secret_access_key=None,
         region_name=None,
+        platform_version=None,
         fargate_use_private_ip=False,
         **kwargs
     ):
@@ -625,6 +639,7 @@ class ECSCluster(SpecCluster):
         self._aws_access_key_id = aws_access_key_id
         self._aws_secret_access_key = aws_secret_access_key
         self._region_name = region_name
+        self._platform_version = platform_version
         self._lock = asyncio.Lock()
         self.session = aiobotocore.get_session()
         super().__init__(**kwargs)
@@ -711,6 +726,9 @@ class ECSCluster(SpecCluster):
         if self._cluster_name_template is None:
             self._cluster_name_template = self.config.get("cluster_name_template")
 
+        if self._platform_version is None:
+            self._platform_version = self.config.get("platform_version")
+
         if self.cluster_arn is None:
             self.cluster_arn = (
                 self.config.get("cluster_arn") or await self._create_cluster()
@@ -787,6 +805,7 @@ class ECSCluster(SpecCluster):
             "environment": self._environment,
             "tags": self.tags,
             "find_address_timeout": self._find_address_timeout,
+            "platform_version": self._platform_version,
             "fargate_use_private_ip": self._fargate_use_private_ip,
         }
         scheduler_options = {
