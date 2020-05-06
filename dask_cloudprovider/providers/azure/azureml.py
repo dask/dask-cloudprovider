@@ -2,9 +2,6 @@ from azureml.core import Experiment, RunConfiguration, ScriptRunConfig
 from azureml.core.compute import AmlCompute
 from azureml.train.estimator import Estimator
 from azureml.core.runconfig import MpiConfiguration
-from azureml.telemetry import get_event_logger
-from azureml.telemetry.contracts\
-    import Event as _Event, RequiredFields as _RequiredFields, StandardFields as _StandardFields
 
 import json
 import os
@@ -144,9 +141,6 @@ class AzureMLCluster(Cluster):
         ### EXPERIMENT DEFINITION
         self.experiment_name = experiment_name
         self.tags = {"tag" : "azureml-dask"}
-        
-        ### TELEMETRY
-        self.cluster_start_time = time.time()
 
         ### ENVIRONMENT AND VARIABLES
         self.initial_node_count = initial_node_count
@@ -346,18 +340,11 @@ class AzureMLCluster(Cluster):
         else:
             return self.run.get_metrics()["scheduler"]
 
-    def __config_client_info(self):        
-        from azureml._base_sdk_common.user_agent import append
-        append('AzureML-Dask-Cluster', '0.1.0')
- 
     async def __create_cluster(self):
-        # set up environment
         self.__print_message("Setting up cluster")
 
         # submit run
         self.__print_message("Submitting the experiment")
-        self.__config_client_info()
-        
         exp = Experiment(self.workspace, self.experiment_name)
         estimator = Estimator(
             os.path.join(self.abs_path, "setup"),
@@ -403,7 +390,6 @@ class AzureMLCluster(Cluster):
             await self.sync(self.__check_if_scheduler_ip_reachable)
             time.sleep(1)
                
-        self.log_event("Running")
         ### REQUIRED BY dask.distributed.deploy.cluster.Cluster
         _scheduler = self.__prepare_rpc_connection_to_headnode()
         self.scheduler_comm = rpc(_scheduler)
@@ -472,7 +458,7 @@ class AzureMLCluster(Cluster):
             self.__print_message("scheduler_public_port: {}".format(scheduler_public_port))
             cmd = (
                 "ssh -vvv -o StrictHostKeyChecking=no -N"
-                f" -i {self.admin_ssh_key}"
+                f" -i {os.path.expanduser(self.admin_ssh_key)}"
                 f" -L 0.0.0.0:{self.jupyter_port}:{scheduler_ip}:8888"
                 f" -L 0.0.0.0:{self.dashboard_port}:{scheduler_ip}:8787"
                 f" -L 0.0.0.0:{self.scheduler_port}:{scheduler_ip}:8786"
@@ -482,8 +468,7 @@ class AzureMLCluster(Cluster):
                 cmd += f" -L 0.0.0.0:{port[1]}:{scheduler_ip}:{port[0]}"
 
             cmd += f" {self.admin_username}@{scheduler_public_ip} -p {scheduler_public_port}"
-            self.__print_message("cmd: {}".format(cmd))
-            portforward_log = open("portforward_out_log.txt", "w")
+
             portforward_proc = subprocess.Popen(
                 cmd.split(),
                 universal_newlines=True,
@@ -750,22 +735,6 @@ class AzureMLCluster(Cluster):
 
         self.status = "closed"
         self.__print_message("Scheduler and workers are disconnected.")
-        self.log_event("Closed")
-    
-    def log_event(self, status):
-        cluster_end_time = time.time()
-        component_name = "DaskCloudProvider"
-        name = "AzureMLCluster"
-        duration_ms = cluster_end_time - self.cluster_start_time
-        completion_status = status
-        logger = get_event_logger()
-        white_listed_properties = [component_name, name, duration_ms, completion_status]
-        track_event = _Event(
-                name='{}.{}.Finish'.format(component_name, name),
-                required_fields=_RequiredFields(component_name=component_name),
-                standard_fields=_StandardFields(duration=duration_ms, task_result=completion_status)
-            )
-        logger.log_event(track_event, white_listed_properties)
 
     def close(self):
         """ Close the cluster. All Azure ML Runs corresponding to the scheduler
