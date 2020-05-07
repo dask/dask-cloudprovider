@@ -10,7 +10,7 @@ import time, os, socket, subprocess, logging
 
 from distributed.deploy.cluster import Cluster
 from distributed.core import rpc
-
+import threading
 import dask
 import pathlib
 
@@ -23,6 +23,7 @@ from distributed.utils import (
 )
 
 logger = logging.getLogger(__name__)
+done = False
 try:
     from azureml._base_sdk_common.user_agent import append
     append('AzureMLCluster-DASK', '0.1')
@@ -165,6 +166,7 @@ class AzureMLCluster(Cluster):
         self.scheduler_port = scheduler_port
         self.scheduler_idle_timeout = scheduler_idle_timeout
         self.worker_death_timeout = worker_death_timeout
+        self.portforward_proc = None
 
         if additional_ports is not None:
             if type(additional_ports) != list:
@@ -430,6 +432,20 @@ class AzureMLCluster(Cluster):
         logger.info(f'Dashboard URL: {self.scheduler_info["dashboard_url"]}')
         logger.info(f'Jupyter URL:   {self.scheduler_info["jupyter_url"]}')
 
+
+    def __port_forward_logger(self, portforward_proc):
+        portforward_log = open("portforward_out_log.txt", "w")
+
+        while True:
+            portforward_out = portforward_proc.stdout.readline()
+            if portforward_proc != "":
+                portforward_log.write(portforward_out)
+                portforward_log.flush()
+
+            if done:
+                break
+        return
+
     async def __setup_port_forwarding(self):
         dashboard_address = self.run.get_metrics()["dashboard"]
         jupyter_address = self.run.get_metrics()["jupyter"]
@@ -468,13 +484,19 @@ class AzureMLCluster(Cluster):
                 cmd += f" -L 0.0.0.0:{port[1]}:{scheduler_ip}:{port[0]}"
 
             cmd += f" {self.admin_username}@{scheduler_public_ip} -p {scheduler_public_port}"
-
-            portforward_proc = subprocess.Popen(
+            self.__print_message("cmd: {}".cmd)
+            self.portforward_proc = subprocess.Popen(
                 cmd.split(),
                 universal_newlines=True,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
             )
+
+            ### Starting thread to keep the SSH tunnel open on Windows
+            portforward_logg = threading.Thread(
+                target=__port_forward_logger, args=[self.portforward_proc]
+            )
+            portforward_logg.start()
 
     @property
     def dashboard_link(self):
@@ -735,6 +757,13 @@ class AzureMLCluster(Cluster):
 
         self.status = "closed"
         self.__print_message("Scheduler and workers are disconnected.")
+
+        if self.portforward_proc is not None:
+            ### STOP LOGGING SSH
+            self.portforward_proc.terminate()
+            done = True
+        time.sleep(30)
+        await super()._close()
 
     def close(self):
         """ Close the cluster. All Azure ML Runs corresponding to the scheduler
