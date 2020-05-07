@@ -484,7 +484,7 @@ class AzureMLCluster(Cluster):
                 cmd += f" -L 0.0.0.0:{port[1]}:{scheduler_ip}:{port[0]}"
 
             cmd += f" {self.admin_username}@{scheduler_public_ip} -p {scheduler_public_port}"
-            self.__print_message("cmd: {}".cmd)
+            self.__print_message("cmd: {}".format(cmd))
             self.portforward_proc = subprocess.Popen(
                 cmd.split(),
                 universal_newlines=True,
