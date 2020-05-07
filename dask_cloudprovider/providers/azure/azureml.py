@@ -494,7 +494,7 @@ class AzureMLCluster(Cluster):
 
             ### Starting thread to keep the SSH tunnel open on Windows
             portforward_logg = threading.Thread(
-                target=__port_forward_logger, args=[self.portforward_proc]
+                target=self.__port_forward_logger, args=[self.portforward_proc]
             )
             portforward_logg.start()
 
