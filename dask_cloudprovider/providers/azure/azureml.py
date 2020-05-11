@@ -746,16 +746,20 @@ class AzureMLCluster(Cluster):
     async def _close(self):
         if self.status == "closed":
             return
-        self.__print_message("Disconnecting all workers.")
-        while self.workers_list:
-            child_run = self.workers_list.pop()
-            child_run.cancel()
+        # self.__print_message("Disconnecting all workers.")
+        # while self.workers_list:
+        #     child_run = self.workers_list.pop()
+        #     child_run.cancel()
 
-        self.__print_message("Disconnecting scheduler.")
-        if self.run:
-            self.run.cancel()
+        # self.__print_message("Disconnecting scheduler.")
+        # if self.run:
+        #     self.run.cancel()
 
-        self.status = "closed"
+        # self.status = "closed"
+
+        with ignoring(CommClosedError):
+            await self.scheduler_comm.close(close_workers=True)
+
         self.__print_message("Scheduler and workers are disconnected.")
 
         if self.portforward_proc is not None:
@@ -770,8 +774,4 @@ class AzureMLCluster(Cluster):
         and worker processes will be completed. The Azure ML Compute Target will
         return to its minimum number of nodes after its idle time before scaledown.
         """
-        with ignoring(CommClosedError):
-            await self.scheduler_comm.close(close_workers=True)
-
-        self.__print_message("Scheduler and workers are disconnected.")
-        ## return self.sync(self._close)
+        return self.sync(self._close)
