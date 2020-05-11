@@ -9,7 +9,7 @@ from pathlib import Path
 import time, os, socket, subprocess, logging
 
 from distributed.deploy.cluster import Cluster
-from distributed.core import rpc
+from distributed.core import rpc, CommClosedError
 import threading
 import dask
 import pathlib
@@ -770,4 +770,8 @@ class AzureMLCluster(Cluster):
         and worker processes will be completed. The Azure ML Compute Target will
         return to its minimum number of nodes after its idle time before scaledown.
         """
-        return self.sync(self._close)
+        with ignoring(CommClosedError):
+            await self.scheduler_comm.close(close_workers=True)
+
+        self.__print_message("Scheduler and workers are disconnected.")
+        ## return self.sync(self._close)
