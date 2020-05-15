@@ -24,11 +24,12 @@ from distributed.utils import (
 logger = logging.getLogger(__name__)
 done = False  # FLAG FOR STOPPING THE port_forward_logger THREAD
 
-try:
-    from azureml._base_sdk_common.user_agent import append  
-    append('AzureMLCluster-DASK', '0.1')
-except:
-    pass
+def append_telemetry():
+    try:
+        from azureml._base_sdk_common.user_agent import append  
+        append('AzureMLCluster-DASK', '0.1')
+    except:
+        pass
 
 
 def port_forward_logger(portforward_proc):
@@ -121,6 +122,13 @@ class AzureMLCluster(Cluster):
         Defaults to ``[]``. To mount all datastores in the workspace,
         set to ``[ws.datastores[datastore] for datastore in ws.datastores]``.
 
+    telemetry_opt_out: bool (optional)
+        A boolean parameter. Defaults to logging a version of AzureMLCluster
+        with Microsoft. Set this flag to False if you do not want to share this 
+        information with Microsoft. Microsoft is not tracking anything else you
+        do in your Dask cluster nor any other information related to your
+        workload. 
+
     asynchronous: bool (optional)
         Flag to run jobs asynchronously.
 
@@ -146,6 +154,7 @@ class AzureMLCluster(Cluster):
         admin_ssh_key=None,
         datastores=None,
         code_store=None,
+        telemetry_opt_out=None,
         asynchronous=False,
         **kwargs,
     ):
@@ -159,6 +168,9 @@ class AzureMLCluster(Cluster):
 
         ### ENVIRONMENT AND VARIABLES
         self.initial_node_count = initial_node_count
+
+        ### SEND TELEMETRY
+        self.telemetry_opt_out = telemetry_opt_out
 
         ### GPU RUN INFO
         self.workspace_vm_sizes = AmlCompute.supported_vmsizes(self.workspace)
@@ -249,6 +261,10 @@ class AzureMLCluster(Cluster):
         if not self.asynchronous:
             self._loop_runner.start()
             self.sync(self.__get_defaults)
+
+            if not self.telemetry_opt_out:
+                append_telemetry()
+
             self.sync(self.__create_cluster)
 
     async def __get_defaults(self):
@@ -289,6 +305,9 @@ class AzureMLCluster(Cluster):
 
         if self.datastores is None:
             self.datastores = self.config.get("datastores")
+
+        if self.telemetry_opt_out is None:
+            self.telemetry_opt_out = self.config.get("telemetry_opt_out")
 
         ### PARAMETERS TO START THE CLUSTER
         self.scheduler_params = {}

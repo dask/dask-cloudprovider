@@ -42,4 +42,5 @@ cloudprovider:
     additional_ports: [] # list of tuples of additional ports to map/forward
     admin_username: "" # username to log in to the AzureML Training Cluster for 'local' runs
     admin_ssh_key: "" # password to log in to the AzureML Training Cluster for 'local' runs
+    telemetry_opt_out: False # by default we log the version of the AzureMLCluster being used, set to True to opt-out 
     datastores: [] # default list of datastores to mount
