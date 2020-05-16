@@ -8,10 +8,7 @@ import argparse
 import threading
 import subprocess
 import logging
-
-import json
 import os
-from pathlib import Path
 
 from mpi4py import MPI
 from azureml.core import Run
@@ -43,7 +40,7 @@ if __name__ == "__main__":
     parser.add_argument("--jupyter_port", default=8888)
     parser.add_argument("--dashboard_port", default=8787)
     parser.add_argument("--scheduler_port", default=8786)
-    parser.add_argument("--scheduler_idle_timeout", default=300)  # 5 mins
+    parser.add_argument("--scheduler_idle_timeout", default=1200)  # 20 mins
     parser.add_argument("--worker_death_timeout", default=30)  # 30 seconds
     parser.add_argument("--use_gpu", default=False)
     parser.add_argument("--n_gpus_per_node", default=0)

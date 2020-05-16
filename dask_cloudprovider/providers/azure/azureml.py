@@ -24,13 +24,6 @@ from distributed.utils import (
 logger = logging.getLogger(__name__)
 done = False  # FLAG FOR STOPPING THE port_forward_logger THREAD
 
-def append_telemetry():
-    try:
-        from azureml._base_sdk_common.user_agent import append  
-        append('AzureMLCluster-DASK', '0.1')
-    except:
-        pass
-
 
 def port_forward_logger(portforward_proc):
     portforward_log = open("portforward_out_log.txt", "w")
@@ -92,6 +85,16 @@ class AzureMLCluster(Cluster):
 
         Defaults to ``9002``.
 
+    scheduler_idle_timeout: int (optional)
+        Number of idle seconds leading to scheduler shut down.
+
+        Defaults to ``1200`` (20 minutes).
+
+    worker_death_timeout: int (optional)
+        Number of seconds to wait for a worker to respond before removing it.
+
+        Defaults to ``30``.
+
     additional_ports: list[tuple[int, int]] (optional)
         Additional ports to forward. This requires a list of tuples where the first element
         is the port to open on the headnode while the second element is the port to map to
@@ -124,10 +127,10 @@ class AzureMLCluster(Cluster):
 
     telemetry_opt_out: bool (optional)
         A boolean parameter. Defaults to logging a version of AzureMLCluster
-        with Microsoft. Set this flag to False if you do not want to share this 
+        with Microsoft. Set this flag to False if you do not want to share this
         information with Microsoft. Microsoft is not tracking anything else you
         do in your Dask cluster nor any other information related to your
-        workload. 
+        workload.
 
     asynchronous: bool (optional)
         Flag to run jobs asynchronously.
@@ -171,6 +174,7 @@ class AzureMLCluster(Cluster):
 
         ### SEND TELEMETRY
         self.telemetry_opt_out = telemetry_opt_out
+        self.telemetry_set = False
 
         ### GPU RUN INFO
         self.workspace_vm_sizes = AmlCompute.supported_vmsizes(self.workspace)
@@ -263,7 +267,7 @@ class AzureMLCluster(Cluster):
             self.sync(self.__get_defaults)
 
             if not self.telemetry_opt_out:
-                append_telemetry()
+                self.__append_telemetry()
 
             self.sync(self.__create_cluster)
 
@@ -336,6 +340,16 @@ class AzureMLCluster(Cluster):
         ###-----> initial node count
         if self.initial_node_count > self.max_nodes:
             self.initial_node_count = self.max_nodes
+
+    def __append_telemetry(self):
+        if not self.telemetry_set:
+            self.telemetry_set = True
+            try:
+                from azureml._base_sdk_common.user_agent import append
+
+                append("AzureMLCluster-DASK", "0.1")
+            except ImportError:
+                pass
 
     def __print_message(self, msg, length=80, filler="#", pre_post=""):
         logger.info(msg)
