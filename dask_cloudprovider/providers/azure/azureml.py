@@ -4,15 +4,12 @@ from azureml.train.estimator import Estimator
 from azureml.core.runconfig import MpiConfiguration
 
 import time, os, socket, subprocess, logging
-
-from distributed.deploy.cluster import Cluster
-from distributed.core import rpc
-
-import dask
 import pathlib
-
 import threading
 
+import dask
+from distributed.deploy.cluster import Cluster
+from distributed.core import rpc
 from distributed.utils import (
     LoopRunner,
     PeriodicCallback,
@@ -22,22 +19,6 @@ from distributed.utils import (
 )
 
 logger = logging.getLogger(__name__)
-done = False  # FLAG FOR STOPPING THE port_forward_logger THREAD
-
-
-def port_forward_logger(portforward_proc):
-    portforward_log = open("portforward_out_log.txt", "w")
-
-    while True:
-        portforward_out = portforward_proc.stdout.readline()
-        if portforward_proc != "":
-            portforward_log.write(portforward_out)
-            portforward_log.flush()
-
-        if done:
-            break
-    return
-
 
 class AzureMLCluster(Cluster):
     """ Deploy a Dask cluster using Azure ML
@@ -168,6 +149,7 @@ class AzureMLCluster(Cluster):
 
         ### EXPERIMENT DEFINITION
         self.experiment_name = experiment_name
+        self.tags = {"tag" : "azureml-dask"}
 
         ### ENVIRONMENT AND VARIABLES
         self.initial_node_count = initial_node_count
@@ -197,6 +179,7 @@ class AzureMLCluster(Cluster):
         self.scheduler_idle_timeout = scheduler_idle_timeout
         self.portforward_proc = None
         self.worker_death_timeout = worker_death_timeout
+        self.end_logging = False  # FLAG FOR STOPPING THE port_forward_logger THREAD
 
         if additional_ports is not None:
             if type(additional_ports) != list:
@@ -390,12 +373,7 @@ class AzureMLCluster(Cluster):
             return self.run.get_metrics()["scheduler"]
 
     async def __create_cluster(self):
-        # set up environment
         self.__print_message("Setting up cluster")
-
-        # submit run
-        self.__print_message("Submitting the experiment")
-
         exp = Experiment(self.workspace, self.experiment_name)
         estimator = Estimator(
             os.path.join(self.abs_path, "setup"),
@@ -409,10 +387,9 @@ class AzureMLCluster(Cluster):
             inputs=self.datastores,
         )
 
-        run = exp.submit(estimator)
+        run = exp.submit(estimator, tags=self.tags)
 
         self.__print_message("Waiting for scheduler node's IP")
-
         while (
             run.get_status() != "Canceled"
             and run.get_status() != "Failed"
@@ -481,6 +458,19 @@ class AzureMLCluster(Cluster):
         logger.info(f'Dashboard URL: {self.scheduler_info["dashboard_url"]}')
         logger.info(f'Jupyter URL:   {self.scheduler_info["jupyter_url"]}')
 
+    def __port_forward_logger(self, portforward_proc):
+        portforward_log = open("portforward_out_log.txt", "w")
+
+        while True:
+            portforward_out = portforward_proc.stdout.readline()
+            if portforward_proc != "":
+                portforward_log.write(portforward_out)
+                portforward_log.flush()
+
+            if self.end_logging:
+                break
+        return
+
     async def __setup_port_forwarding(self):
         dashboard_address = self.run.get_metrics()["dashboard"]
         jupyter_address = self.run.get_metrics()["jupyter"]
@@ -505,9 +495,11 @@ class AzureMLCluster(Cluster):
         else:
             scheduler_public_ip = self.compute_target.list_nodes()[0]["publicIpAddress"]
             scheduler_public_port = self.compute_target.list_nodes()[0]["port"]
+            self.__print_message("scheduler_public_ip: {}".format(scheduler_public_ip))
+            self.__print_message("scheduler_public_port: {}".format(scheduler_public_port))
 
             cmd = (
-                "ssh -vvv -N -o StrictHostKeyChecking=no "
+                "ssh -vvv -o StrictHostKeyChecking=no -N"
                 f" -i {os.path.expanduser(self.admin_ssh_key)}"
                 f" -L 0.0.0.0:{self.jupyter_port}:{scheduler_ip}:8888"
                 f" -L 0.0.0.0:{self.dashboard_port}:{scheduler_ip}:8787"
@@ -528,7 +520,7 @@ class AzureMLCluster(Cluster):
 
             ### Starting thread to keep the SSH tunnel open on Windows
             portforward_logg = threading.Thread(
-                target=port_forward_logger, args=[self.portforward_proc]
+                target=self.__port_forward_logger, args=[self.portforward_proc]
             )
             portforward_logg.start()
 
@@ -762,7 +754,7 @@ class AzureMLCluster(Cluster):
         )
 
         for i in range(workers):
-            child_run = self.run.submit_child(child_run_config)
+            child_run = self.run.submit_child(child_run_config, tags=self.tags)
             self.workers_list.append(child_run)
 
     # scale down
@@ -796,7 +788,7 @@ class AzureMLCluster(Cluster):
         if self.portforward_proc is not None:
             ### STOP LOGGING SSH
             self.portforward_proc.terminate()
-            done = True
+            self.end_logging = True
 
         time.sleep(30)
         await super()._close()
