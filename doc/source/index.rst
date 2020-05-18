@@ -257,7 +257,7 @@ To create cluster:
 
       ### UNCOMMENT BELOW FOR LOCAL RUNS
       # admin_username=admin_username,
-      # admin_ssh_key=admin_ssh_key_priv,
+      # admin_ssh_key=admin_ssh_key_priv   ### path, not contents of the key
    )
 
 Once the cluster has started, the Dask Cluster widget will print out two links:
