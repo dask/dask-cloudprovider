@@ -12,11 +12,11 @@ from distributed.deploy.cluster import Cluster
 from distributed.core import rpc
 from distributed.utils import (
     LoopRunner,
-    PeriodicCallback,
     log_errors,
     ignoring,
     format_bytes,
 )
+from tornado.ioloop import PeriodicCallback
 
 logger = logging.getLogger(__name__)
 
