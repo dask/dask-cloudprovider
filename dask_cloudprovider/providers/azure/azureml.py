@@ -20,6 +20,7 @@ from distributed.utils import (
 
 logger = logging.getLogger(__name__)
 
+
 class AzureMLCluster(Cluster):
     """ Deploy a Dask cluster using Azure ML
 
