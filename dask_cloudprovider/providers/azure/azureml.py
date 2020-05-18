@@ -150,7 +150,7 @@ class AzureMLCluster(Cluster):
 
         ### EXPERIMENT DEFINITION
         self.experiment_name = experiment_name
-        self.tags = {"tag" : "azureml-dask"}
+        self.tags = {"tag": "azureml-dask"}
 
         ### ENVIRONMENT AND VARIABLES
         self.initial_node_count = initial_node_count
@@ -497,7 +497,9 @@ class AzureMLCluster(Cluster):
             scheduler_public_ip = self.compute_target.list_nodes()[0]["publicIpAddress"]
             scheduler_public_port = self.compute_target.list_nodes()[0]["port"]
             self.__print_message("scheduler_public_ip: {}".format(scheduler_public_ip))
-            self.__print_message("scheduler_public_port: {}".format(scheduler_public_port))
+            self.__print_message(
+                "scheduler_public_port: {}".format(scheduler_public_port)
+            )
 
             cmd = (
                 "ssh -vvv -o StrictHostKeyChecking=no -N"
