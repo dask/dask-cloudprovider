@@ -415,6 +415,14 @@ class ECSCluster(SpecCluster):
         Select whether or not to use fargate for the workers.
 
         Defaults to ``False``. You must provide an existing cluster.
+	fargate_spot: bool (optional)
+	    Select whether or not to include ``FARGATE_SPOT`` Capacity Provider
+		
+		Defaults to ``False``.
+	fargate_spot_weight: int (optional)
+	    Specifies ``FARGATE_SPOT`` Capacity Provider Weight.
+		
+		Defaults to ``4``.
     image: str (optional)
         The docker image to use for the scheduler and worker tasks.
 
