@@ -866,6 +866,7 @@ class ECSCluster(SpecCluster):
         self.cluster_name = dask.config.expand_environment_variables(
             self._cluster_name_template
         )
+        self.cluster_name = self.cluster_name.format(uuid=str(uuid.uuid4())[:10])
         create_cluster_kwargs = {'clusterName': self.cluster_name, 'tags': dict_to_aws(self.tags)}
         if self._fargate_spot:
             spot_cluster_kwargs = {
@@ -882,7 +883,6 @@ class ECSCluster(SpecCluster):
                 ]
             }
             create_cluster_kwargs = { **create_cluster_kwargs, **spot_cluster_kwargs}
-        self.cluster_name = self.cluster_name.format(uuid=str(uuid.uuid4())[:10])
         async with self._client("ecs") as ecs:
             response = await ecs.create_cluster(**create_cluster_kwargs)
         weakref.finalize(self, self.sync, self._delete_cluster)
