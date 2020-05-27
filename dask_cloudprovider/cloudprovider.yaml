@@ -4,9 +4,11 @@ cloudprovider:
     fargate_workers: False # Use fargate mode for the workers
     scheduler_cpu: 1024 # Millicpu (1024ths of a CPU core)
     scheduler_mem: 4096 # Memory in MB
+#   scheduler_extra_args: "--tls-cert,/path/to/cert.pem,--tls-key,/path/to/cert.key,--tls-ca-file,/path/to/ca.key"
     worker_cpu: 4096 # Millicpu (1024ths of a CPU core)
     worker_mem: 16384 # Memory in MB
     worker_gpu: 0 # Number of GPUs for each worker
+#   worker_extra_args: "--tls-cert,/path/to/cert.pem,--tls-key,/path/to/cert.key,--tls-ca-file,/path/to/ca.key"
     n_workers: 0 # Number of workers to start the cluster with
     scheduler_timeout: "5 minutes" # Length of inactivity to wait before closing the cluster
 
@@ -17,6 +19,7 @@ cloudprovider:
     execution_role_arn: "" # Arn of existing execution role to use (if not set one will be created)
     task_role_arn: "" # Arn of existing task role to use (if not set one will be created)
     task_role_policies: [] # List of policy arns to attach to tasks (e.g S3 read only access)
+#   platform_version: "LATEST" # Fargate platformVersion string like "1.4.0" or "LATEST"
 
     cloudwatch_logs_group: "" # Name of existing cloudwatch logs group to use (if not set one will be created)
     cloudwatch_logs_stream_prefix: "{cluster_name}" # Stream prefix template
