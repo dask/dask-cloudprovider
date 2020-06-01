@@ -8,12 +8,12 @@ import pathlib
 import threading
 
 import dask
+from contextlib import suppress
 from distributed.deploy.cluster import Cluster
 from distributed.core import rpc
 from distributed.utils import (
     LoopRunner,
     log_errors,
-    ignoring,
     format_bytes,
 )
 from tornado.ioloop import PeriodicCallback
@@ -686,7 +686,7 @@ class AzureMLCluster(Cluster):
             def scale_cb(b):
                 with log_errors():
                     n = request.value
-                    with ignoring(AttributeError):
+                    with suppress(AttributeError):
                         self._adaptive.stop()
                     self.scale(n)
                     update()
