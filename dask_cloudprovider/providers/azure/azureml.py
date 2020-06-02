@@ -116,7 +116,7 @@ class AzureMLCluster(Cluster):
     def __init__(
         self,
         workspace,
-        compute_target,
+        compute_target=None,
         environment_definition,
         experiment_name=None,
         initial_node_count=None,
@@ -155,10 +155,10 @@ class AzureMLCluster(Cluster):
         ]
         self.workspace_vm_sizes = dict(self.workspace_vm_sizes)
 
-        self.compute_target_vm_size = self.compute_target.serialize()["properties"][
-            "status"
-        ]["vmSize"].lower()
-        self.n_gpus_per_node = self.workspace_vm_sizes[self.compute_target_vm_size]
+    #    self.compute_target_vm_size = self.compute_target.serialize()["properties"][
+    #         "status"
+    #     ]["vmSize"].lower()
+        self.n_gpus_per_node = 2 # self.workspace_vm_sizes[self.compute_target_vm_size]
         self.use_gpu = True if self.n_gpus_per_node > 0 else False
 
         ### JUPYTER AND PORT FORWARDING
@@ -294,9 +294,9 @@ class AzureMLCluster(Cluster):
             self.worker_params["--n_gpus_per_node"] = self.n_gpus_per_node
 
         ### CLUSTER PARAMS
-        self.max_nodes = self.compute_target.serialize()["properties"]["properties"][
-            "scaleSettings"
-        ]["maxNodeCount"]
+        self.max_nodes = 100 #self.compute_target.serialize()["properties"]["properties"][
+        #     "scaleSettings"
+        # ]["maxNodeCount"]
         self.scheduler_ip_port = None
         self.workers_list = []
         self.URLs = {}
@@ -346,7 +346,6 @@ class AzureMLCluster(Cluster):
 
     async def __create_cluster(self):
         run_config = RunConfiguration()
-        run_config.target = self.compute_target
         run_config.environment = self.environment_definition
 
         args = []
@@ -728,7 +727,7 @@ class AzureMLCluster(Cluster):
         """ Scale up the number of workers.
         """
         run_config = RunConfiguration()
-        run_config.target = self.compute_target
+       # run_config.target = self.compute_target
         run_config.environment = self.environment_definition
 
         scheduler_ip = self.run.get_metrics()["scheduler"]
