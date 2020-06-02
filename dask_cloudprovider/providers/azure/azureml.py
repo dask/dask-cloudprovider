@@ -149,11 +149,11 @@ class AzureMLCluster(Cluster):
         self.parent_run = run
 
         ### GPU RUN INFO
-        self.workspace_vm_sizes = AmlCompute.supported_vmsizes(self.workspace)
-        self.workspace_vm_sizes = [
-            (e["name"].lower(), e["gpus"]) for e in self.workspace_vm_sizes
-        ]
-        self.workspace_vm_sizes = dict(self.workspace_vm_sizes)
+        # self.workspace_vm_sizes = AmlCompute.supported_vmsizes(self.workspace)
+        # self.workspace_vm_sizes = [
+        #     (e["name"].lower(), e["gpus"]) for e in self.workspace_vm_sizes
+        # ]
+        # self.workspace_vm_sizes = dict(self.workspace_vm_sizes)
 
     #    self.compute_target_vm_size = self.compute_target.serialize()["properties"][
     #         "status"
