@@ -116,8 +116,8 @@ class AzureMLCluster(Cluster):
     def __init__(
         self,
         workspace,
-        compute_target=None,
         environment_definition,
+        compute_target=None,
         experiment_name=None,
         initial_node_count=None,
         run=None,
