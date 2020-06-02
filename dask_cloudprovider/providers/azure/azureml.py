@@ -10,17 +10,17 @@ import time, os, socket, subprocess, logging
 
 from distributed.deploy.cluster import Cluster
 from distributed.core import rpc, CommClosedError
+from contextlib import suppress
 import threading
 import dask
 import pathlib
 
 from distributed.utils import (
     LoopRunner,
-    PeriodicCallback,
     log_errors,
-    ignoring,
     format_bytes,
 )
+from tornado.ioloop import PeriodicCallback
 
 logger = logging.getLogger(__name__)
 done = False
@@ -120,6 +120,7 @@ class AzureMLCluster(Cluster):
         environment_definition,
         experiment_name=None,
         initial_node_count=None,
+        run=None,
         jupyter=None,
         jupyter_port=None,
         dashboard_port=None,
@@ -145,6 +146,7 @@ class AzureMLCluster(Cluster):
 
         ### ENVIRONMENT AND VARIABLES
         self.initial_node_count = initial_node_count
+        self.parent_run = run
 
         ### GPU RUN INFO
         self.workspace_vm_sizes = AmlCompute.supported_vmsizes(self.workspace)
@@ -343,22 +345,39 @@ class AzureMLCluster(Cluster):
             return self.run.get_metrics()["scheduler"]
 
     async def __create_cluster(self):
-        self.__print_message("Setting up cluster")
+        run_config = RunConfiguration()
+        run_config.target = self.compute_target
+        run_config.environment = self.environment_definition
 
-        # submit run
-        self.__print_message("Submitting the experiment")
-        exp = Experiment(self.workspace, self.experiment_name)
-        estimator = Estimator(
-            os.path.join(self.abs_path, "setup"),
-            compute_target=self.compute_target,
-            entry_script="start_scheduler.py",
-            environment_definition=self.environment_definition,
-            script_params=self.scheduler_params,
-            node_count=1,  ### start only scheduler
-            distributed_training=MpiConfiguration(),
-            use_docker=True,
-            inputs=self.datastores,
+        args = []
+        for key, value in self.scheduler_params.iteritems():
+            args.append(f"{key}={value}")
+
+        child_run_config = ScriptRunConfig(
+            source_directory=os.path.join(self.abs_path, "setup"),
+            script="start_scheduler.py",
+            arguments=args,
+            run_config=run_config,
         )
+
+        run = self.parent_run.submit_child(child_run_config, tags=self.tags)
+
+        # self.__print_message("Setting up cluster")
+
+        # # submit run
+        # self.__print_message("Submitting the experiment")
+        # exp = Experiment(self.workspace, self.experiment_name)
+        # estimator = Estimator(
+        #     os.path.join(self.abs_path, "setup"),
+        #     compute_target=self.compute_target,
+        #     entry_script="start_scheduler.py",
+        #     environment_definition=self.environment_definition,
+        #     script_params=self.scheduler_params,
+        #     node_count=1,  ### start only scheduler
+        #     distributed_training=MpiConfiguration(),
+        #     use_docker=True,
+        #     inputs=self.datastores,
+        # )
 
         run = exp.submit(estimator, tags=self.tags)
 
@@ -657,7 +676,7 @@ class AzureMLCluster(Cluster):
             def scale_cb(b):
                 with log_errors():
                     n = request.value
-                    with ignoring(AttributeError):
+                    with suppress(AttributeError):
                         self._adaptive.stop()
                     self.scale(n)
                     update()
@@ -746,19 +765,16 @@ class AzureMLCluster(Cluster):
     async def _close(self):
         if self.status == "closed":
             return
-        # self.__print_message("Disconnecting all workers.")
-        # while self.workers_list:
-        #     child_run = self.workers_list.pop()
-        #     child_run.cancel()
+        self.__print_message("Disconnecting all workers.")
+        while self.workers_list:
+            child_run = self.workers_list.pop()
+            child_run.cancel()
 
-        # self.__print_message("Disconnecting scheduler.")
-        # if self.run:
-        #     self.run.cancel()
+        self.__print_message("Disconnecting scheduler.")
+        if self.run:
+            self.run.cancel()
 
-        # self.status = "closed"
-
-        with ignoring(CommClosedError):
-            await self.scheduler_comm.close(close_workers=True)
+        self.status = "closed"
 
         self.__print_message("Scheduler and workers are disconnected.")
 
@@ -767,6 +783,7 @@ class AzureMLCluster(Cluster):
             self.portforward_proc.terminate()
             done = True
         time.sleep(30)
+
         await super()._close()
 
     def close(self):
