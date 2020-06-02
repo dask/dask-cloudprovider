@@ -349,7 +349,7 @@ class AzureMLCluster(Cluster):
         run_config.environment = self.environment_definition
 
         args = []
-        for key, value in self.scheduler_params.iteritems():
+        for key, value in self.scheduler_params.items():
             args.append(f"{key}={value}")
 
         child_run_config = ScriptRunConfig(
