@@ -872,7 +872,8 @@ class ECSCluster(SpecCluster):
             "tags": dict_to_aws(self.tags),
         }
         if self._fargate_spot:
-            spot_cluster_kwargs = {
+            create_cluster_kwargs = {
+                **create_cluster_kwargs,
                 "capacityProviders": ["FARGATE", "FARGATE_SPOT"],
                 "defaultCapacityProviderStrategy": [
                     {
@@ -882,7 +883,6 @@ class ECSCluster(SpecCluster):
                     {"capacityProvider": "FARGATE", "weight": 1},
                 ],
             }
-            create_cluster_kwargs = {**create_cluster_kwargs, **spot_cluster_kwargs}
         async with self._client("ecs") as ecs:
             response = await ecs.create_cluster(**create_cluster_kwargs)
         weakref.finalize(self, self.sync, self._delete_cluster)
