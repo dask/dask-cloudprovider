@@ -23,7 +23,7 @@ from distributed.utils import (
 from tornado.ioloop import PeriodicCallback
 
 logger = logging.getLogger(__name__)
-done = False
+
 try:
     from azureml._base_sdk_common.user_agent import append
     append('AzureMLCluster-DASK', '0.1')
@@ -169,6 +169,7 @@ class AzureMLCluster(Cluster):
         self.scheduler_idle_timeout = scheduler_idle_timeout
         self.worker_death_timeout = worker_death_timeout
         self.portforward_proc = None
+        self.end_logging = False
 
         if additional_ports is not None:
             if type(additional_ports) != list:
@@ -365,7 +366,6 @@ class AzureMLCluster(Cluster):
             run = self.parent_run.submit_child(child_run_config, tags=self.tags)
         else:
             # submit scheduler run
-            self.__print_message("Submitting the experiment")
             exp = Experiment(self.workspace, self.experiment_name)
             estimator = Estimator(
                 os.path.join(self.abs_path, "setup"),
@@ -462,7 +462,7 @@ class AzureMLCluster(Cluster):
                 portforward_log.write(portforward_out)
                 portforward_log.flush()
 
-            if done:
+            if self.end_logging:
                 break
         return
 
@@ -758,6 +758,7 @@ class AzureMLCluster(Cluster):
         for i in range(workers):
             if self.workers_list:
                 child_run = self.workers_list.pop(0)  # deactive oldest workers
+                child_run.complete()
                 child_run.cancel()  # complete() will mark the run "Complete", but won't kill the process
             else:
                 self.__print_message("All scaled workers are removed.")
@@ -784,7 +785,7 @@ class AzureMLCluster(Cluster):
         if self.portforward_proc is not None:
             ### STOP LOGGING SSH
             self.portforward_proc.terminate()
-            done = True
+            self.end_logging = True
         time.sleep(30)
 
         await super()._close()
