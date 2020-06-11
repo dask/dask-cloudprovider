@@ -109,7 +109,7 @@ if __name__ == "__main__":
     workspace_name = run.experiment.workspace.name.lower()
     run_id = run.get_details()["runId"]
 
-    mount_point = f"/mnt/batch/tasks/shared/LS_root/jobs/{workspace_name}/azureml/{run_id}/mounts/"
+    mount_point = f"/mnt/batch/tasks/shared/LS_root/jobs/{workspace_name}/azureml/{run_id.lower()}/mounts/"
 
     if args.jupyter:
         cmd = (
