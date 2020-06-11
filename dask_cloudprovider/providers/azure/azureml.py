@@ -7,6 +7,8 @@ import time, os, socket, subprocess, logging
 import pathlib
 import threading
 
+from contextlib import suppress
+
 import dask
 from contextlib import suppress
 from distributed.deploy.cluster import Cluster
@@ -703,7 +705,7 @@ class AzureMLCluster(Cluster):
             self.close_when_disconnect()
             status.value = self._widget_status()
 
-        pc = PeriodicCallback(update, 500, io_loop=self.loop)
+        pc = PeriodicCallback(update, 500)  # , io_loop=self.loop)
         self.periodic_callbacks["cluster-repr"] = pc
         pc.start()
 
