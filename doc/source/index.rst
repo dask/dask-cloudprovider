@@ -242,9 +242,9 @@ Let's keep everything in one place so it's easy to maintain.
    name = "dask-azureml"
 
    ### vnet settings
-   vnet_rg = ws.resource_group
-   vnet_name = "dask_azureml_vnet"
-   subnet_name = "default"
+   # vnet_rg = ws.resource_group
+   # vnet_name = "dask_azureml_vnet"
+   # subnet_name = "default"
 
    ### azure ml names: ct - compute target, env - environment
    ct_name = "dask-ct"
