@@ -368,7 +368,7 @@ class AzureMLCluster(Cluster):
                 logger.exception(message)
                 raise Exception(message)
             else:
-                uri = f"127.0.0.1:{self.scheduler_port}"
+                uri = f"localhost:{self.scheduler_port}"
                 logger.info(f"Local connection: {uri}")
                 return uri
         else:
@@ -437,7 +437,7 @@ class AzureMLCluster(Cluster):
         self.__print_message(f"Scaling is done")
 
     async def __update_links(self):
-        hostname = "127.0.0.1"
+        hostname = "localhost"
         location = self.workspace.get_details()["location"]
         token = self.run.get_metrics()["token"]
 
