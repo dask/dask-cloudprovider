@@ -93,6 +93,8 @@ an `Azure subscription <https://azure.microsoft.com/en-us/free/services/machine-
 an `AzureML workspace <https://docs.microsoft.com/en-us/python/api/azureml-core/azureml.core.workspace.workspace?view=azure-ml-py>`_, and
 a `quota <https://docs.microsoft.com/en-us/azure/azure-resource-manager/management/azure-subscription-service-limits>`_ to create your compute target.
 
+Connecting via SSH key pair does not work on Windows Subsystem for Linux (WSL). It is recommended to use a Compute Instance <https://aka.ms/aml/computeinstance> on the same Azure Virtual Network as the Dask cluster.
+
 Getting started
 ^^^^^^^^^^^^^^^
 
