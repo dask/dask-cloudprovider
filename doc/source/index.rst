@@ -244,12 +244,12 @@ Let's keep everything in one place so it's easy to maintain.
    name = "dask-azureml"
 
    ### vnet settings
-   vnet_rg = ws.resource_group
-   vnet_name = "dask_azureml_vnet"
-   subnet_name = "default"
+   # vnet_rg = ws.resource_group
+   # vnet_name = "dask_azureml_vnet"
+   # subnet_name = "default"
 
    ### azure ml names: ct - compute target, env - environment
-   ct_name  = "dask-ct"
+   ct_name = "dask-ct"
    env_name = "AzureML-Dask-CPU"
 
 If you are running from an AzureML Compute Instance (Jupyter Lab) you should put both,
@@ -283,26 +283,25 @@ and `Linux <https://azure.microsoft.com/en-us/pricing/details/virtual-machines/l
    # In this example, we will use ``STANDARD_DS12_V2`` VM because it is cheaper than others
    vm_name = "STANDARD_DS12_V2"
 
-   ### UNCOMMENT BELOW FOR LOCAL RUNS
-   # with open(admin_ssh_key_pub, "r") as f:
-   #    ssh_key_pub = f.read().strip()
+   with open(admin_ssh_key_pub, "r") as f:
+      ssh_key_pub = f.read().strip()
 
    if ct_name not in ws.compute_targets:
       # create config for Azure ML cluster
       # change properties as needed
       config = AmlCompute.provisioning_configuration(
-         vm_size=vm_name,
-         min_nodes=0,
-         max_nodes=2,
-         vnet_resourcegroup_name=vnet_rg,
-         vnet_name=vnet_name,
-         subnet_name=subnet_name,
-         idle_seconds_before_scaledown=300,
+         vm_size=vm_name
+         , min_nodes=0
+         , max_nodes=2
+         , idle_seconds_before_scaledown=300
+         , admin_username=admin_username
+         , admin_user_ssh_key=ssh_key_pub
+         , remote_login_port_public_access='Enabled'
 
-         ### UNCOMMENT BELOW FOR LOCAL RUNS
-         # admin_username=admin_username,
-         # admin_user_ssh_key=ssh_key_pub,
-         # remote_login_port_public_access='Enabled',
+         ## UNCOMMENT TO SETUP VIRTUAL NETWORK
+         # , vnet_resourcegroup_name=vnet_rg
+         # , vnet_name=vnet_name
+         # , subnet_name=subnet_name
       )
       ct = ComputeTarget.create(ws, ct_name, config)
       ct.wait_for_completion(show_output=True)
@@ -356,13 +355,11 @@ To create cluster:
 
    amlcluster = AzureMLCluster(
       workspace=ws,
-      compute_target=ct,
-      environment_definition=env,
-      initial_node_count=2,
-
-      ### UNCOMMENT BELOW FOR LOCAL RUNS
-      # admin_username=admin_username,
-      # admin_ssh_key=admin_ssh_key_priv   ### path, not contents of the key
+      , compute_target=ct
+      , environment_definition=env
+      , initial_node_count=2
+      , admin_username=admin_username
+      , admin_ssh_key=admin_ssh_key_priv   ### path, not contents of the key
    )
 
 Once the cluster has started, the Dask Cluster widget will print out two links:
