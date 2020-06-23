@@ -437,7 +437,7 @@ class AzureMLCluster(Cluster):
         self.__print_message(f"Scaling is done")
 
     async def __update_links(self):
-        hostname = "localhost"
+        hostname = socket.gethostname()
         location = self.workspace.get_details()["location"]
         token = self.run.get_metrics()["token"]
 
@@ -450,6 +450,7 @@ class AzureMLCluster(Cluster):
                 "jupyter_url"
             ] = f"https://{hostname}-{self.jupyter_port}.{location}.instances.azureml.net/lab?token={token}"
         else:
+            hostname = "localhost"
             self.scheduler_info[
                 "dashboard_url"
             ] = f"http://{hostname}:{self.dashboard_port}"
