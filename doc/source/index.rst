@@ -369,7 +369,7 @@ Once the cluster has started, the Dask Cluster widget will print out two links:
 2. Dask Dashboard link.
 
 You can stop the cluster with `amlcluster.close()`. The cluster will automatically spin down if unused for 20 minutes by default.
-Alternatively, you can delete the Azure ML Compute Target or cancel the Run to stop the cluster.  
+Alternatively, you can delete the Azure ML Compute Target or cancel the Run from the Python SDK or UI to stop the cluster.  
 
 .. toctree::
    :maxdepth: 3
