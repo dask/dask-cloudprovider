@@ -438,11 +438,12 @@ class AzureMLCluster(Cluster):
         self.__print_message(f"Scaling is done")
 
     async def __update_links(self):
-        hostname = socket.gethostname()
-        location = self.workspace.get_details()["location"]
         token = self.run.get_metrics()["token"]
 
         if self.same_vnet:
+            hostname = socket.gethostname()
+            location = self.workspace.get_details()["location"]
+
             self.scheduler_info[
                 "dashboard_url"
             ] = f"https://{hostname}-{self.dashboard_port}.{location}.instances.azureml.net/status"
