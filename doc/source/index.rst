@@ -192,9 +192,9 @@ Azure
 -----
 
 In order to start using ``dask_cloudprovider.AzureMLCluster`` you need, at a minimum,
-an `Azure subscription <https://azure.microsoft.com/en-us/free/services/machine-learning/>`_,
-an `AzureML workspace <https://docs.microsoft.com/en-us/python/api/azureml-core/azureml.core.workspace.workspace?view=azure-ml-py>`_, and
-a `quota <https://docs.microsoft.com/en-us/azure/azure-resource-manager/management/azure-subscription-service-limits>`_ to create your compute target.
+an `Azure subscription <https://azure.microsoft.com/free/services/machine-learning/>`_,
+an `AzureML workspace <https://docs.microsoft.com/python/api/azureml-core/azureml.core.workspace.workspace?view=azure-ml-py>`_, and
+a `quota <https://docs.microsoft.com/azure/azure-resource-manager/management/azure-subscription-service-limits>`_ to create your compute target.
 
 Getting started
 ^^^^^^^^^^^^^^^
@@ -218,7 +218,9 @@ Setup
 ~~~~~
 
 Next, create the ``Workspace`` object given your AzureML ``Workspace`` parameters. Check
-more in the AzureML documentation for `Workspace <https://docs.microsoft.com/en-us/python/api/azureml-core/azureml.core.workspace.workspace?view=azure-ml-py>`_.
+more in the AzureML documentation for `Workspace <https://docs.microsoft.com/python/api/azureml-core/azureml.core.workspace.workspace?view=azure-ml-py>`_.
+
+You can use ``ws = Workspace.from_config()`` after downloading the config file from the Azure Portal or ML studio. 
 
 .. code-block:: python
 
@@ -251,9 +253,9 @@ Let's keep everything in one place so it's easy to maintain.
    env_name = "AzureML-Dask-CPU"
 
 If you are running from an AzureML Compute Instance (Jupyter Lab) you should put both,
-the ``ComputeTarget`` (see `Compute Target <https://docs.microsoft.com/en-us/python/api/azureml-core/azureml.core.compute.computetarget?view=azure-ml-py>`_ documentation page) 
+the ``ComputeTarget`` (see `Compute Target <https://docs.microsoft.com/python/api/azureml-core/azureml.core.compute.computetarget?view=azure-ml-py>`_ documentation page) 
 and the Compute Instance on the
-same `virtual network <https://docs.microsoft.com/en-us/azure/virtual-network/virtual-networks-overview>`_.
+same `virtual network <https://docs.microsoft.com/azure/virtual-network/virtual-networks-overview>`_.
 
 The ``AzureMLCluster`` class allows you to submit the job from your local machine as well (tested on DOS CLI and bash). In such case it is not necesary to 
 for the Compute Target to be on a virtual network (it is still preferred to hide the cluster in a virtual network). 
@@ -273,8 +275,8 @@ Create Compute Target
 ~~~~~~~~~~~~~~~~~~~~~
 
 Next, let's create or retrieve already existing compute target. For a full list of
-VMs check here: `Windows <https://azure.microsoft.com/en-us/pricing/details/virtual-machines/windows/>`_ 
-and `Linux <https://azure.microsoft.com/en-us/pricing/details/virtual-machines/linux/>`_.
+VMs check here: `Windows <https://azure.microsoft.com/pricing/details/virtual-machines/windows/>`_ 
+and `Linux <https://azure.microsoft.com/pricing/details/virtual-machines/linux/>`_.
 
 .. code-block:: python
 
@@ -312,7 +314,7 @@ Setting up vnet
 """""""""""""""
 If you do not have a virtual network yet there are two ways to create one.
 
-1. Using `https://azure.portal.com <https://azure.portal.com>`_:
+1. Using `https://portal.azure.com <https://portal.azure.com>`_:
 
    a. On the home page click on `+ Create a resource` on the top-left portion of the page.
    b. Search for `Virtual Network`.
@@ -325,8 +327,8 @@ If you do not have a virtual network yet there are two ways to create one.
 2. Using Azure CLI:
 
    a. Install the AzureCLI; instructions are here: 
-      `https://docs.microsoft.com/en-us/cli/azure/install-azure-cli?view=azure-cli-latest 
-      <https://docs.microsoft.com/en-us/cli/azure/install-azure-cli?view=azure-cli-latest>`_
+      `https://docs.microsoft.com/cli/azure/install-azure-cli?view=azure-cli-latest 
+      <https://docs.microsoft.com/cli/azure/install-azure-cli?view=azure-cli-latest>`_
    b. Open terminal and login to your Azure Subscription: ``az login``. This should 
       automatically log you in into your Azure subscription. **NOTE:** If you have more than 
       one subscription you will need to set the right subscription to use:
@@ -337,11 +339,12 @@ If you do not have a virtual network yet there are two ways to create one.
 Define Environment
 ~~~~~~~~~~~~~~~~~~
 
-For the `Environment <https://docs.microsoft.com/en-us/python/api/azureml-core/azureml.core.environment.environment?view=azure-ml-py>`_  
+For the `Environment <https://docs.microsoft.com/python/api/azureml-core/azureml.core.environment.environment?view=azure-ml-py>`_  
 we will use a AzureML curated environment for running Dask CPU cluster, the `AzureML-Dask-CPU`. 
 However, the ``Environment`` class allows you to specify your own docker image and additional packages to install.
 
 .. code-block:: python
+
    env = ws.environments[env_name]
 
 Create cluster
@@ -352,7 +355,7 @@ To create cluster:
 .. code-block:: python
 
    amlcluster = AzureMLCluster(
-      workspace=ws,
+      workspace=ws
       , compute_target=ct
       , environment_definition=env
       , initial_node_count=2
@@ -364,6 +367,9 @@ Once the cluster has started, the Dask Cluster widget will print out two links:
 
 1. Jupyter link to a Jupyter Lab instance running on the headnode.
 2. Dask Dashboard link.
+
+You can stop the cluster with `amlcluster.close()`. The cluster will automatically spin down if unused for 20 minutes by default.
+Alternatively, you can delete the Azure ML Compute Target or cancel the Run to stop the cluster.  
 
 .. toctree::
    :maxdepth: 3
