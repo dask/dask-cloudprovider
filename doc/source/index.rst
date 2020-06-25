@@ -208,7 +208,7 @@ First, import all necessary modules.
 
 .. code-block:: python
 
-   from azureml.core import Workspace, Environment
+   from azureml.core import Workspace
    from azureml.core.compute import ComputeTarget, AmlCompute
    
    from dask_cloudprovider import AzureMLCluster
