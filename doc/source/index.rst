@@ -213,8 +213,6 @@ First, import all necessary modules.
    
    from dask_cloudprovider import AzureMLCluster
 
-   import os
-
 Setup
 ~~~~~
 
