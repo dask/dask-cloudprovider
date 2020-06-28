@@ -563,6 +563,19 @@ class ECSCluster(SpecCluster):
         Whether to use a private IP (if True) or public IP (if False) with Fargate.
         
         Default ``False``.
+    mount_points: list (optional)
+        List of mount points as documented here: https://docs.aws.amazon.com/AmazonECS/latest/developerguide/efs-volumes.html
+
+        Default ``None``.
+    volumes: list (optional)
+        List of volumes as documented here: https://docs.aws.amazon.com/AmazonECS/latest/developerguide/efs-volumes.html
+
+        Default ``None``.
+    mount_volumes_on_scheduler: bool (optional)
+        Whether to also mount volumes in the scheduler task. Any volumes and mount points specified will always be
+        mounted in worker tasks. This setting controls whether volumes are also mounted in the scheduler task.
+
+        Default ``False``.
     **kwargs: dict
         Additional keyword arguments to pass to ``SpecCluster``.
 
@@ -605,6 +618,9 @@ class ECSCluster(SpecCluster):
         region_name=None,
         platform_version=None,
         fargate_use_private_ip=False,
+        mount_points=None,
+        volumes=None,
+        mount_volumes_on_scheduler=False,
         **kwargs
     ):
         self._fargate_scheduler = fargate_scheduler
@@ -636,6 +652,9 @@ class ECSCluster(SpecCluster):
         self._find_address_timeout = find_address_timeout
         self._skip_cleanup = skip_cleanup
         self._fargate_use_private_ip = fargate_use_private_ip
+        self._mount_points = mount_points
+        self._volumes = volumes
+        self._mount_volumes_on_scheduler = mount_volumes_on_scheduler
         self._aws_access_key_id = aws_access_key_id
         self._aws_secret_access_key = aws_secret_access_key
         self._region_name = region_name
@@ -1067,9 +1086,14 @@ class ECSCluster(SpecCluster):
                                 "awslogs-create-group": "true",
                             },
                         },
+                        "mountPoints": self._mount_points
+                        if self._mount_points and self._mount_volumes_on_scheduler
+                        else [],
                     }
                 ],
-                volumes=[],
+                volumes=self._volumes
+                if self._volumes and self._mount_volumes_on_scheduler
+                else [],
                 requiresCompatibilities=["FARGATE"] if self._fargate_scheduler else [],
                 cpu=str(self._scheduler_cpu),
                 memory=str(self._scheduler_mem),
@@ -1128,9 +1152,10 @@ class ECSCluster(SpecCluster):
                                 "awslogs-create-group": "true",
                             },
                         },
+                        "mountPoints": self._mount_points if self._mount_points else [],
                     }
                 ],
-                volumes=[],
+                volumes=self._volumes if self._volumes else [],
                 requiresCompatibilities=["FARGATE"] if self._fargate_workers else [],
                 cpu=str(self._worker_cpu),
                 memory=str(self._worker_mem),
