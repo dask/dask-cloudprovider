@@ -405,8 +405,8 @@ class AzureMLCluster(Cluster):
         if run.status == "Canceled" or run.status == "Failed":
             run_details = run.get_details()
             error_msg = run_details["error"]
-            logger.exception("Failed to start the AzureML cluster: {}".format(error_message))
-            raise Exception("Failed to start the AzureML cluster: {}".format(error_message))
+            logger.exception("Failed to start the AzureML cluster: {}".format(error_msg))
+            raise Exception("Failed to start the AzureML cluster: {}".format(error_msg))
 
         print("\n\n")
 
