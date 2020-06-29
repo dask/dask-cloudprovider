@@ -3,18 +3,16 @@ from azureml.core.compute import AmlCompute
 from azureml.train.estimator import Estimator
 from azureml.core.runconfig import MpiConfiguration
 
-import json
-import os
-from pathlib import Path
 import time, os, socket, subprocess, logging
-
-from distributed.deploy.cluster import Cluster
-from distributed.core import rpc, CommClosedError
-from contextlib import suppress
-import threading
-import dask
 import pathlib
+import threading
 
+from contextlib import suppress
+
+import dask
+from contextlib import suppress
+from distributed.deploy.cluster import Cluster
+from distributed.core import rpc
 from distributed.utils import (
     LoopRunner,
     log_errors,
@@ -24,11 +22,6 @@ from tornado.ioloop import PeriodicCallback
 
 logger = logging.getLogger(__name__)
 
-try:
-    from azureml._base_sdk_common.user_agent import append
-    append('AzureMLCluster-DASK', '0.1')
-except:
-    pass
 
 class AzureMLCluster(Cluster):
     """ Deploy a Dask cluster using Azure ML
@@ -76,6 +69,16 @@ class AzureMLCluster(Cluster):
 
         Defaults to ``9002``.
 
+    scheduler_idle_timeout: int (optional)
+        Number of idle seconds leading to scheduler shut down.
+
+        Defaults to ``1200`` (20 minutes).
+
+    worker_death_timeout: int (optional)
+        Number of seconds to wait for a worker to respond before removing it.
+
+        Defaults to ``30``.
+
     additional_ports: list[tuple[int, int]] (optional)
         Additional ports to forward. This requires a list of tuples where the first element
         is the port to open on the headnode while the second element is the port to map to
@@ -106,6 +109,13 @@ class AzureMLCluster(Cluster):
         Defaults to ``[]``. To mount all datastores in the workspace,
         set to ``[ws.datastores[datastore] for datastore in ws.datastores]``.
 
+    telemetry_opt_out: bool (optional)
+        A boolean parameter. Defaults to logging a version of AzureMLCluster
+        with Microsoft. Set this flag to False if you do not want to share this
+        information with Microsoft. Microsoft is not tracking anything else you
+        do in your Dask cluster nor any other information related to your
+        workload.
+
     asynchronous: bool (optional)
         Flag to run jobs asynchronously.
 
@@ -116,11 +126,10 @@ class AzureMLCluster(Cluster):
     def __init__(
         self,
         workspace,
-        environment_definition,
         compute_target,
+        environment_definition,
         experiment_name=None,
         initial_node_count=None,
-        run=None,
         jupyter=None,
         jupyter_port=None,
         dashboard_port=None,
@@ -132,6 +141,7 @@ class AzureMLCluster(Cluster):
         admin_ssh_key=None,
         datastores=None,
         code_store=None,
+        telemetry_opt_out=None,
         asynchronous=False,
         **kwargs,
     ):
@@ -142,13 +152,16 @@ class AzureMLCluster(Cluster):
 
         ### EXPERIMENT DEFINITION
         self.experiment_name = experiment_name
-        self.tags = {"tag" : "azureml-dask"}
+        self.tags = {"tag": "azureml-dask"}
 
         ### ENVIRONMENT AND VARIABLES
         self.initial_node_count = initial_node_count
-        self.parent_run = run
 
-        ## GPU RUN INFO
+        ### SEND TELEMETRY
+        self.telemetry_opt_out = telemetry_opt_out
+        self.telemetry_set = False
+
+        ### GPU RUN INFO
         self.workspace_vm_sizes = AmlCompute.supported_vmsizes(self.workspace)
         self.workspace_vm_sizes = [
             (e["name"].lower(), e["gpus"]) for e in self.workspace_vm_sizes
@@ -167,9 +180,9 @@ class AzureMLCluster(Cluster):
         self.dashboard_port = dashboard_port
         self.scheduler_port = scheduler_port
         self.scheduler_idle_timeout = scheduler_idle_timeout
-        self.worker_death_timeout = worker_death_timeout
         self.portforward_proc = None
-        self.end_logging = False
+        self.worker_death_timeout = worker_death_timeout
+        self.end_logging = False  # FLAG FOR STOPPING THE port_forward_logger THREAD
 
         if additional_ports is not None:
             if type(additional_ports) != list:
@@ -238,6 +251,10 @@ class AzureMLCluster(Cluster):
         if not self.asynchronous:
             self._loop_runner.start()
             self.sync(self.__get_defaults)
+
+            if not self.telemetry_opt_out:
+                self.__append_telemetry()
+
             self.sync(self.__create_cluster)
 
     async def __get_defaults(self):
@@ -279,6 +296,9 @@ class AzureMLCluster(Cluster):
         if self.datastores is None:
             self.datastores = self.config.get("datastores")
 
+        if self.telemetry_opt_out is None:
+            self.telemetry_opt_out = self.config.get("telemetry_opt_out")
+
         ### PARAMETERS TO START THE CLUSTER
         self.scheduler_params = {}
         self.worker_params = {}
@@ -295,9 +315,9 @@ class AzureMLCluster(Cluster):
             self.worker_params["--n_gpus_per_node"] = self.n_gpus_per_node
 
         ### CLUSTER PARAMS
-        self.max_nodes = 100 #self.compute_target.serialize()["properties"]["properties"][
-        #     "scaleSettings"
-        # ]["maxNodeCount"]
+        self.max_nodes = self.compute_target.serialize()["properties"]["properties"][
+            "scaleSettings"
+        ]["maxNodeCount"]
         self.scheduler_ip_port = None
         self.workers_list = []
         self.URLs = {}
@@ -306,6 +326,16 @@ class AzureMLCluster(Cluster):
         ###-----> initial node count
         if self.initial_node_count > self.max_nodes:
             self.initial_node_count = self.max_nodes
+
+    def __append_telemetry(self):
+        if not self.telemetry_set:
+            self.telemetry_set = True
+            try:
+                from azureml._base_sdk_common.user_agent import append
+
+                append("AzureMLCluster-DASK", "0.1")
+            except ImportError:
+                pass
 
     def __print_message(self, msg, length=80, filler="#", pre_post=""):
         logger.info(msg)
@@ -339,7 +369,7 @@ class AzureMLCluster(Cluster):
                 logger.exception(message)
                 raise Exception(message)
             else:
-                uri = f"{socket.gethostname()}:{self.scheduler_port}"
+                uri = f"localhost:{self.scheduler_port}"
                 logger.info(f"Local connection: {uri}")
                 return uri
         else:
@@ -347,62 +377,44 @@ class AzureMLCluster(Cluster):
 
     async def __create_cluster(self):
         self.__print_message("Setting up cluster")
-        run = None
-        if self.parent_run:
-            ## scheduler run as child run
-            run_config = RunConfiguration()
-            run_config.environment = self.environment_definition
-            args = []
-            for key, value in self.scheduler_params.items():
-                args.append(f"{key}={value}")
+        exp = Experiment(self.workspace, self.experiment_name)
+        estimator = Estimator(
+            os.path.join(self.abs_path, "setup"),
+            compute_target=self.compute_target,
+            entry_script="start_scheduler.py",
+            environment_definition=self.environment_definition,
+            script_params=self.scheduler_params,
+            node_count=1,  ### start only scheduler
+            distributed_training=MpiConfiguration(),
+            use_docker=True,
+            inputs=self.datastores,
+        )
 
-            child_run_config = ScriptRunConfig(
-                source_directory=os.path.join(self.abs_path, "setup"),
-                script="start_scheduler.py",
-                arguments=args,
-                run_config=run_config,
-            )
-
-            run = self.parent_run.submit_child(child_run_config, tags=self.tags)
-        else:
-            # submit scheduler run
-            exp = Experiment(self.workspace, self.experiment_name)
-            estimator = Estimator(
-                os.path.join(self.abs_path, "setup"),
-                compute_target=self.compute_target,
-                entry_script="start_scheduler.py",
-                environment_definition=self.environment_definition,
-                script_params=self.scheduler_params,
-                node_count=1,  ### start only scheduler
-                distributed_training=MpiConfiguration(),
-                use_docker=True,
-                inputs=self.datastores,
-            )
-
-            run = exp.submit(estimator, tags=self.tags)
+        run = exp.submit(estimator, tags=self.tags)
 
         self.__print_message("Waiting for scheduler node's IP")
-
         while (
-            run.get_status() != "Canceled"
-            and run.get_status() != "Failed"
+            run.status != "Canceled"
+            and run.status != "Failed"
             and "scheduler" not in run.get_metrics()
         ):
             print(".", end="")
             logger.info("Scheduler not ready")
             time.sleep(5)
 
-        if run.get_status() == "Canceled" or run.get_status() == "Failed":
-            logger.exception("Failed to start the AzureML cluster")
-            raise Exception("Failed to start the AzureML cluster.")
+        if run.status == "Canceled" or run.status == "Failed":
+            run_details = run.get_details()
+            error_msg = run_details["error"]
+            logger.exception("Failed to start the AzureML cluster: {}".format(error_message))
+            raise Exception("Failed to start the AzureML cluster: {}".format(error_message))
 
-        self.run = run
         print("\n\n")
 
         ### SET FLAGS
         self.scheduler_ip_port = run.get_metrics()["scheduler"]
         self.worker_params["--scheduler_ip_port"] = self.scheduler_ip_port
         self.__print_message(f'Scheduler: {run.get_metrics()["scheduler"]}')
+        self.run = run
 
         logger.info(f'Scheduler: {run.get_metrics()["scheduler"]}')
 
@@ -410,7 +422,7 @@ class AzureMLCluster(Cluster):
         while self.same_vnet is None:
             await self.sync(self.__check_if_scheduler_ip_reachable)
             time.sleep(1)
-               
+
         ### REQUIRED BY dask.distributed.deploy.cluster.Cluster
         _scheduler = self.__prepare_rpc_connection_to_headnode()
         self.scheduler_comm = rpc(_scheduler)
@@ -418,22 +430,22 @@ class AzureMLCluster(Cluster):
         await self.sync(super()._start)
         await self.sync(self.__update_links)
 
-        self.__print_message("Connections established") 
+        self.__print_message("Connections established")
         self.__print_message(f"Scaling to {self.initial_node_count} workers")
 
-        # LOGIC TO KEEP PROPER TRACK OF WORKERS IN `scale`
         if self.initial_node_count > 1:
             self.scale(
                 self.initial_node_count
-            )
+            )  # LOGIC TO KEEP PROPER TRACK OF WORKERS IN `scale`
         self.__print_message(f"Scaling is done")
 
     async def __update_links(self):
-        hostname = socket.gethostname()
-        location = self.workspace.get_details()["location"]
         token = self.run.get_metrics()["token"]
 
         if self.same_vnet:
+            hostname = socket.gethostname()
+            location = self.workspace.get_details()["location"]
+
             self.scheduler_info[
                 "dashboard_url"
             ] = f"https://{hostname}-{self.dashboard_port}.{location}.instances.azureml.net/status"
@@ -442,6 +454,7 @@ class AzureMLCluster(Cluster):
                 "jupyter_url"
             ] = f"https://{hostname}-{self.jupyter_port}.{location}.instances.azureml.net/lab?token={token}"
         else:
+            hostname = "localhost"
             self.scheduler_info[
                 "dashboard_url"
             ] = f"http://{hostname}:{self.dashboard_port}"
@@ -451,7 +464,6 @@ class AzureMLCluster(Cluster):
 
         logger.info(f'Dashboard URL: {self.scheduler_info["dashboard_url"]}')
         logger.info(f'Jupyter URL:   {self.scheduler_info["jupyter_url"]}')
-
 
     def __port_forward_logger(self, portforward_proc):
         portforward_log = open("portforward_out_log.txt", "w")
@@ -491,7 +503,10 @@ class AzureMLCluster(Cluster):
             scheduler_public_ip = self.compute_target.list_nodes()[0]["publicIpAddress"]
             scheduler_public_port = self.compute_target.list_nodes()[0]["port"]
             self.__print_message("scheduler_public_ip: {}".format(scheduler_public_ip))
-            self.__print_message("scheduler_public_port: {}".format(scheduler_public_port))
+            self.__print_message(
+                "scheduler_public_port: {}".format(scheduler_public_port)
+            )
+
             cmd = (
                 "ssh -vvv -o StrictHostKeyChecking=no -N"
                 f" -i {os.path.expanduser(self.admin_ssh_key)}"
@@ -504,7 +519,7 @@ class AzureMLCluster(Cluster):
                 cmd += f" -L 0.0.0.0:{port[1]}:{scheduler_ip}:{port[0]}"
 
             cmd += f" {self.admin_username}@{scheduler_public_ip} -p {scheduler_public_port}"
-            self.__print_message("cmd: {}".format(cmd))
+
             self.portforward_proc = subprocess.Popen(
                 cmd.split(),
                 universal_newlines=True,
@@ -694,7 +709,7 @@ class AzureMLCluster(Cluster):
             self.close_when_disconnect()
             status.value = self._widget_status()
 
-        pc = PeriodicCallback(update, 500, io_loop=self.loop)
+        pc = PeriodicCallback(update, 500)  # , io_loop=self.loop)
         self.periodic_callbacks["cluster-repr"] = pc
         pc.start()
 
@@ -702,9 +717,9 @@ class AzureMLCluster(Cluster):
 
     def close_when_disconnect(self):
         if (
-            self.run.get_status() == "Canceled"
-            or self.run.get_status() == "Completed"
-            or self.run.get_status() == "Failed"
+            self.run.status == "Canceled"
+            or self.run.status == "Completed"
+            or self.run.status == "Failed"
         ):
             self.scale_down(len(self.workers_list))
 
@@ -758,8 +773,8 @@ class AzureMLCluster(Cluster):
         for i in range(workers):
             if self.workers_list:
                 child_run = self.workers_list.pop(0)  # deactive oldest workers
-                child_run.complete()
-                child_run.cancel()  # complete() will mark the run "Complete", but won't kill the process
+                child_run.complete()  # complete() will mark the run "Complete", but won't kill the process
+                child_run.cancel()
             else:
                 self.__print_message("All scaled workers are removed.")
 
@@ -767,27 +782,24 @@ class AzureMLCluster(Cluster):
     async def _close(self):
         if self.status == "closed":
             return
-        self.__print_message("Disconnecting all workers.")
         while self.workers_list:
             child_run = self.workers_list.pop()
             child_run.complete()
             child_run.cancel()
 
-        self.__print_message("Disconnecting scheduler.")
         if self.run:
             self.run.complete()
             self.run.cancel()
 
         self.status = "closed"
-
         self.__print_message("Scheduler and workers are disconnected.")
 
         if self.portforward_proc is not None:
             ### STOP LOGGING SSH
             self.portforward_proc.terminate()
             self.end_logging = True
-        time.sleep(30)
 
+        time.sleep(30)
         await super()._close()
 
     def close(self):
