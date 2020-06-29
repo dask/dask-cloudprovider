@@ -393,20 +393,26 @@ class AzureMLCluster(Cluster):
         run = exp.submit(estimator, tags=self.tags)
 
         self.__print_message("Waiting for scheduler node's IP")
+        status = run.get_status()
         while (
-            run.status != "Canceled"
-            and run.status != "Failed"
+            status != "Canceled"
+            and status != "Failed"
             and "scheduler" not in run.get_metrics()
         ):
             print(".", end="")
             logger.info("Scheduler not ready")
             time.sleep(5)
+            status = run.get_status()
 
-        if run.status == "Canceled" or run.status == "Failed":
-            run_details = run.get_details()
-            error_msg = run_details["error"]
-            logger.exception("Failed to start the AzureML cluster: {}".format(error_msg))
-            raise Exception("Failed to start the AzureML cluster: {}".format(error_msg))
+        if status == "Canceled" or status == "Failed":
+            run_error = run.get_details().get("error")
+            error_message = "Failed to start the AzureML cluster."
+
+            if run_error:
+                error_message = "{} {}".format(error_message, run_error)
+
+            logger.exception(error_message)
+            raise Exception(error_message)
 
         print("\n\n")
 
@@ -716,10 +722,11 @@ class AzureMLCluster(Cluster):
         return box
 
     def close_when_disconnect(self):
+        status = self.run.get_status()
         if (
-            self.run.status == "Canceled"
-            or self.run.status == "Completed"
-            or self.run.status == "Failed"
+            status == "Canceled"
+            or status == "Completed"
+            or status == "Failed"
         ):
             self.scale_down(len(self.workers_list))
 
