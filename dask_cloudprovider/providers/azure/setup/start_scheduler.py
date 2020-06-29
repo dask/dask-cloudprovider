@@ -39,8 +39,8 @@ if __name__ == "__main__":
     parser.add_argument("--jupyter_port", default=8888)
     parser.add_argument("--dashboard_port", default=8787)
     parser.add_argument("--scheduler_port", default=8786)
-    parser.add_argument("--scheduler_idle_timeout", default=2400)  # 5 mins
-    parser.add_argument("--worker_death_timeout", default=300)  # 30 seconds
+    parser.add_argument("--scheduler_idle_timeout", default=1200)  # 20 mins
+    parser.add_argument("--worker_death_timeout", default=300)  # 5 mins
     parser.add_argument("--use_gpu", default=False)
     parser.add_argument("--n_gpus_per_node", default=0)
 
@@ -109,7 +109,7 @@ if __name__ == "__main__":
     workspace_name = run.experiment.workspace.name.lower()
     run_id = run.get_details()["runId"]
 
-    mount_point = f"/mnt/batch/tasks/shared/LS_root/jobs/{workspace_name}/azureml/{run_id}/mounts/"
+    mount_point = f"/mnt/batch/tasks/shared/LS_root/jobs/{workspace_name}/azureml/{run_id.lower()}/mounts/"
 
     if args.jupyter:
         cmd = (
