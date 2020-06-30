@@ -723,11 +723,7 @@ class AzureMLCluster(Cluster):
 
     def close_when_disconnect(self):
         status = self.run.get_status()
-        if (
-            status == "Canceled"
-            or status == "Completed"
-            or status == "Failed"
-        ):
+        if status == "Canceled" or status == "Completed" or status == "Failed":
             self.scale_down(len(self.workers_list))
 
     def scale(self, workers=1):
