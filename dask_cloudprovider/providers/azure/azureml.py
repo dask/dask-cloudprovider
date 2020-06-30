@@ -431,8 +431,13 @@ class AzureMLCluster(Cluster):
             time.sleep(1)
             max_retry -= 1
         if max_retry <= 0:
-            self.__print_message("Connection error after retrying.")
             self.run.cancel()
+            logger.exception(
+                "Connection error after retrying. Failed to start the AzureML cluster."
+            )
+            self.__print_message(
+                "Connection error after retrying. Failed to start the AzureML cluster."
+            )
             return
 
         ### REQUIRED BY dask.distributed.deploy.cluster.Cluster
