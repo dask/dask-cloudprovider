@@ -432,7 +432,7 @@ class AzureMLCluster(Cluster):
             max_retry -= 1
         if max_retry <= 0:
             self.__print_message("Connection error after retrying.")
-            self.close()
+            self.run.cancel()
 
         ### REQUIRED BY dask.distributed.deploy.cluster.Cluster
         _scheduler = self.__prepare_rpc_connection_to_headnode()
