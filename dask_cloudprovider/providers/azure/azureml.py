@@ -423,7 +423,10 @@ class AzureMLCluster(Cluster):
         with open(pri_key_file, "wb") as f:
             f.write(private_key)
 
-        return public_key, pri_key_file
+        with open(pub_key_file, 'r') as f:
+            pubkey = f.read()
+
+        return pubkey, pri_key_file
 
     def __create_compute_target(self):
         import random
