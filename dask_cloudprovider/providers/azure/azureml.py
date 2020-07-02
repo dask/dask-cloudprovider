@@ -165,13 +165,19 @@ class AzureMLCluster(Cluster):
         self.telemetry_opt_out = telemetry_opt_out
         self.telemetry_set = False
 
+        ### FUTURE EXTENSIONS
+        self.kwargs = kwargs
+
         ## CREATE COMPUTE TARGET
+        self.admin_username = admin_username
+        self.admin_ssh_key = admin_ssh_key
         self.vnet = vnet
         self.subnet = subnet
         if self.compute_target is None:
             try:
-                self.compute_target = self.__create_compute_target(self.vnet, self.subnet)
-            except Exception:
+                self.compute_target = self.__create_compute_target()
+            except Exception as e:
+                logger.exception(e)
                 return
 
         ### GPU RUN INFO
@@ -188,9 +194,13 @@ class AzureMLCluster(Cluster):
         self.use_gpu = True if self.n_gpus_per_node > 0 else False
         if self.environment_definition is None:
             if self.use_gpu:
-                self.environment_definition = self.workspace.environments["AzureML-Dask-GPU"]
+                self.environment_definition = self.workspace.environments[
+                    "AzureML-Dask-GPU"
+                ]
             else:
-                self.environment_definition = self.workspace.environments["AzureML-Dask-CPU"]
+                self.environment_definition = self.workspace.environments[
+                    "AzureML-Dask-CPU"
+                ]
 
         ### JUPYTER AND PORT FORWARDING
         self.jupyter = jupyter
@@ -241,18 +251,12 @@ class AzureMLCluster(Cluster):
                     raise TypeError(error_message)
 
         self.additional_ports = additional_ports
-
-        self.admin_username = admin_username
-        self.admin_ssh_key = admin_ssh_key
         self.scheduler_ip_port = (
             None  ### INIT FOR HOLDING THE ADDRESS FOR THE SCHEDULER
         )
 
         ### DATASTORES
         self.datastores = datastores
-
-        ### FUTURE EXTENSIONS
-        self.kwargs = kwargs
 
         ### RUNNING IN MATRIX OR LOCAL
         self.same_vnet = None
@@ -393,12 +397,12 @@ class AzureMLCluster(Cluster):
         from cryptography.hazmat.backends import (
             default_backend as crypto_default_backend,
         )
-        from uuid import uuid4
-        guid = uuid4();
-        dir_path = os.path.join("tmp", str(guid))
+
+        dir_path = os.path.join(os.getcwd(), "tmp")
         if not os.path.exists(dir_path):
             os.makedirs(dir_path)
-        private_key_file = os.path.join(dir_path, "private.key")
+        pub_key_file = os.path.join(dir_path, "key.pub")
+        pri_key_file = os.path.join(dir_path, "key")
 
         key = rsa.generate_private_key(
             backend=crypto_default_backend(), public_exponent=65537, key_size=2048
@@ -413,27 +417,35 @@ class AzureMLCluster(Cluster):
             crypto_serialization.PublicFormat.OpenSSH,
         )
 
-        with open(private_key_file, "wb") as f:
+        with open(pub_key_file, "wb") as f:
+            f.write(public_key)
+
+        with open(pri_key_file, "wb") as f:
             f.write(private_key)
 
-        return public_key, private_key_file
+        return public_key, pri_key_file
 
-    def __create_compute_target(self, vnet, subnet):
-        ct_name = "dask-ct"
-        vm_name = "STANDARD_D13"
-        min_nodes = 0
-        max_nodes = 100
-        idle_time = 300
+    def __create_compute_target(self):
+        import random
+
+        tmp_name = "dask-ct-{}".format(random.randint(1, 1000000))
+        ct_name = self.kwargs.get("ct_name", tmp_name)
+        vm_name = self.kwargs.get("vm_size", "STANDARD_D13")
+        min_nodes = int(self.kwargs.get("min_nodes", "0"))
+        max_nodes = int(self.kwargs.get("max_nodes", "100"))
+        idle_time = int(self.kwargs.get("idle_time", "300"))
         vnet_rg = None
         vnet_name = None
         subnet_name = None
-        self.admin_username = "dask"
+
+        if self.admin_username is None:
+            self.admin_username = "dask"
         ssh_key_pub, self.admin_ssh_key = self.__get_ssh_keys()
 
-        if vnet and subnet:
+        if self.vnet and self.subnet:
             vnet_rg = self.workspace.resource_group
-            vnet_name = vnet
-            subnet_name = subnet
+            vnet_name = self.vnet
+            subnet_name = self.subnet
 
         try:
             if ct_name not in self.workspace.compute_targets:
@@ -450,15 +462,17 @@ class AzureMLCluster(Cluster):
                     remote_login_port_public_access="Enabled",
                 )
 
-                logger.info("Create new compute target: {}".format(ct_name))
-                self.__print_message("Create new compute: {}".format(ct_name))
+                logger.info("Creating new compute target: {}".format(ct_name))
+                self.__print_message("Creating new compute targe: {}".format(ct_name))
                 ct = ComputeTarget.create(self.workspace, ct_name, config)
                 ct.wait_for_completion(show_output=True)
             else:
-                self.__print_message("Use existing compute target: {}".format(ct_name))
+                self.__print_message(
+                    "Using existing compute target: {}".format(ct_name)
+                )
                 ct = self.workspace.compute_targets[ct_name]
         except Exception as e:
-            logger.exception("Cannot create/get compute. {}".format(e))
+            logger.exception("Cannot create/get compute target. {}".format(e))
             raise e
 
         return ct
@@ -635,7 +649,7 @@ class AzureMLCluster(Cluster):
             )
             portforward_logg.start()
 
-            ## remove temp file
+            # remove temp file
             if os.path.isfile(self.admin_ssh_key):
                 os.remove(self.admin_ssh_key)
 
