@@ -1,5 +1,5 @@
 from azureml.core import Experiment, RunConfiguration, ScriptRunConfig
-from azureml.core.compute import AmlCompute
+from azureml.core.compute import AmlCompute, ComputeTarget
 from azureml.train.estimator import Estimator
 from azureml.core.runconfig import MpiConfiguration
 
@@ -127,7 +127,7 @@ class AzureMLCluster(Cluster):
         self,
         workspace,
         compute_target,
-        environment_definition,
+        environment_definition=None,
         experiment_name=None,
         initial_node_count=None,
         jupyter=None,
@@ -141,6 +141,8 @@ class AzureMLCluster(Cluster):
         admin_ssh_key=None,
         datastores=None,
         code_store=None,
+        vnet=None,
+        subnet=None,
         telemetry_opt_out=None,
         asynchronous=False,
         **kwargs,
@@ -148,6 +150,8 @@ class AzureMLCluster(Cluster):
         ### REQUIRED PARAMETERS
         self.workspace = workspace
         self.compute_target = compute_target
+
+        ### ENVIRONMENT
         self.environment_definition = environment_definition
 
         ### EXPERIMENT DEFINITION
@@ -161,6 +165,12 @@ class AzureMLCluster(Cluster):
         self.telemetry_opt_out = telemetry_opt_out
         self.telemetry_set = False
 
+        ## CREATE COMPUTE TARGET
+        self.vnet = vnet
+        self.subnet = subnet
+        if self.compute_target is None:
+            self.compute_target = self.__create_compute_target(self.vnet, self.subnet)
+
         ### GPU RUN INFO
         self.workspace_vm_sizes = AmlCompute.supported_vmsizes(self.workspace)
         self.workspace_vm_sizes = [
@@ -173,6 +183,11 @@ class AzureMLCluster(Cluster):
         ]["vmSize"].lower()
         self.n_gpus_per_node = self.workspace_vm_sizes[self.compute_target_vm_size]
         self.use_gpu = True if self.n_gpus_per_node > 0 else False
+        if self.environment_definition is None:
+            if self.use_gpu:
+                self.environment_definition = "AzureML-Dask-GPU"
+            else:
+                self.environment_definition = "AzureML-Dask-CPU"
 
         ### JUPYTER AND PORT FORWARDING
         self.jupyter = jupyter
@@ -375,6 +390,78 @@ class AzureMLCluster(Cluster):
         else:
             return self.run.get_metrics()["scheduler"]
 
+    def __get_ssh_keys(self):
+        from cryptography.hazmat.primitives import serialization as crypto_serialization
+        from cryptography.hazmat.primitives.asymmetric import rsa
+        from cryptography.hazmat.backends import (
+            default_backend as crypto_default_backend,
+        )
+        from uuid import uuid4
+
+        dir_path = uuid4()
+        if not os.path.exists(dir_path):
+            os.mkdir(dir_path)
+        private_key_file = os.path.join(dir_path, "private.key")
+
+        key = rsa.generate_private_key(
+            backend=crypto_default_backend(), public_exponent=65537, key_size=2048
+        )
+        private_key = key.private_bytes(
+            crypto_serialization.Encoding.PEM,
+            crypto_serialization.PrivateFormat.PKCS8,
+            crypto_serialization.NoEncryption(),
+        )
+        public_key = key.public_key().public_bytes(
+            crypto_serialization.Encoding.OpenSSH,
+            crypto_serialization.PublicFormat.OpenSSH,
+        )
+
+        with open(private_key_file, "wb") as f:
+            f.write(private_key)
+
+        return public_key, private_key_file
+
+    async def __create_compute_target(self, vnet, subnet):
+        ct_name = "dask-ct"
+        vm_name = "STANDARD_D13"
+        min_nodes = 0
+        max_nodes = 100
+        idle_time = 300
+        vnet_rg = None
+        vnet_name = None
+        subnet_name = None
+        self.admin_username = "dask"
+        ssh_key_pub, self.admin_ssh_key = self.__get_ssh_keys()
+
+        if vnet and subnet:
+            vnet_rg = self.workspace.resource_group
+            vnet_name = vnet
+            subnet_name = subnet
+
+        if ct_name not in self.workspace.compute_targets:
+            config = AmlCompute.provisioning_configuration(
+                vm_size=vm_name,
+                min_nodes=min_nodes,
+                max_nodes=max_nodes,
+                vnet_resourcegroup_name=vnet_rg,
+                vnet_name=vnet_name,
+                subnet_name=subnet_name,
+                idle_seconds_before_scaledown=idle_time,
+                admin_username=self.admin_username,
+                dmin_user_ssh_key=ssh_key_pub,
+                remote_login_port_public_access="Enabled",
+            )
+
+            logger.info("Create new compute target: {}".format(ct_name))
+            self.__print_message("Create new compute: {}".format(ct_name))
+            ct = ComputeTarget.create(self.workspace, ct_name, config)
+            ct.wait_for_completion()
+        else:
+            self.__print_message("Use existing compute target: {}".format(ct_name))
+            ct = self.workspace.compute_targets[ct_name]
+
+        return ct
+
     async def __create_cluster(self):
         self.__print_message("Setting up cluster")
         exp = Experiment(self.workspace, self.experiment_name)
@@ -546,6 +633,10 @@ class AzureMLCluster(Cluster):
                 target=self.__port_forward_logger, args=[self.portforward_proc]
             )
             portforward_logg.start()
+
+            ## remove temp file
+            if os.path.isfile(self.admin_ssh_key):
+                os.remove(self.admin_ssh_key)
 
     @property
     def dashboard_link(self):
