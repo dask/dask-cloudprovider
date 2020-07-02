@@ -169,7 +169,10 @@ class AzureMLCluster(Cluster):
         self.vnet = vnet
         self.subnet = subnet
         if self.compute_target is None:
-            self.compute_target = self.__create_compute_target(self.vnet, self.subnet)
+            try:
+                self.compute_target = self.__create_compute_target(self.vnet, self.subnet)
+            except Exception:
+                return
 
         ### GPU RUN INFO
         self.workspace_vm_sizes = AmlCompute.supported_vmsizes(self.workspace)
@@ -185,9 +188,9 @@ class AzureMLCluster(Cluster):
         self.use_gpu = True if self.n_gpus_per_node > 0 else False
         if self.environment_definition is None:
             if self.use_gpu:
-                self.environment_definition = "AzureML-Dask-GPU"
+                self.environment_definition = self.workspace.environments["AzureML-Dask-GPU"]
             else:
-                self.environment_definition = "AzureML-Dask-CPU"
+                self.environment_definition = self.workspace.environments["AzureML-Dask-CPU"]
 
         ### JUPYTER AND PORT FORWARDING
         self.jupyter = jupyter
@@ -378,15 +381,9 @@ class AzureMLCluster(Cluster):
 
     def __prepare_rpc_connection_to_headnode(self):
         if not self.same_vnet:
-            if self.admin_username == "" or self.admin_ssh_key == "":
-                message = "Your machine is not at the same VNET as the cluster. "
-                message += "You need to set admin_username and admin_ssh_key. Check documentation."
-                logger.exception(message)
-                raise Exception(message)
-            else:
-                uri = f"localhost:{self.scheduler_port}"
-                logger.info(f"Local connection: {uri}")
-                return uri
+            uri = f"localhost:{self.scheduler_port}"
+            logger.info(f"Local connection: {uri}")
+            return uri
         else:
             return self.run.get_metrics()["scheduler"]
 
@@ -397,10 +394,10 @@ class AzureMLCluster(Cluster):
             default_backend as crypto_default_backend,
         )
         from uuid import uuid4
-
-        dir_path = uuid4()
+        guid = uuid4();
+        dir_path = os.path.join("tmp", str(guid))
         if not os.path.exists(dir_path):
-            os.mkdir(dir_path)
+            os.makedirs(dir_path)
         private_key_file = os.path.join(dir_path, "private.key")
 
         key = rsa.generate_private_key(
@@ -421,7 +418,7 @@ class AzureMLCluster(Cluster):
 
         return public_key, private_key_file
 
-    async def __create_compute_target(self, vnet, subnet):
+    def __create_compute_target(self, vnet, subnet):
         ct_name = "dask-ct"
         vm_name = "STANDARD_D13"
         min_nodes = 0
@@ -438,27 +435,31 @@ class AzureMLCluster(Cluster):
             vnet_name = vnet
             subnet_name = subnet
 
-        if ct_name not in self.workspace.compute_targets:
-            config = AmlCompute.provisioning_configuration(
-                vm_size=vm_name,
-                min_nodes=min_nodes,
-                max_nodes=max_nodes,
-                vnet_resourcegroup_name=vnet_rg,
-                vnet_name=vnet_name,
-                subnet_name=subnet_name,
-                idle_seconds_before_scaledown=idle_time,
-                admin_username=self.admin_username,
-                dmin_user_ssh_key=ssh_key_pub,
-                remote_login_port_public_access="Enabled",
-            )
+        try:
+            if ct_name not in self.workspace.compute_targets:
+                config = AmlCompute.provisioning_configuration(
+                    vm_size=vm_name,
+                    min_nodes=min_nodes,
+                    max_nodes=max_nodes,
+                    vnet_resourcegroup_name=vnet_rg,
+                    vnet_name=vnet_name,
+                    subnet_name=subnet_name,
+                    idle_seconds_before_scaledown=idle_time,
+                    admin_username=self.admin_username,
+                    admin_user_ssh_key=ssh_key_pub,
+                    remote_login_port_public_access="Enabled",
+                )
 
-            logger.info("Create new compute target: {}".format(ct_name))
-            self.__print_message("Create new compute: {}".format(ct_name))
-            ct = ComputeTarget.create(self.workspace, ct_name, config)
-            ct.wait_for_completion()
-        else:
-            self.__print_message("Use existing compute target: {}".format(ct_name))
-            ct = self.workspace.compute_targets[ct_name]
+                logger.info("Create new compute target: {}".format(ct_name))
+                self.__print_message("Create new compute: {}".format(ct_name))
+                ct = ComputeTarget.create(self.workspace, ct_name, config)
+                ct.wait_for_completion(show_output=True)
+            else:
+                self.__print_message("Use existing compute target: {}".format(ct_name))
+                ct = self.workspace.compute_targets[ct_name]
+        except Exception as e:
+            logger.exception("Cannot create/get compute. {}".format(e))
+            raise e
 
         return ct
 
