@@ -356,7 +356,7 @@ class AzureMLCluster(Cluster):
             self.__print_message("Not on the same VNET")
             logger.info("Not on the same VNET")
             self.same_vnet = False
-        except Exception as e:
+        except ConnectionRefusedError as e:
             logger.info(e)
             self.__print_message(e)
             pass
