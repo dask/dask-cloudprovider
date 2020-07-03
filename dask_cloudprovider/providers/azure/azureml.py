@@ -143,6 +143,7 @@ class AzureMLCluster(Cluster):
         code_store=None,
         vnet=None,
         subnet=None,
+        debug_mode=False,
         telemetry_opt_out=None,
         asynchronous=False,
         **kwargs,
@@ -167,6 +168,7 @@ class AzureMLCluster(Cluster):
 
         ### FUTURE EXTENSIONS
         self.kwargs = kwargs
+        self.debug_mode = debug_mode
 
         ## CREATE COMPUTE TARGET
         self.admin_username = admin_username
@@ -211,6 +213,8 @@ class AzureMLCluster(Cluster):
         self.portforward_proc = None
         self.worker_death_timeout = worker_death_timeout
         self.end_logging = False  # FLAG FOR STOPPING THE port_forward_logger THREAD
+        self.pub_key_file = ""
+        self.priv_key_file = ""
 
         if additional_ports is not None:
             if type(additional_ports) != list:
@@ -361,7 +365,8 @@ class AzureMLCluster(Cluster):
 
     def __print_message(self, msg, length=80, filler="#", pre_post=""):
         logger.info(msg)
-        print(f"{pre_post} {msg} {pre_post}".center(length, filler))
+        if self.debug_mode:
+            print(f"{pre_post} {msg} {pre_post}".center(length, filler))
 
     async def __check_if_scheduler_ip_reachable(self):
         """
@@ -373,10 +378,8 @@ class AzureMLCluster(Cluster):
             socket.create_connection((ip, port), 10)
             self.same_vnet = True
             self.__print_message("On the same VNET")
-            logger.info("On the same VNET")
         except socket.timeout as e:
             self.__print_message("Not on the same VNET")
-            logger.info("Not on the same VNET")
             self.same_vnet = False
         except Exception as e:
             logger.info(e)
@@ -423,8 +426,11 @@ class AzureMLCluster(Cluster):
         with open(pri_key_file, "wb") as f:
             f.write(private_key)
 
-        with open(pub_key_file, 'r') as f:
+        with open(pub_key_file, "r") as f:
             pubkey = f.read()
+
+        self.pub_key_file = pub_key_file
+        self.pri_key_file = pri_key_file
 
         return pubkey, pri_key_file
 
@@ -465,10 +471,9 @@ class AzureMLCluster(Cluster):
                     remote_login_port_public_access="Enabled",
                 )
 
-                logger.info("Creating new compute target: {}".format(ct_name))
                 self.__print_message("Creating new compute targe: {}".format(ct_name))
                 ct = ComputeTarget.create(self.workspace, ct_name, config)
-                ct.wait_for_completion(show_output=True)
+                ct.wait_for_completion(show_output=self.debug_mode)
             else:
                 self.__print_message(
                     "Using existing compute target: {}".format(ct_name)
@@ -526,8 +531,6 @@ class AzureMLCluster(Cluster):
         self.worker_params["--scheduler_ip_port"] = self.scheduler_ip_port
         self.__print_message(f'Scheduler: {run.get_metrics()["scheduler"]}')
         self.run = run
-
-        logger.info(f'Scheduler: {run.get_metrics()["scheduler"]}')
 
         ### CHECK IF ON THE SAME VNET
         max_retry = 5
@@ -638,7 +641,7 @@ class AzureMLCluster(Cluster):
                 cmd += f" -L 0.0.0.0:{port[1]}:{scheduler_ip}:{port[0]}"
 
             cmd += f" {self.admin_username}@{scheduler_public_ip} -p {scheduler_public_port}"
-
+            self.__print_message("Command: {}".format(cmd))
             self.portforward_proc = subprocess.Popen(
                 cmd.split(),
                 universal_newlines=True,
@@ -651,10 +654,6 @@ class AzureMLCluster(Cluster):
                 target=self.__port_forward_logger, args=[self.portforward_proc]
             )
             portforward_logg.start()
-
-            # remove temp file
-            if os.path.isfile(self.admin_ssh_key):
-                os.remove(self.admin_ssh_key)
 
     @property
     def dashboard_link(self):
@@ -902,6 +901,7 @@ class AzureMLCluster(Cluster):
     async def _close(self):
         if self.status == "closed":
             return
+
         while self.workers_list:
             child_run = self.workers_list.pop()
             child_run.complete()
@@ -918,6 +918,12 @@ class AzureMLCluster(Cluster):
             ### STOP LOGGING SSH
             self.portforward_proc.terminate()
             self.end_logging = True
+
+        ### Remove temp files
+        if os.path.isfile(self.pub_key_file):
+            os.remove(self.pub_key_file)
+        if os.path.isfile(self.pri_key_file):
+            os.remove(self.pri_key_file)
 
         time.sleep(30)
         await super()._close()
