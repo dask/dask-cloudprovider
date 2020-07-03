@@ -1,5 +1,6 @@
 from azureml.core import Experiment, RunConfiguration, ScriptRunConfig
 from azureml.core.compute import AmlCompute, ComputeTarget
+from azureml.core.compute_target import ComputeTargetException
 from azureml.train.estimator import Estimator
 from azureml.core.runconfig import MpiConfiguration
 
@@ -143,7 +144,7 @@ class AzureMLCluster(Cluster):
         code_store=None,
         vnet=None,
         subnet=None,
-        debug_mode=False,
+        show_output=False,
         telemetry_opt_out=None,
         asynchronous=False,
         **kwargs,
@@ -168,16 +169,20 @@ class AzureMLCluster(Cluster):
 
         ### FUTURE EXTENSIONS
         self.kwargs = kwargs
-        self.debug_mode = debug_mode
+        self.show_output = show_output
 
         ## CREATE COMPUTE TARGET
         self.admin_username = admin_username
         self.admin_ssh_key = admin_ssh_key
         self.vnet = vnet
         self.subnet = subnet
+        self.compute_target_set = True
+        self.pub_key_file = ""
+        self.pri_key_file = ""
         if self.compute_target is None:
             try:
                 self.compute_target = self.__create_compute_target()
+                self.compute_target_set = False
             except Exception as e:
                 logger.exception(e)
                 return
@@ -213,8 +218,6 @@ class AzureMLCluster(Cluster):
         self.portforward_proc = None
         self.worker_death_timeout = worker_death_timeout
         self.end_logging = False  # FLAG FOR STOPPING THE port_forward_logger THREAD
-        self.pub_key_file = ""
-        self.priv_key_file = ""
 
         if additional_ports is not None:
             if type(additional_ports) != list:
@@ -365,7 +368,7 @@ class AzureMLCluster(Cluster):
 
     def __print_message(self, msg, length=80, filler="#", pre_post=""):
         logger.info(msg)
-        if self.debug_mode:
+        if self.show_output:
             print(f"{pre_post} {msg} {pre_post}".center(length, filler))
 
     async def __check_if_scheduler_ip_reachable(self):
@@ -439,7 +442,7 @@ class AzureMLCluster(Cluster):
 
         tmp_name = "dask-ct-{}".format(random.randint(1, 1000000))
         ct_name = self.kwargs.get("ct_name", tmp_name)
-        vm_name = self.kwargs.get("vm_size", "STANDARD_D13")
+        vm_name = self.kwargs.get("vm_size", "STANDARD_DS3_V2")
         min_nodes = int(self.kwargs.get("min_nodes", "0"))
         max_nodes = int(self.kwargs.get("max_nodes", "100"))
         idle_time = int(self.kwargs.get("idle_time", "300"))
@@ -473,7 +476,7 @@ class AzureMLCluster(Cluster):
 
                 self.__print_message("Creating new compute targe: {}".format(ct_name))
                 ct = ComputeTarget.create(self.workspace, ct_name, config)
-                ct.wait_for_completion(show_output=self.debug_mode)
+                ct.wait_for_completion(show_output=self.show_output)
             else:
                 self.__print_message(
                     "Using existing compute target: {}".format(ct_name)
@@ -641,7 +644,7 @@ class AzureMLCluster(Cluster):
                 cmd += f" -L 0.0.0.0:{port[1]}:{scheduler_ip}:{port[0]}"
 
             cmd += f" {self.admin_username}@{scheduler_public_ip} -p {scheduler_public_port}"
-            self.__print_message("Command: {}".format(cmd))
+
             self.portforward_proc = subprocess.Popen(
                 cmd.split(),
                 universal_newlines=True,
@@ -919,11 +922,22 @@ class AzureMLCluster(Cluster):
             self.portforward_proc.terminate()
             self.end_logging = True
 
-        ### Remove temp files
+        ### REMOVE TEMP FILE
         if os.path.isfile(self.pub_key_file):
             os.remove(self.pub_key_file)
         if os.path.isfile(self.pri_key_file):
             os.remove(self.pri_key_file)
+
+        if not self.compute_target_set:
+            ### REMOVE COMPUTE TARGET
+            try:
+                self.compute_target.delete()
+            except ComputeTargetException as e:
+                logger.exception(
+                    "Compute target {} cannot be removed. You may need to delete it manually. {}".format(
+                        self.compute_target.name, e
+                    )
+                )
 
         time.sleep(30)
         await super()._close()
