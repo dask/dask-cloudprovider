@@ -353,12 +353,12 @@ class AzureMLCluster(Cluster):
             self.__print_message("On the same VNET")
             logger.info("On the same VNET")
         except socket.timeout as e:
-
             self.__print_message("Not on the same VNET")
-            logger.info("On the same VNET")
+            logger.info("Not on the same VNET")
             self.same_vnet = False
         except ConnectionRefusedError as e:
             logger.info(e)
+            self.__print_message(e)
             pass
 
     def __prepare_rpc_connection_to_headnode(self):
@@ -425,9 +425,17 @@ class AzureMLCluster(Cluster):
         logger.info(f'Scheduler: {run.get_metrics()["scheduler"]}')
 
         ### CHECK IF ON THE SAME VNET
-        while self.same_vnet is None:
+        max_retry = 5
+        while self.same_vnet is None and max_retry > 0:
             await self.sync(self.__check_if_scheduler_ip_reachable)
             time.sleep(1)
+            max_retry -= 1
+        if max_retry <= 0:
+            self.run.cancel()
+            logger.exception(
+                "Connection error after retrying. Failed to start the AzureML cluster."
+            )
+            return
 
         ### REQUIRED BY dask.distributed.deploy.cluster.Cluster
         _scheduler = self.__prepare_rpc_connection_to_headnode()
