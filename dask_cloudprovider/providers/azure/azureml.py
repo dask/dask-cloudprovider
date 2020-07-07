@@ -440,7 +440,7 @@ class AzureMLCluster(Cluster):
     def __create_compute_target(self):
         import random
 
-        tmp_name = "dask-ct-{}".format(random.randint(1, 1000000))
+        tmp_name = "dask-ct-{}".format(random.randint(100000,999999))
         ct_name = self.kwargs.get("ct_name", tmp_name)
         vm_name = self.kwargs.get("vm_size", "STANDARD_DS3_V2")
         min_nodes = int(self.kwargs.get("min_nodes", "0"))
@@ -566,9 +566,9 @@ class AzureMLCluster(Cluster):
 
     async def __update_links(self):
         token = self.run.get_metrics()["token"]
+        hostname = socket.gethostname()
 
         if self.same_vnet:
-            hostname = socket.gethostname()
             location = self.workspace.get_details()["location"]
 
             self.scheduler_info[
@@ -579,7 +579,9 @@ class AzureMLCluster(Cluster):
                 "jupyter_url"
             ] = f"https://{hostname}-{self.jupyter_port}.{location}.instances.azureml.net/lab?token={token}"
         else:
-            hostname = "localhost"
+            is_in_ci = f'/mnt/batch/tasks/shared/LS_root/mounts/clusters/{hostname}' in os.getcwd()
+            if not is_in_ci:
+                hostname = "localhost"
             self.scheduler_info[
                 "dashboard_url"
             ] = f"http://{hostname}:{self.dashboard_port}"
@@ -843,7 +845,7 @@ class AzureMLCluster(Cluster):
     def close_when_disconnect(self):
         status = self.run.get_status()
         if status == "Canceled" or status == "Completed" or status == "Failed":
-            self.scale_down(len(self.workers_list))
+            self.close()
 
     def scale(self, workers=1):
         """ Scale the cluster. Scales to a maximum of the workers available in the cluster.
