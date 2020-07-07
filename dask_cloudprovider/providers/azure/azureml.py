@@ -267,6 +267,7 @@ class AzureMLCluster(Cluster):
 
         ### RUNNING IN MATRIX OR LOCAL
         self.same_vnet = None
+        self.is_in_ci = False
 
         ### GET RUNNING LOOP
         self._loop_runner = LoopRunner(loop=None, asynchronous=asynchronous)
@@ -609,7 +610,9 @@ class AzureMLCluster(Cluster):
         jupyter_address = self.run.get_metrics()["jupyter"]
         scheduler_ip = self.run.get_metrics()["scheduler"].split(":")[0]
 
-        if self.same_vnet:
+        hostname = socket.gethostname()
+        self.is_in_ci = f'/mnt/batch/tasks/shared/LS_root/mounts/clusters/{hostname}' in os.getcwd()
+        if self.same_vnet or self.is_in_ci:
             os.system(
                 f"killall socat"
             )  # kill all socat processes - cleans up previous port forward setups
@@ -625,7 +628,7 @@ class AzureMLCluster(Cluster):
                 os.system(
                     f"setsid socat tcp-listen:{self.port[1]},reuseaddr,fork tcp:{scheduler_ip}:{port[0]} &"
                 )
-        else:
+        if not self.same_vnet:
             scheduler_public_ip = self.compute_target.list_nodes()[0]["publicIpAddress"]
             scheduler_public_port = self.compute_target.list_nodes()[0]["port"]
             self.__print_message("scheduler_public_ip: {}".format(scheduler_public_ip))
