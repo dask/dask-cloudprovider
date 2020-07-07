@@ -567,8 +567,9 @@ class AzureMLCluster(Cluster):
     async def __update_links(self):
         token = self.run.get_metrics()["token"]
         hostname = socket.gethostname()
+        is_in_ci = f'/mnt/batch/tasks/shared/LS_root/mounts/clusters/{hostname}' in os.getcwd()
 
-        if self.same_vnet:
+        if self.same_vnet or is_in_ci:
             location = self.workspace.get_details()["location"]
 
             self.scheduler_info[
@@ -579,9 +580,7 @@ class AzureMLCluster(Cluster):
                 "jupyter_url"
             ] = f"https://{hostname}-{self.jupyter_port}.{location}.instances.azureml.net/lab?token={token}"
         else:
-            is_in_ci = f'/mnt/batch/tasks/shared/LS_root/mounts/clusters/{hostname}' in os.getcwd()
-            if not is_in_ci:
-                hostname = "localhost"
+            hostname = "localhost"
             self.scheduler_info[
                 "dashboard_url"
             ] = f"http://{hostname}:{self.dashboard_port}"
