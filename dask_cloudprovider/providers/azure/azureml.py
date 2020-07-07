@@ -396,6 +396,7 @@ class AzureMLCluster(Cluster):
             return uri
         elif not self.same_vnet:
             uri = f"localhost:{self.scheduler_port}"
+            self.hostname = "localhost"
             logger.info(f"Local connection: {uri}")
             return uri
         else:
@@ -654,7 +655,7 @@ class AzureMLCluster(Cluster):
                 cmd += f" -{forwarding_option} {self.hostname}:{port[1]}:{scheduler_ip}:{port[0]}"
 
             cmd += f" {self.admin_username}@{scheduler_public_ip} -p {scheduler_public_port}"
-
+            self.__print_message(cmd)
             self.portforward_proc = subprocess.Popen(
                 cmd.split(),
                 universal_newlines=True,
