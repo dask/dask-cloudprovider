@@ -391,7 +391,10 @@ class AzureMLCluster(Cluster):
             pass
 
     def __prepare_rpc_connection_to_headnode(self):
-        if not self.same_vnet:
+        if self.is_in_ci:
+            uri =  f"{self.hostname}:{self.scheduler_port}"
+            return uri
+        elif not self.same_vnet:
             uri = f"localhost:{self.scheduler_port}"
             logger.info(f"Local connection: {uri}")
             return uri
@@ -550,6 +553,8 @@ class AzureMLCluster(Cluster):
             return
 
         ### REQUIRED BY dask.distributed.deploy.cluster.Cluster
+        self.hostname = socket.gethostname()
+        self.is_in_ci = f'/mnt/batch/tasks/shared/LS_root/mounts/clusters/{self.hostname}' in os.getcwd()
         _scheduler = self.__prepare_rpc_connection_to_headnode()
         self.scheduler_comm = rpc(_scheduler)
         await self.sync(self.__setup_port_forwarding)
@@ -567,19 +572,17 @@ class AzureMLCluster(Cluster):
 
     async def __update_links(self):
         token = self.run.get_metrics()["token"]
-        hostname = socket.gethostname()
-        is_in_ci = f'/mnt/batch/tasks/shared/LS_root/mounts/clusters/{hostname}' in os.getcwd()
 
-        if self.same_vnet or is_in_ci:
+        if self.same_vnet or self.is_in_ci:
             location = self.workspace.get_details()["location"]
 
             self.scheduler_info[
                 "dashboard_url"
-            ] = f"https://{hostname}-{self.dashboard_port}.{location}.instances.azureml.net/status"
+            ] = f"https://{self.hostname}-{self.dashboard_port}.{location}.instances.azureml.net/status"
 
             self.scheduler_info[
                 "jupyter_url"
-            ] = f"https://{hostname}-{self.jupyter_port}.{location}.instances.azureml.net/lab?token={token}"
+            ] = f"https://{self.hostname}-{self.jupyter_port}.{location}.instances.azureml.net/lab?token={token}"
         else:
             hostname = "localhost"
             self.scheduler_info[
@@ -610,8 +613,8 @@ class AzureMLCluster(Cluster):
         jupyter_address = self.run.get_metrics()["jupyter"]
         scheduler_ip = self.run.get_metrics()["scheduler"].split(":")[0]
 
-        hostname = socket.gethostname()
-        self.is_in_ci = f'/mnt/batch/tasks/shared/LS_root/mounts/clusters/{hostname}' in os.getcwd()
+        self.__print_message("Running in compute instance? {}".format(self.is_in_ci))
+
         if self.same_vnet or self.is_in_ci:
             os.system(
                 f"killall socat"
@@ -629,6 +632,9 @@ class AzureMLCluster(Cluster):
                     f"setsid socat tcp-listen:{self.port[1]},reuseaddr,fork tcp:{scheduler_ip}:{port[0]} &"
                 )
         if not self.same_vnet:
+            forwarding_option = 'L'
+            if self.is_in_ci:
+                forwarding_option = 'R'
             scheduler_public_ip = self.compute_target.list_nodes()[0]["publicIpAddress"]
             scheduler_public_port = self.compute_target.list_nodes()[0]["port"]
             self.__print_message("scheduler_public_ip: {}".format(scheduler_public_ip))
@@ -639,13 +645,13 @@ class AzureMLCluster(Cluster):
             cmd = (
                 "ssh -vvv -o StrictHostKeyChecking=no -N"
                 f" -i {os.path.expanduser(self.admin_ssh_key)}"
-                f" -L 0.0.0.0:{self.jupyter_port}:{scheduler_ip}:8888"
-                f" -L 0.0.0.0:{self.dashboard_port}:{scheduler_ip}:8787"
-                f" -L 0.0.0.0:{self.scheduler_port}:{scheduler_ip}:8786"
+                f" -{forwarding_option} {self.hostname}:{self.jupyter_port}:{scheduler_ip}:8888"
+                f" -{forwarding_option} {self.hostname}:{self.dashboard_port}:{scheduler_ip}:8787"
+                f" -{forwarding_option} {self.hostname}:{self.scheduler_port}:{scheduler_ip}:8786"
             )
 
             for port in self.additional_ports:
-                cmd += f" -L 0.0.0.0:{port[1]}:{scheduler_ip}:{port[0]}"
+                cmd += f" -{forwarding_option} {self.hostname}:{port[1]}:{scheduler_ip}:{port[0]}"
 
             cmd += f" {self.admin_username}@{scheduler_public_ip} -p {scheduler_public_port}"
 
