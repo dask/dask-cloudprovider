@@ -634,8 +634,8 @@ class AzureMLCluster(Cluster):
                 )
         if not self.same_vnet:
             forwarding_option = 'L'
-            if self.is_in_ci:
-                forwarding_option = 'R'
+            # if self.is_in_ci:
+            #     forwarding_option = 'R'
             scheduler_public_ip = self.compute_target.list_nodes()[0]["publicIpAddress"]
             scheduler_public_port = self.compute_target.list_nodes()[0]["port"]
             self.__print_message("scheduler_public_ip: {}".format(scheduler_public_ip))
