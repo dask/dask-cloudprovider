@@ -615,11 +615,10 @@ class AzureMLCluster(Cluster):
         scheduler_ip = self.run.get_metrics()["scheduler"].split(":")[0]
 
         self.__print_message("Running in compute instance? {}".format(self.is_in_ci))
-
-        if self.same_vnet or self.is_in_ci:
-            os.system(
-                f"killall socat"
-            )  # kill all socat processes - cleans up previous port forward setups
+        os.system(
+            f"killall socat"
+        )  # kill all socat processes - cleans up previous port forward setups
+        if self.same_vnet:
             os.system(
                 f"setsid socat tcp-listen:{self.dashboard_port},reuseaddr,fork tcp:{dashboard_address} &"
             )
@@ -632,27 +631,28 @@ class AzureMLCluster(Cluster):
                 os.system(
                     f"setsid socat tcp-listen:{self.port[1]},reuseaddr,fork tcp:{scheduler_ip}:{port[0]} &"
                 )
-        if not self.same_vnet:
+        else:
             forwarding_option = 'L'
-            # if self.is_in_ci:
-            #     forwarding_option = 'R'
             scheduler_public_ip = self.compute_target.list_nodes()[0]["publicIpAddress"]
             scheduler_public_port = self.compute_target.list_nodes()[0]["port"]
             self.__print_message("scheduler_public_ip: {}".format(scheduler_public_ip))
             self.__print_message(
                 "scheduler_public_port: {}".format(scheduler_public_port)
             )
+            host_ip = "0.0.0.0"
+            if self.is_in_ci:
+                host_ip = socket.gethostbyname(self.hostname)
 
             cmd = (
                 "ssh -vvv -o StrictHostKeyChecking=no -N"
                 f" -i {os.path.expanduser(self.admin_ssh_key)}"
-                f" -{forwarding_option} {self.hostname}:{self.jupyter_port}:{scheduler_ip}:8888"
-                f" -{forwarding_option} {self.hostname}:{self.dashboard_port}:{scheduler_ip}:8787"
-                f" -{forwarding_option} {self.hostname}:{self.scheduler_port}:{scheduler_ip}:8786"
+                f" -{forwarding_option} {host_ip}:{self.jupyter_port}:{scheduler_ip}:8888"
+                f" -{forwarding_option} {host_ip}:{self.dashboard_port}:{scheduler_ip}:8787"
+                f" -{forwarding_option} {host_ip}:{self.scheduler_port}:{scheduler_ip}:8786"
             )
 
             for port in self.additional_ports:
-                cmd += f" -{forwarding_option} {self.hostname}:{port[1]}:{scheduler_ip}:{port[0]}"
+                cmd += f" -{forwarding_option} {host_ip}:{port[1]}:{scheduler_ip}:{port[0]}"
 
             cmd += f" {self.admin_username}@{scheduler_public_ip} -p {scheduler_public_port}"
             self.__print_message(cmd)
