@@ -542,8 +542,8 @@ class AzureMLCluster(Cluster):
         ### CHECK IF ON THE SAME VNET
         max_retry = 5
         while self.same_vnet is None and max_retry > 0:
+            time.sleep(5)
             await self.sync(self.__check_if_scheduler_ip_reachable)
-            time.sleep(1)
             max_retry -= 1
         if self.same_vnet is None:
             self.run.cancel()
