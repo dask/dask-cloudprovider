@@ -379,7 +379,7 @@ class AzureMLCluster(Cluster):
         """
         try:
             ip, port = self.scheduler_ip_port.split(":")
-            socket.create_connection((ip, port), 10)
+            socket.create_connection((ip, port), 20)
             self.same_vnet = True
             self.__print_message("On the same VNET")
         except socket.timeout as e:
@@ -390,16 +390,16 @@ class AzureMLCluster(Cluster):
             pass
 
     def __prepare_rpc_connection_to_headnode(self):
-        if self.is_in_ci:
+        if self.same_vnet:
+            return self.run.get_metrics()["scheduler"]
+        elif self.is_in_ci:
             uri =  f"{self.hostname}:{self.scheduler_port}"
             return uri
-        elif not self.same_vnet:
+        else:
             uri = f"localhost:{self.scheduler_port}"
             self.hostname = "localhost"
             logger.info(f"Local connection: {uri}")
             return uri
-        else:
-            return self.run.get_metrics()["scheduler"]
 
     def __get_ssh_keys(self):
         from cryptography.hazmat.primitives import serialization as crypto_serialization
