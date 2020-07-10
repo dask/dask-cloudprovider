@@ -531,7 +531,7 @@ class AzureMLCluster(Cluster):
             logger.exception(error_message)
             raise Exception(error_message)
 
-        print("\n\n")
+        print("\n")
 
         ### SET FLAGS
         self.scheduler_ip_port = run.get_metrics()["scheduler"]
@@ -654,7 +654,7 @@ class AzureMLCluster(Cluster):
                 cmd += f" -{forwarding_option} {host_ip}:{port[1]}:{scheduler_ip}:{port[0]}"
 
             cmd += f" {self.admin_username}@{scheduler_public_ip} -p {scheduler_public_port}"
-            self.__print_message(cmd)
+
             self.portforward_proc = subprocess.Popen(
                 cmd.split(),
                 universal_newlines=True,
