@@ -215,7 +215,7 @@ Setup
 Next, create the ``Workspace`` object given your AzureML ``Workspace`` parameters. Check
 more in the AzureML documentation for `Workspace <https://docs.microsoft.com/python/api/azureml-core/azureml.core.workspace.workspace?view=azure-ml-py>`_.
 
-You can use ``ws = Workspace.from_config()`` after downloading the config file from the Azure Portal or ML studio. 
+You can use ``ws = Workspace.from_config()`` after downloading the config file from the Azure Portal or ML Studio. 
 
 .. code-block:: python
 
