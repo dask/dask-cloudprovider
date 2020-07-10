@@ -392,6 +392,7 @@ class AzureMLCluster(Cluster):
             self.same_vnet = False
         except ConnectionRefusedError as e:
             logger.info(e)
+            self.__print_message(e)
             pass
 
     def __prepare_rpc_connection_to_headnode(self):
@@ -566,6 +567,7 @@ class AzureMLCluster(Cluster):
             if not self.compute_target_set:
                 ### REMOVE COMPUTE TARGET
                 self.__delete_compute_target()
+
             logger.exception(
                 "Connection error after retrying. Failed to start the AzureML cluster."
             )
