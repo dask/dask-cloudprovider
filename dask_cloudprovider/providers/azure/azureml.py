@@ -32,13 +32,27 @@ class AzureMLCluster(Cluster):
     Parameters
     ----------
     workspace: azureml.core.Workspace (required)
-        Azure ML Workspace - see https://aka.ms/azureml/workspace
+        Azure ML Workspace - see https://aka.ms/azureml/workspace.
 
-    compute_target: azureml.core.ComputeTarget (required)
-        Azure ML Compute Target - see https://aka.ms/azureml/computetarget
+    vm_size: str (optional)
+        Azure VM size to be used in the Compute Target - see https://aka.ms/azureml/vmsizes.
 
-    environment_definition: azureml.core.Environment (required)
-        Azure ML Environment - see https://aka.ms/azureml/environments
+    datastores: List[str] (optional)
+        List of Azure ML Datastores to be mounted on the headnode -
+        see https://aka.ms/azureml/data and https://aka.ms/azureml/datastores.
+
+        Defaults to ``[]``. To mount all datastores in the workspace,
+        set to ``ws.datastores.values()``.
+
+    environment_definition: azureml.core.Environment (optional)
+        Azure ML Environment - see https://aka.ms/azureml/environments.
+
+        Defaults to the "AzureML-Dask-CPU" or "AzureML-Dask-GPU" curated environment. 
+
+    scheduler_idle_timeout: int (optional)
+        Number of idle seconds leading to scheduler shut down.
+
+        Defaults to ``1200`` (20 minutes).
 
     experiment_name: str (optional)
         The name of the Azure ML Experiment used to control the cluster.
@@ -53,7 +67,7 @@ class AzureMLCluster(Cluster):
     jupyter: bool (optional)
         Flag to start JupyterLab session on the headnode of the cluster.
 
-        Defaults to ``False``.
+        Defaults to ``True``.
 
     jupyter_port: int (optional)
         Port on headnode to use for hosting JupyterLab session.
@@ -70,11 +84,6 @@ class AzureMLCluster(Cluster):
 
         Defaults to ``9002``.
 
-    scheduler_idle_timeout: int (optional)
-        Number of idle seconds leading to scheduler shut down.
-
-        Defaults to ``1200`` (20 minutes).
-
     worker_death_timeout: int (optional)
         Number of seconds to wait for a worker to respond before removing it.
 
@@ -86,6 +95,9 @@ class AzureMLCluster(Cluster):
         or forward via the SSH-tunnel.
 
         Defaults to ``[]``.
+
+    compute_target: azureml.core.ComputeTarget (optional)
+        Azure ML Compute Target - see https://aka.ms/azureml/computetarget.
 
     admin_username: str (optional)
         Username of the admin account for the AzureML Compute.
@@ -102,13 +114,6 @@ class AzureMLCluster(Cluster):
         Throws Exception if machine not on the same VNET.
 
         Defaults to ``""``.
-
-    datastores: List[str] (optional)
-        List of Azure ML Datastores to be mounted on the headnode -
-        see https://aka.ms/azureml/data and https://aka.ms/azureml/datastores.
-
-        Defaults to ``[]``. To mount all datastores in the workspace,
-        set to ``[ws.datastores[datastore] for datastore in ws.datastores]``.
 
     telemetry_opt_out: bool (optional)
         A boolean parameter. Defaults to logging a version of AzureMLCluster
@@ -385,7 +390,7 @@ class AzureMLCluster(Cluster):
         except socket.timeout as e:
             self.__print_message("Not on the same VNET")
             self.same_vnet = False
-        except Exception as e:
+        except ConnectionRefusedError as e:
             logger.info(e)
             pass
 
