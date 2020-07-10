@@ -41,18 +41,17 @@ class AzureMLCluster(Cluster):
         see https://aka.ms/azureml/data and https://aka.ms/azureml/datastores.
 
         Defaults to ``[]``. To mount all datastores in the workspace,
-        set to ``[ws.datastores[datastore] for datastore in ws.datastores]``.
+        set to ``ws.datastores.values()``.
 
     environment_definition: azureml.core.Environment (optional)
         Azure ML Environment - see https://aka.ms/azureml/environments.
+
+        Defaults to the "AzureML-Dask-CPU" or "AzureML-Dask-GPU" curated environment. 
 
     scheduler_idle_timeout: int (optional)
         Number of idle seconds leading to scheduler shut down.
 
         Defaults to ``1200`` (20 minutes).
-
-    compute_target: azureml.core.ComputeTarget (optional)
-        Azure ML Compute Target - see https://aka.ms/azureml/computetarget.
 
     experiment_name: str (optional)
         The name of the Azure ML Experiment used to control the cluster.
@@ -95,6 +94,9 @@ class AzureMLCluster(Cluster):
         or forward via the SSH-tunnel.
 
         Defaults to ``[]``.
+
+    compute_target: azureml.core.ComputeTarget (optional)
+        Azure ML Compute Target - see https://aka.ms/azureml/computetarget.
 
     admin_username: str (optional)
         Username of the admin account for the AzureML Compute.
