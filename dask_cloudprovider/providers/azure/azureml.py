@@ -47,7 +47,7 @@ class AzureMLCluster(Cluster):
     environment_definition: azureml.core.Environment (optional)
         Azure ML Environment - see https://aka.ms/azureml/environments.
 
-        Defaults to the "AzureML-Dask-CPU" or "AzureML-Dask-GPU" curated environment. 
+        Defaults to the "AzureML-Dask-CPU" or "AzureML-Dask-GPU" curated environment.
 
     scheduler_idle_timeout: int (optional)
         Number of idle seconds leading to scheduler shut down.
@@ -398,7 +398,7 @@ class AzureMLCluster(Cluster):
         if self.same_vnet:
             return self.run.get_metrics()["scheduler"]
         elif self.is_in_ci:
-            uri =  f"{self.hostname}:{self.scheduler_port}"
+            uri = f"{self.hostname}:{self.scheduler_port}"
             return uri
         else:
             uri = f"localhost:{self.scheduler_port}"
@@ -449,7 +449,7 @@ class AzureMLCluster(Cluster):
     def __create_compute_target(self):
         import random
 
-        tmp_name = "dask-ct-{}".format(random.randint(100000,999999))
+        tmp_name = "dask-ct-{}".format(random.randint(100000, 999999))
         ct_name = self.kwargs.get("ct_name", tmp_name)
         vm_name = self.kwargs.get("vm_size", "STANDARD_DS3_V2")
         min_nodes = int(self.kwargs.get("min_nodes", "0"))
@@ -496,6 +496,16 @@ class AzureMLCluster(Cluster):
             raise e
 
         return ct
+
+    def __delete_compute_target(self):
+        try:
+            self.compute_target.delete()
+        except ComputeTargetException as e:
+            logger.exception(
+                "Compute target {} cannot be removed. You may need to delete it manually. {}".format(
+                    self.compute_target.name, e
+                )
+            )
 
     async def __create_cluster(self):
         self.__print_message("Setting up cluster")
@@ -550,8 +560,12 @@ class AzureMLCluster(Cluster):
             time.sleep(5)
             await self.sync(self.__check_if_scheduler_ip_reachable)
             max_retry -= 1
+
         if self.same_vnet is None:
             self.run.cancel()
+            if not self.compute_target_set:
+                ### REMOVE COMPUTE TARGET
+                self.__delete_compute_target()
             logger.exception(
                 "Connection error after retrying. Failed to start the AzureML cluster."
             )
@@ -559,7 +573,10 @@ class AzureMLCluster(Cluster):
 
         ### REQUIRED BY dask.distributed.deploy.cluster.Cluster
         self.hostname = socket.gethostname()
-        self.is_in_ci = f'/mnt/batch/tasks/shared/LS_root/mounts/clusters/{self.hostname}' in os.getcwd()
+        self.is_in_ci = (
+            f"/mnt/batch/tasks/shared/LS_root/mounts/clusters/{self.hostname}"
+            in os.getcwd()
+        )
         _scheduler = self.__prepare_rpc_connection_to_headnode()
         self.scheduler_comm = rpc(_scheduler)
         await self.sync(self.__setup_port_forwarding)
@@ -636,7 +653,7 @@ class AzureMLCluster(Cluster):
                     f"setsid socat tcp-listen:{self.port[1]},reuseaddr,fork tcp:{scheduler_ip}:{port[0]} &"
                 )
         else:
-            forwarding_option = 'L'
+            forwarding_option = "L"
             scheduler_public_ip = self.compute_target.list_nodes()[0]["publicIpAddress"]
             scheduler_public_port = self.compute_target.list_nodes()[0]["port"]
             self.__print_message("scheduler_public_ip: {}".format(scheduler_public_ip))
@@ -945,14 +962,7 @@ class AzureMLCluster(Cluster):
 
         if not self.compute_target_set:
             ### REMOVE COMPUTE TARGET
-            try:
-                self.compute_target.delete()
-            except ComputeTargetException as e:
-                logger.exception(
-                    "Compute target {} cannot be removed. You may need to delete it manually. {}".format(
-                        self.compute_target.name, e
-                    )
-                )
+            self.__delete_compute_target()
 
         time.sleep(30)
         await super()._close()
