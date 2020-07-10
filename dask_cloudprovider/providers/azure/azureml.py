@@ -545,7 +545,7 @@ class AzureMLCluster(Cluster):
             await self.sync(self.__check_if_scheduler_ip_reachable)
             time.sleep(1)
             max_retry -= 1
-        if max_retry <= 0:
+        if self.same_vnet is None:
             self.run.cancel()
             logger.exception(
                 "Connection error after retrying. Failed to start the AzureML cluster."
