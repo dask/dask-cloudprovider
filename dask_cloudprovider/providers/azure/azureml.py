@@ -31,10 +31,10 @@ class AzureMLCluster(Cluster):
     Parameters
     ----------
     workspace: azureml.core.Workspace (required)
-        Azure ML Workspace - see https://aka.ms/azureml/workspace
+        Azure ML Workspace - see https://aka.ms/azureml/workspace.
 
     vm_size: str (optional)
-        Azure VM size to be used in the Compute Target - see https://aka.ms/azureml/vmsizes
+        Azure VM size to be used in the Compute Target - see https://aka.ms/azureml/vmsizes.
 
     datastores: List[str] (optional)
         List of Azure ML Datastores to be mounted on the headnode -
@@ -44,7 +44,7 @@ class AzureMLCluster(Cluster):
         set to ``[ws.datastores[datastore] for datastore in ws.datastores]``.
 
     environment_definition: azureml.core.Environment (optional)
-        Azure ML Environment - see https://aka.ms/azureml/environments
+        Azure ML Environment - see https://aka.ms/azureml/environments.
 
     scheduler_idle_timeout: int (optional)
         Number of idle seconds leading to scheduler shut down.
@@ -52,7 +52,7 @@ class AzureMLCluster(Cluster):
         Defaults to ``1200`` (20 minutes).
 
     compute_target: azureml.core.ComputeTarget (optional)
-        Azure ML Compute Target - see https://aka.ms/azureml/computetarget
+        Azure ML Compute Target - see https://aka.ms/azureml/computetarget.
 
     experiment_name: str (optional)
         The name of the Azure ML Experiment used to control the cluster.
