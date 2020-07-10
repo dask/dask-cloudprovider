@@ -235,10 +235,11 @@ Create cluster
 To create cluster:
 
 .. code-block:: python
-   # optional kwargs
+   # common optional kwargs
    vm_size = "STANDARD_DS13_V2"                       # Azure VM size for the Compute Target
    datastores = ws.datastores.values()                # Azure ML Datastores to mount on the headnode
    environment = ws.environments['AzureML-Dask-CPU]   # Azure ML Environment to run on the cluster_ar
+   initial_node_count = 20                            # number of nodes to start
    scheduler_idle_timeout = 7200                      # scheduler idle timeout in seconds 
 
    # only workspace is required
