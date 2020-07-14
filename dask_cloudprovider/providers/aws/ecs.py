@@ -1,7 +1,5 @@
 import asyncio
 import logging
-import sys
-import time
 import uuid
 import warnings
 import weakref
@@ -561,10 +559,11 @@ class ECSCluster(SpecCluster):
         Defaults to ``None``
     fargate_use_private_ip: bool (optional)
         Whether to use a private IP (if True) or public IP (if False) with Fargate.
-        
+
         Default ``False``.
     mount_points: list (optional)
-        List of mount points as documented here: https://docs.aws.amazon.com/AmazonECS/latest/developerguide/efs-volumes.html
+        List of mount points as documented here:
+        https://docs.aws.amazon.com/AmazonECS/latest/developerguide/efs-volumes.html
 
         Default ``None``.
     volumes: list (optional)
