@@ -971,15 +971,14 @@ class ECSCluster(SpecCluster):
     async def _create_cloudwatch_logs_group(self):
         log_group_name = "dask-ecs"
         async with self._client("logs") as logs:
-            groups = (await logs.describe_log_groups())
+            groups = await logs.describe_log_groups()
             log_group_defs = groups["logGroups"]
             while groups.get("nextToken"):
-                groups = (await logs.describe_log_groups(nextToken=groups["nextToken"]))
+                groups = await logs.describe_log_groups(nextToken=groups["nextToken"])
                 log_group_defs.extend(groups["logGroups"])
 
             if log_group_name not in [
-                group["logGroupName"]
-                for group in log_group_defs
+                group["logGroupName"] for group in log_group_defs
             ]:
                 await logs.create_log_group(logGroupName=log_group_name, tags=self.tags)
                 await logs.put_retention_policy(
