@@ -989,6 +989,7 @@ class ECSCluster(SpecCluster):
                 )
         # Note: Not cleaning up the logs here as they may be useful after the cluster is destroyed
         return log_group_name
+
     async def _get_default_vpc(self):
         async with self._client("ec2") as ec2:
             vpcs = (await ec2.describe_vpcs())["Vpcs"]
