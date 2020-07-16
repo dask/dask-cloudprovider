@@ -655,13 +655,13 @@ class AzureMLCluster(Cluster):
                     f"setsid socat tcp-listen:{self.port[1]},reuseaddr,fork tcp:{scheduler_ip}:{port[0]} &"
                 )
         else:
-            forwarding_option = "L"
             scheduler_public_ip = self.compute_target.list_nodes()[0]["publicIpAddress"]
             scheduler_public_port = self.compute_target.list_nodes()[0]["port"]
             self.__print_message("scheduler_public_ip: {}".format(scheduler_public_ip))
             self.__print_message(
                 "scheduler_public_port: {}".format(scheduler_public_port)
             )
+
             host_ip = "0.0.0.0"
             if self.is_in_ci:
                 host_ip = socket.gethostbyname(self.hostname)
@@ -669,13 +669,13 @@ class AzureMLCluster(Cluster):
             cmd = (
                 "ssh -vvv -o StrictHostKeyChecking=no -N"
                 f" -i {os.path.expanduser(self.admin_ssh_key)}"
-                f" -{forwarding_option} {host_ip}:{self.jupyter_port}:{scheduler_ip}:8888"
-                f" -{forwarding_option} {host_ip}:{self.dashboard_port}:{scheduler_ip}:8787"
-                f" -{forwarding_option} {host_ip}:{self.scheduler_port}:{scheduler_ip}:8786"
+                f" -L {host_ip}:{self.jupyter_port}:{scheduler_ip}:8888"
+                f" -L {host_ip}:{self.dashboard_port}:{scheduler_ip}:8787"
+                f" -L {host_ip}:{self.scheduler_port}:{scheduler_ip}:8786"
             )
 
             for port in self.additional_ports:
-                cmd += f" -{forwarding_option} {host_ip}:{port[1]}:{scheduler_ip}:{port[0]}"
+                cmd += f" -L {host_ip}:{port[1]}:{scheduler_ip}:{port[0]}"
 
             cmd += f" {self.admin_username}@{scheduler_public_ip} -p {scheduler_public_port}"
 
