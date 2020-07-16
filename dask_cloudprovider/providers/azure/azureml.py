@@ -67,7 +67,7 @@ class AzureMLCluster(Cluster):
     jupyter: bool (optional)
         Flag to start JupyterLab session on the headnode of the cluster.
 
-        Defaults to ``True``.
+        Defaults to ``False``.
 
     jupyter_port: int (optional)
         Port on headnode to use for hosting JupyterLab session.
