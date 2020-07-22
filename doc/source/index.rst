@@ -234,6 +234,7 @@ Create cluster
 To create cluster:
 
 .. code-block:: python
+
    amlcluster = AzureMLCluster(
    # required
    ws,
