@@ -543,8 +543,11 @@ class AzureMLCluster(Cluster):
 
             if run_error:
                 error_message = "{} {}".format(error_message, run_error)
-
             logger.exception(error_message)
+
+            if not self.compute_target_set:
+                self.__delete_compute_target()
+
             raise Exception(error_message)
 
         print("\n")
@@ -565,9 +568,7 @@ class AzureMLCluster(Cluster):
         if self.same_vnet is None:
             self.run.cancel()
             if not self.compute_target_set:
-                ### REMOVE COMPUTE TARGET
                 self.__delete_compute_target()
-
             logger.exception(
                 "Connection error after retrying. Failed to start the AzureML cluster."
             )
@@ -582,7 +583,17 @@ class AzureMLCluster(Cluster):
         _scheduler = self.__prepare_rpc_connection_to_headnode()
         self.scheduler_comm = rpc(_scheduler)
         await self.sync(self.__setup_port_forwarding)
-        await self.sync(super()._start)
+
+        try:
+            await self.sync(super()._start)
+        Exception as e:
+            logger.exception(e)
+            raise e
+        finally:
+            # DELETE COMPUTE IN CASE CONNECTION TIMEOUT
+            if not self.compute_target_set:
+                self.__delete_compute_target()
+
         await self.sync(self.__update_links)
 
         self.__print_message("Connections established")
