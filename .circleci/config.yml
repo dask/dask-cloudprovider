@@ -43,5 +43,5 @@ jobs:
             /home/circleci/miniconda/envs/dask-cloudprovider-test/bin/py.test dask_cloudprovider
       - run:
           command: |
-            /home/circleci/miniconda/envs/dask-cloudprovider-test/bin/flake8 dask-cloudprovider
+            /home/circleci/miniconda/envs/dask-cloudprovider-test/bin/flake8 dask_cloudprovider
             /home/circleci/miniconda/envs/dask-cloudprovider-test/bin/black --check dask_cloudprovider setup.py
