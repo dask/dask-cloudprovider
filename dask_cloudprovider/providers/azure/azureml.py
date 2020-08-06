@@ -266,7 +266,7 @@ class AzureMLCluster(Cluster):
 
                 if not all_correct:
                     error_message = (
-                        f"At least one of the elements of the additional_ports parameter"
+                        "At least one of the elements of the additional_ports parameter"
                         " is wrong. Make sure it is a list of int tuples."
                         " Check the documentation."
                     )
@@ -605,7 +605,7 @@ class AzureMLCluster(Cluster):
             self.scale(
                 self.initial_node_count
             )  # LOGIC TO KEEP PROPER TRACK OF WORKERS IN `scale`
-        self.__print_message(f"Scaling is done")
+        self.__print_message("Scaling is done")
 
     async def __update_links(self):
         token = self.run.get_metrics()["token"]
@@ -652,7 +652,7 @@ class AzureMLCluster(Cluster):
 
         self.__print_message("Running in compute instance? {}".format(self.is_in_ci))
         os.system(
-            f"killall socat"
+            "killall socat"
         )  # kill all socat processes - cleans up previous port forward setups
         if self.same_vnet:
             os.system(
