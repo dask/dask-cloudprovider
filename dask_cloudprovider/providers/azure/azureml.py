@@ -14,11 +14,7 @@ import dask
 from contextlib import suppress
 from distributed.deploy.cluster import Cluster
 from distributed.core import rpc
-from distributed.utils import (
-    LoopRunner,
-    log_errors,
-    format_bytes,
-)
+from distributed.utils import LoopRunner, log_errors, format_bytes
 from tornado.ioloop import PeriodicCallback
 
 logger = logging.getLogger(__name__)
@@ -821,7 +817,7 @@ class AzureMLCluster(Cluster):
         if self.dashboard_link:
             dashboard_link = (
                 '<p><b>Dashboard: </b><a href="%s" target="_blank">%s</a></p>\n'
-                % (self.dashboard_link, self.dashboard_link,)
+                % (self.dashboard_link, self.dashboard_link)
             )
         else:
             dashboard_link = ""
@@ -829,7 +825,7 @@ class AzureMLCluster(Cluster):
         if self.jupyter_link:
             jupyter_link = (
                 '<p><b>Jupyter: </b><a href="%s" target="_blank">%s</a></p>\n'
-                % (self.jupyter_link, self.jupyter_link,)
+                % (self.jupyter_link, self.jupyter_link)
             )
         else:
             jupyter_link = ""
@@ -992,4 +988,3 @@ class AzureMLCluster(Cluster):
         return to its minimum number of nodes after its idle time before scaledown.
         """
         return self.sync(self._close)
-
