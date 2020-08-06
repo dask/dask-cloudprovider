@@ -115,6 +115,18 @@ class AzureMLCluster(Cluster):
 
         Defaults to ``""``.
 
+    vnet: str (optional)
+        Name of the virtual network.
+
+    subnet: str (optional)
+        Name of the subnet inside the virtual network ``vnet``.
+
+    vnet_resource_group: str (optional)
+        Name of the resource group where the virtual network ``vnet``
+        is located. If not passed, but names for ``vnet`` and ``subnet`` are
+        passed, ``vnet_resource_group`` is assigned with the name of resource
+        group associted with ``workspace``
+
     telemetry_opt_out: bool (optional)
         A boolean parameter. Defaults to logging a version of AzureMLCluster
         with Microsoft. Set this flag to False if you do not want to share this
@@ -147,6 +159,7 @@ class AzureMLCluster(Cluster):
         admin_ssh_key=None,
         datastores=None,
         code_store=None,
+        vnet_resource_group=None,
         vnet=None,
         subnet=None,
         show_output=False,
@@ -179,6 +192,7 @@ class AzureMLCluster(Cluster):
         ## CREATE COMPUTE TARGET
         self.admin_username = admin_username
         self.admin_ssh_key = admin_ssh_key
+        self.vnet_resource_group = vnet_resource_group
         self.vnet = vnet
         self.subnet = subnet
         self.compute_target_set = True
@@ -465,9 +479,12 @@ class AzureMLCluster(Cluster):
         ssh_key_pub, self.admin_ssh_key = self.__get_ssh_keys()
 
         if self.vnet and self.subnet:
-            vnet_rg = self.workspace.resource_group
             vnet_name = self.vnet
             subnet_name = self.subnet
+            if self.vnet_resource_group:
+                vnet_rg = self.vnet_resource_group
+            else:
+                vnet_rg = self.workspace.resource_group
 
         try:
             if ct_name not in self.workspace.compute_targets:
@@ -975,3 +992,4 @@ class AzureMLCluster(Cluster):
         return to its minimum number of nodes after its idle time before scaledown.
         """
         return self.sync(self._close)
+
