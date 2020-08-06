@@ -14,11 +14,7 @@ import dask
 from contextlib import suppress
 from distributed.deploy.cluster import Cluster
 from distributed.core import rpc
-from distributed.utils import (
-    LoopRunner,
-    log_errors,
-    format_bytes,
-)
+from distributed.utils import LoopRunner, log_errors, format_bytes
 from tornado.ioloop import PeriodicCallback
 
 logger = logging.getLogger(__name__)
@@ -270,7 +266,7 @@ class AzureMLCluster(Cluster):
 
                 if not all_correct:
                     error_message = (
-                        f"At least one of the elements of the additional_ports parameter"
+                        "At least one of the elements of the additional_ports parameter"
                         " is wrong. Make sure it is a list of int tuples."
                         " Check the documentation."
                     )
@@ -609,7 +605,7 @@ class AzureMLCluster(Cluster):
             self.scale(
                 self.initial_node_count
             )  # LOGIC TO KEEP PROPER TRACK OF WORKERS IN `scale`
-        self.__print_message(f"Scaling is done")
+        self.__print_message("Scaling is done")
 
     async def __update_links(self):
         token = self.run.get_metrics()["token"]
@@ -656,7 +652,7 @@ class AzureMLCluster(Cluster):
 
         self.__print_message("Running in compute instance? {}".format(self.is_in_ci))
         os.system(
-            f"killall socat"
+            "killall socat"
         )  # kill all socat processes - cleans up previous port forward setups
         if self.same_vnet:
             os.system(
@@ -821,7 +817,7 @@ class AzureMLCluster(Cluster):
         if self.dashboard_link:
             dashboard_link = (
                 '<p><b>Dashboard: </b><a href="%s" target="_blank">%s</a></p>\n'
-                % (self.dashboard_link, self.dashboard_link,)
+                % (self.dashboard_link, self.dashboard_link)
             )
         else:
             dashboard_link = ""
@@ -829,7 +825,7 @@ class AzureMLCluster(Cluster):
         if self.jupyter_link:
             jupyter_link = (
                 '<p><b>Jupyter: </b><a href="%s" target="_blank">%s</a></p>\n'
-                % (self.jupyter_link, self.jupyter_link,)
+                % (self.jupyter_link, self.jupyter_link)
             )
         else:
             jupyter_link = ""
@@ -992,4 +988,3 @@ class AzureMLCluster(Cluster):
         return to its minimum number of nodes after its idle time before scaledown.
         """
         return self.sync(self._close)
-

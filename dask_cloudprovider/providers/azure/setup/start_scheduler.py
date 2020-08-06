@@ -117,7 +117,7 @@ if __name__ == "__main__":
             f" --NotebookApp.token={token}"
         )
         cmd += f" --notebook-dir={mount_point}"
-        cmd += f" --allow-root --no-browser"
+        cmd += " --allow-root --no-browser"
 
         jupyter_log = open("jupyter_log.txt", "a")
         jupyter_proc = subprocess.Popen(
