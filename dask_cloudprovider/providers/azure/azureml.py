@@ -191,6 +191,15 @@ class AzureMLCluster(Cluster):
             except Exception as e:
                 logger.exception(e)
                 return
+        elif self.compute_target.admin_user_ssh_key is not None and (
+            self.admin_ssh_key is None or self.admin_username is None
+        ):
+            logger.exception(
+                "Please provide private key and admin username to access compute target {}".format(
+                    self.compute_target.name
+                )
+            )
+            return
 
         ### GPU RUN INFO
         self.workspace_vm_sizes = AmlCompute.supported_vmsizes(self.workspace)
@@ -439,6 +448,8 @@ class AzureMLCluster(Cluster):
         with open(pri_key_file, "wb") as f:
             f.write(private_key)
 
+        os.chmod(pri_key_file, 0o600)
+
         with open(pub_key_file, "r") as f:
             pubkey = f.read()
 
@@ -585,14 +596,14 @@ class AzureMLCluster(Cluster):
         await self.sync(self.__setup_port_forwarding)
 
         try:
-            await self.sync(super()._start)
-        Exception as e:
+            await super()._start()
+        except Exception as e:
             logger.exception(e)
-            raise e
-        finally:
-            # DELETE COMPUTE IN CASE CONNECTION TIMEOUT
+            # CLEAN UP COMPUTE TARGET
+            self.run.cancel()
             if not self.compute_target_set:
                 self.__delete_compute_target()
+            return
 
         await self.sync(self.__update_links)
 
