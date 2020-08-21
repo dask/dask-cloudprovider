@@ -14,11 +14,7 @@ import dask
 from contextlib import suppress
 from distributed.deploy.cluster import Cluster
 from distributed.core import rpc
-from distributed.utils import (
-    LoopRunner,
-    log_errors,
-    format_bytes,
-)
+from distributed.utils import LoopRunner, log_errors, format_bytes
 from tornado.ioloop import PeriodicCallback
 
 logger = logging.getLogger(__name__)
@@ -115,6 +111,18 @@ class AzureMLCluster(Cluster):
 
         Defaults to ``""``.
 
+    vnet: str (optional)
+        Name of the virtual network.
+
+    subnet: str (optional)
+        Name of the subnet inside the virtual network ``vnet``.
+
+    vnet_resource_group: str (optional)
+        Name of the resource group where the virtual network ``vnet``
+        is located. If not passed, but names for ``vnet`` and ``subnet`` are
+        passed, ``vnet_resource_group`` is assigned with the name of resource
+        group associted with ``workspace``
+
     telemetry_opt_out: bool (optional)
         A boolean parameter. Defaults to logging a version of AzureMLCluster
         with Microsoft. Set this flag to False if you do not want to share this
@@ -147,6 +155,7 @@ class AzureMLCluster(Cluster):
         admin_ssh_key=None,
         datastores=None,
         code_store=None,
+        vnet_resource_group=None,
         vnet=None,
         subnet=None,
         show_output=False,
@@ -179,6 +188,7 @@ class AzureMLCluster(Cluster):
         ## CREATE COMPUTE TARGET
         self.admin_username = admin_username
         self.admin_ssh_key = admin_ssh_key
+        self.vnet_resource_group = vnet_resource_group
         self.vnet = vnet
         self.subnet = subnet
         self.compute_target_set = True
@@ -265,7 +275,7 @@ class AzureMLCluster(Cluster):
 
                 if not all_correct:
                     error_message = (
-                        f"At least one of the elements of the additional_ports parameter"
+                        "At least one of the elements of the additional_ports parameter"
                         " is wrong. Make sure it is a list of int tuples."
                         " Check the documentation."
                     )
@@ -476,9 +486,12 @@ class AzureMLCluster(Cluster):
         ssh_key_pub, self.admin_ssh_key = self.__get_ssh_keys()
 
         if self.vnet and self.subnet:
-            vnet_rg = self.workspace.resource_group
             vnet_name = self.vnet
             subnet_name = self.subnet
+            if self.vnet_resource_group:
+                vnet_rg = self.vnet_resource_group
+            else:
+                vnet_rg = self.workspace.resource_group
 
         try:
             if ct_name not in self.workspace.compute_targets:
@@ -614,7 +627,7 @@ class AzureMLCluster(Cluster):
             self.scale(
                 self.initial_node_count
             )  # LOGIC TO KEEP PROPER TRACK OF WORKERS IN `scale`
-        self.__print_message(f"Scaling is done")
+        self.__print_message("Scaling is done")
 
     async def __update_links(self):
         token = self.run.get_metrics()["token"]
@@ -661,7 +674,7 @@ class AzureMLCluster(Cluster):
 
         self.__print_message("Running in compute instance? {}".format(self.is_in_ci))
         os.system(
-            f"killall socat"
+            "killall socat"
         )  # kill all socat processes - cleans up previous port forward setups
         if self.same_vnet:
             os.system(
@@ -826,7 +839,7 @@ class AzureMLCluster(Cluster):
         if self.dashboard_link:
             dashboard_link = (
                 '<p><b>Dashboard: </b><a href="%s" target="_blank">%s</a></p>\n'
-                % (self.dashboard_link, self.dashboard_link,)
+                % (self.dashboard_link, self.dashboard_link)
             )
         else:
             dashboard_link = ""
@@ -834,7 +847,7 @@ class AzureMLCluster(Cluster):
         if self.jupyter_link:
             jupyter_link = (
                 '<p><b>Jupyter: </b><a href="%s" target="_blank">%s</a></p>\n'
-                % (self.jupyter_link, self.jupyter_link,)
+                % (self.jupyter_link, self.jupyter_link)
             )
         else:
             jupyter_link = ""

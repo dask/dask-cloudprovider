@@ -1,7 +1,5 @@
 import asyncio
 import logging
-import sys
-import time
 import uuid
 import warnings
 import weakref
@@ -561,10 +559,11 @@ class ECSCluster(SpecCluster):
         Defaults to ``None``
     fargate_use_private_ip: bool (optional)
         Whether to use a private IP (if True) or public IP (if False) with Fargate.
-        
+
         Default ``False``.
     mount_points: list (optional)
-        List of mount points as documented here: https://docs.aws.amazon.com/AmazonECS/latest/developerguide/efs-volumes.html
+        List of mount points as documented here:
+        https://docs.aws.amazon.com/AmazonECS/latest/developerguide/efs-volumes.html
 
         Default ``None``.
     volumes: list (optional)
@@ -972,9 +971,14 @@ class ECSCluster(SpecCluster):
     async def _create_cloudwatch_logs_group(self):
         log_group_name = "dask-ecs"
         async with self._client("logs") as logs:
+            groups = await logs.describe_log_groups()
+            log_group_defs = groups["logGroups"]
+            while groups.get("nextToken"):
+                groups = await logs.describe_log_groups(nextToken=groups["nextToken"])
+                log_group_defs.extend(groups["logGroups"])
+
             if log_group_name not in [
-                group["logGroupName"]
-                for group in (await logs.describe_log_groups())["logGroups"]
+                group["logGroupName"] for group in log_group_defs
             ]:
                 await logs.create_log_group(logGroupName=log_group_name, tags=self.tags)
                 await logs.put_retention_policy(
