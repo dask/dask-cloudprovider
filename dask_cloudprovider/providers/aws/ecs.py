@@ -247,9 +247,17 @@ class Task:
                 await asyncio.sleep(1)
 
         self.task_arn = self.task["taskArn"]
+        wait_duration = 1
         while self.task["lastStatus"] in ["PENDING", "PROVISIONING"]:
-            await asyncio.sleep(1)
-            await self._update_task()
+            try:
+                await self._update_task()
+                wait_duration = 1
+            except ClientError as e:
+                if e.response["Error"]["Code"] == "ThrottlingException":
+                    wait_duration = wait_duration * 2
+                else:
+                    raise
+            await asyncio.sleep(min(wait_duration, 20))
         if not await self._task_is_running():
             raise RuntimeError("%s failed to start" % type(self).__name__)
         [eni] = [
