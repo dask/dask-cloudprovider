@@ -1,6 +1,13 @@
 from . import config
-from .providers.aws.ecs import ECSCluster, FargateCluster
-from .providers.azure.azureml import AzureMLCluster
+
+try:
+    from .providers.aws.ecs import ECSCluster, FargateCluster
+except ImportError:
+    pass
+try:
+    from .providers.azure.azureml import AzureMLCluster
+except ImportError:
+    pass
 
 __all__ = ["ECSCluster", "FargateCluster", "AzureMLCluster"]
 
