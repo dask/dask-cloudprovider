@@ -243,6 +243,7 @@ To create cluster:
    vm_size="STANDARD_DS13_V2",                                 # Azure VM size for the Compute Target
    datastores=ws.datastores.values(),                          # Azure ML Datastores to mount on the headnode
    environment_definition=ws.environments['AzureML-Dask-CPU'], # Azure ML Environment to run on the cluster
+   jupyter=true,                                               # Flag to start JupyterLab session on the headnode
    initial_node_count=2,                                       # number of nodes to start 
    scheduler_idle_timeout=7200                                 # scheduler idle timeout in seconds 
    )

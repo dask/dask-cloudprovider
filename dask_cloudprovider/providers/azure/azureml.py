@@ -201,6 +201,15 @@ class AzureMLCluster(Cluster):
             except Exception as e:
                 logger.exception(e)
                 return
+        elif self.compute_target.admin_user_ssh_key is not None and (
+            self.admin_ssh_key is None or self.admin_username is None
+        ):
+            logger.exception(
+                "Please provide private key and admin username to access compute target {}".format(
+                    self.compute_target.name
+                )
+            )
+            return
 
         ### GPU RUN INFO
         self.workspace_vm_sizes = AmlCompute.supported_vmsizes(self.workspace)
@@ -449,6 +458,8 @@ class AzureMLCluster(Cluster):
         with open(pri_key_file, "wb") as f:
             f.write(private_key)
 
+        os.chmod(pri_key_file, 0o600)
+
         with open(pub_key_file, "r") as f:
             pubkey = f.read()
 
@@ -556,8 +567,11 @@ class AzureMLCluster(Cluster):
 
             if run_error:
                 error_message = "{} {}".format(error_message, run_error)
-
             logger.exception(error_message)
+
+            if not self.compute_target_set:
+                self.__delete_compute_target()
+
             raise Exception(error_message)
 
         print("\n")
@@ -578,9 +592,7 @@ class AzureMLCluster(Cluster):
         if self.same_vnet is None:
             self.run.cancel()
             if not self.compute_target_set:
-                ### REMOVE COMPUTE TARGET
                 self.__delete_compute_target()
-
             logger.exception(
                 "Connection error after retrying. Failed to start the AzureML cluster."
             )
@@ -595,7 +607,17 @@ class AzureMLCluster(Cluster):
         _scheduler = self.__prepare_rpc_connection_to_headnode()
         self.scheduler_comm = rpc(_scheduler)
         await self.sync(self.__setup_port_forwarding)
-        await self.sync(super()._start)
+
+        try:
+            await super()._start()
+        except Exception as e:
+            logger.exception(e)
+            # CLEAN UP COMPUTE TARGET
+            self.run.cancel()
+            if not self.compute_target_set:
+                self.__delete_compute_target()
+            return
+
         await self.sync(self.__update_links)
 
         self.__print_message("Connections established")
