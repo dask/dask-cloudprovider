@@ -1,24 +1,33 @@
-import asyncio
-import logging
-import uuid
-import warnings
-import weakref
-from typing import List
+try:
+    import asyncio
+    import logging
+    import uuid
+    import warnings
+    import weakref
+    from typing import List
 
-from botocore.exceptions import ClientError
-import aiobotocore
-import dask
+    from botocore.exceptions import ClientError
+    import aiobotocore
+    import dask
 
-from dask_cloudprovider.utils.logs import Log, Logs
-from dask_cloudprovider.utils.timeout import Timeout
-from dask_cloudprovider.providers.aws.helper import (
-    dict_to_aws,
-    aws_to_dict,
-    get_sleep_duration,
-)
+    from dask_cloudprovider.utils.logs import Log, Logs
+    from dask_cloudprovider.utils.timeout import Timeout
+    from dask_cloudprovider.providers.aws.helper import (
+        dict_to_aws,
+        aws_to_dict,
+        get_sleep_duration,
+    )
 
-from distributed.deploy.spec import SpecCluster
-from distributed.utils import warn_on_duration
+    from distributed.deploy.spec import SpecCluster
+    from distributed.utils import warn_on_duration
+except ImportError as e:
+    msg = (
+        "Dask Cloud Provider AWS requirements are not installed.\n\n"
+        "Please either conda or pip install as follows:\n\n"
+        "  conda install dask-cloudprovider                           # either conda install\n"
+        '  python -m pip install "dask-cloudprovider[aws]" --upgrade  # or python -m pip install'
+    )
+    raise ImportError(msg) from e
 
 logger = logging.getLogger(__name__)
 
