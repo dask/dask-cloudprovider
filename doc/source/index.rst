@@ -13,16 +13,15 @@ Installation
 Pip
 ^^^
 
-For AWS
+.. code-block:: console
+
+   $ pip install dask-cloudprovider[all]
+
+You can also restrict your install to a specific cloud provider by giving their name instead of ``all``.
 
 .. code-block:: console
 
-   $ pip install dask-cloudprovider[aws]
-
-For Azure
-
-.. code-block:: console
-
+   $ pip install dask-cloudprovider[aws]  # or
    $ pip install dask-cloudprovider[azure]
 
 Conda
