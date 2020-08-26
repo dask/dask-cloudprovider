@@ -13,9 +13,17 @@ Installation
 Pip
 ^^^
 
+For AWS
+
 .. code-block:: console
 
-   $ pip install dask-cloudprovider
+   $ pip install dask-cloudprovider[aws]
+
+For Azure
+
+.. code-block:: console
+
+   $ pip install dask-cloudprovider[azure]
 
 Conda
 ^^^^^
