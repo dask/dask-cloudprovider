@@ -5,15 +5,11 @@ from setuptools import setup, find_packages
 
 import versioneer
 
-extras_require={
+extras_require = {
     "aws": ["aiobotocore>=0.10.2"],
     "azure": ["azureml-sdk>=1.0.83"],
 }
-extras_require["all"] = set(
-    pkg
-    for pkgs in extras_require.values()
-    for pkg in pkgs
-)
+extras_require["all"] = set(pkg for pkgs in extras_require.values() for pkg in pkgs)
 
 setup(
     name="dask-cloudprovider",
