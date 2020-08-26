@@ -18,10 +18,7 @@ setup(
     long_description=(open("README.md").read() if exists("README.md") else ""),
     zip_safe=False,
     install_requires=list(open("requirements.txt").read().strip().split("\n")),
-    extras_require={
-        "aws": ["aiobotocore>=0.10.2"],
-        "azure": ["azureml-sdk>=1.0.83"],
-    },
+    extras_require={"aws": ["aiobotocore>=0.10.2"], "azure": ["azureml-sdk>=1.0.83"],},
     entry_points="""
     [console_scripts]
     dask-ecs=dask_cloudprovider.cli.ecs:go
