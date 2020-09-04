@@ -15,7 +15,16 @@ Pip
 
 .. code-block:: console
 
-   $ pip install dask-cloudprovider
+   $ pip install dask-cloudprovider[all]
+
+You can also restrict your install to just a specific cloud provider by giving their name instead of ``all``.
+
+.. code-block:: console
+
+   $ pip install dask-cloudprovider[aws]  # or
+   $ pip install dask-cloudprovider[azure]  # or
+   $ pip install dask-cloudprovider[digitalocean]  # or
+   $ pip install dask-cloudprovider[googlecloud]
 
 Conda
 ^^^^^
@@ -56,7 +65,7 @@ with all the IAM roles, security groups, and so on that it needs to function.
    ⚠ All AWS resources created by ``FargateCluster`` should be removed on
    garbage collection. If the process is killed harshly this will not happen.
 
-Note that in many cases you will want to specify a custom Docker image to ``FargateCluster`` so that Dask has the packages it needs to execute your workflow. 
+Note that in many cases you will want to specify a custom Docker image to ``FargateCluster`` so that Dask has the packages it needs to execute your workflow.
 
 .. code-block:: python
 
@@ -64,7 +73,7 @@ Note that in many cases you will want to specify a custom Docker image to ``Farg
    cluster = FargateCluster(image="<hub-user>/<repo-name>[:<tag>]")
 
 ..
-One strategy to ensure that package versions match between your custom environment and the Docker container is to create your environment from an ``environment.yml`` file, export the exact package list for that environment using ``conda list --export > package-list.txt``, and then use the pinned package versions contained in ``package-list.txt`` in your Dockerfile.  You could use the default `Dask Dockerfile`_ as a template and simply add your pinned additional packages. 
+One strategy to ensure that package versions match between your custom environment and the Docker container is to create your environment from an ``environment.yml`` file, export the exact package list for that environment using ``conda list --export > package-list.txt``, and then use the pinned package versions contained in ``package-list.txt`` in your Dockerfile.  You could use the default `Dask Dockerfile`_ as a template and simply add your pinned additional packages.
 
 .. _`Dask Dockerfile`: https://github.com/dask/dask-docker/blob/master/base/Dockerfile
 
@@ -89,7 +98,7 @@ To create a ``FargateCluster`` the cluster manager will need to various AWS reso
 Here is the full minimal IAM policy that you need to create the whole cluster:
 
 .. code-block:: json
-   
+
    {
        "Statement": [
            {
@@ -130,12 +139,12 @@ Here is the full minimal IAM policy that you need to create the whole cluster:
            }
        ],
        "Version": "2012-10-17"
-   } 
-   
+   }
+
 If you specify all of the resources yourself you will need a minimal policy of:
 
 .. code-block:: json
-   
+
    {
        "Statement": [
            {
@@ -164,7 +173,7 @@ If you specify all of the resources yourself you will need a minimal policy of:
            }
        ],
        "Version": "2012-10-17"
-   } 
+   }
 
 GPU Support
 ~~~~~~~~~~~
@@ -214,7 +223,7 @@ Setup
 Next, create the ``Workspace`` object given your AzureML ``Workspace`` parameters. Check
 more in the AzureML documentation for `Workspace <https://docs.microsoft.com/python/api/azureml-core/azureml.core.workspace.workspace?view=azure-ml-py>`_.
 
-You can use ``ws = Workspace.from_config()`` after downloading the config file from the `Azure Portal <https://portal.azure.com>`_ or `ML Studio <https://ml.azure.com>`_. 
+You can use ``ws = Workspace.from_config()`` after downloading the config file from the `Azure Portal <https://portal.azure.com>`_ or `ML Studio <https://ml.azure.com>`_.
 
 .. code-block:: python
 
@@ -243,8 +252,8 @@ To create cluster:
    vm_size="STANDARD_DS13_V2",                                 # Azure VM size for the Compute Target
    datastores=ws.datastores.values(),                          # Azure ML Datastores to mount on the headnode
    environment_definition=ws.environments['AzureML-Dask-CPU'], # Azure ML Environment to run on the cluster
-   initial_node_count=2,                                       # number of nodes to start 
-   scheduler_idle_timeout=7200                                 # scheduler idle timeout in seconds 
+   initial_node_count=2,                                       # number of nodes to start
+   scheduler_idle_timeout=7200                                 # scheduler idle timeout in seconds
    )
 
 Once the cluster has started, the Dask Cluster widget will print out two links:
@@ -253,7 +262,7 @@ Once the cluster has started, the Dask Cluster widget will print out two links:
 2. Dask Dashboard link.
 
 You can stop the cluster with `amlcluster.close()`. The cluster will automatically spin down if unused for 20 minutes by default.
-Alternatively, you can delete the Azure ML Compute Target or cancel the Run from the Python SDK or UI to stop the cluster.  
+Alternatively, you can delete the Azure ML Compute Target or cancel the Run from the Python SDK or UI to stop the cluster.
 
 .. toctree::
    :maxdepth: 3

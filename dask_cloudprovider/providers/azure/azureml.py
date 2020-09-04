@@ -1,9 +1,3 @@
-from azureml.core import Experiment, RunConfiguration, ScriptRunConfig
-from azureml.core.compute import AmlCompute, ComputeTarget
-from azureml.core.compute_target import ComputeTargetException
-from azureml.train.estimator import Estimator
-from azureml.core.runconfig import MpiConfiguration
-
 import time, os, socket, subprocess, logging
 import pathlib
 import threading
@@ -16,6 +10,19 @@ from distributed.deploy.cluster import Cluster
 from distributed.core import rpc
 from distributed.utils import LoopRunner, log_errors, format_bytes
 from tornado.ioloop import PeriodicCallback
+
+try:
+    from azureml.core import Experiment, RunConfiguration, ScriptRunConfig
+    from azureml.core.compute import AmlCompute, ComputeTarget
+    from azureml.core.compute_target import ComputeTargetException
+    from azureml.train.estimator import Estimator
+    from azureml.core.runconfig import MpiConfiguration
+except:
+    raise RuntimeError(
+        "Missing Azure dependencies. "
+        "You can install with `pip install dask-cloudprovider[azure]."
+    )
+
 
 logger = logging.getLogger(__name__)
 

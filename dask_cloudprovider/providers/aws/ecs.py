@@ -5,9 +5,9 @@ import warnings
 import weakref
 from typing import List
 
-from botocore.exceptions import ClientError
-import aiobotocore
 import dask
+from distributed.deploy.spec import SpecCluster
+from distributed.utils import warn_on_duration
 
 from dask_cloudprovider.utils.logs import Log, Logs
 from dask_cloudprovider.utils.timeout import Timeout
@@ -17,8 +17,15 @@ from dask_cloudprovider.providers.aws.helper import (
     get_sleep_duration,
 )
 
-from distributed.deploy.spec import SpecCluster
-from distributed.utils import warn_on_duration
+try:
+    from botocore.exceptions import ClientError
+    import aiobotocore
+except:
+    raise RuntimeError(
+        "Missing Azure dependencies. "
+        "You can install with `pip install dask-cloudprovider[azure]."
+    )
+
 
 logger = logging.getLogger(__name__)
 
