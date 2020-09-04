@@ -11,9 +11,7 @@ extras_require = {
     "digitalocean": ["python-digitalocean"],
     "googlecloud": ["google-api-python-client"],
 }
-extras_require["all"] = set(
-    package for packages in extras_require.values() for package in packages
-)
+extras_require["all"] = set(pkg for pkgs in extras_require.values() for pkg in pkgs)
 
 setup(
     name="dask-cloudprovider",

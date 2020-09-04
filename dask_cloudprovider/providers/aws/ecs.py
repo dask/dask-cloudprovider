@@ -6,8 +6,6 @@ import weakref
 from typing import List
 
 import dask
-from distributed.deploy.spec import SpecCluster
-from distributed.utils import warn_on_duration
 
 from dask_cloudprovider.utils.logs import Log, Logs
 from dask_cloudprovider.utils.timeout import Timeout
@@ -17,15 +15,20 @@ from dask_cloudprovider.providers.aws.helper import (
     get_sleep_duration,
 )
 
+from distributed.deploy.spec import SpecCluster
+from distributed.utils import warn_on_duration
+
 try:
     from botocore.exceptions import ClientError
     import aiobotocore
-except:
-    raise RuntimeError(
-        "Missing Azure dependencies. "
-        "You can install with `pip install dask-cloudprovider[azure]."
+except ImportError as e:
+    msg = (
+        "Dask Cloud Provider AWS requirements are not installed.\n\n"
+        "Please either conda or pip install as follows:\n\n"
+        "  conda install dask-cloudprovider                           # either conda install\n"
+        '  python -m pip install "dask-cloudprovider[aws]" --upgrade  # or python -m pip install'
     )
-
+    raise ImportError(msg) from e
 
 logger = logging.getLogger(__name__)
 
