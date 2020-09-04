@@ -89,3 +89,14 @@ class VMCluster(SpecCluster):
             "Hang tight! ",
         ):
             await super()._start()
+
+    async def _close(self):
+        await asyncio.gather(
+            self.scheduler.close(), *[worker.close() for worker in self.workers]
+        )
+
+    def close(self, timeout=10):
+        super().close()
+        return self.sync(
+            self._close
+        )  # FIXME Event loop seems to be closed here already

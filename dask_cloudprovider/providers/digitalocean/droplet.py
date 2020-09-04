@@ -11,15 +11,19 @@ from dask_cloudprovider.utils.socket import is_socket_open
 
 try:
     import digitalocean
-except:
-    raise RuntimeError(
-        "Missing DigitalOcean dependencies. "
-        "You can install with `pip install dask-cloudprovider[digitalocean]."
+except ImportError as e:
+    msg = (
+        "Dask Cloud Provider AWS requirements are not installed.\n\n"
+        "Please either conda or pip install as follows:\n\n"
+        "  conda install dask-cloudprovider                           # either conda install\n"
+        '  python -m pip install "dask-cloudprovider[digitalocean]" --upgrade  # or python -m pip install'
     )
+    raise ImportError(msg) from e
 
 
 class DropletMixin:
     async def create_droplet(self):
+        # FIXME make configurable
         self.droplet = digitalocean.Droplet(
             token=self.config.get("token"),
             name=self.name,
@@ -86,9 +90,9 @@ class DropletWorker(VMWorker, DropletMixin):
         scheduler,
         cluster,
         config,
+        worker_command,
         region=None,
         size=None,
-        worker_command="dask-worker",
         **kwargs,
     ):
         super().__init__(scheduler)
@@ -117,7 +121,12 @@ class DropletCluster(VMCluster):
     """
 
     def __init__(
-        self, n_workers=0, region=None, size=None, worker_command=None, **kwargs
+        self,
+        n_workers=0,
+        region=None,
+        size=None,
+        worker_command="dask-worker",
+        **kwargs,
     ):
         super().__init__(**kwargs)
         self.config = dask.config.get("cloudprovider.digitalocean", {})

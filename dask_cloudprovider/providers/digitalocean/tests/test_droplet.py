@@ -8,14 +8,13 @@ from distributed.core import Status
 
 @pytest.fixture
 async def gen_cluster():
-    cluster = DropletCluster(asynchronous=True)
-    yield cluster
-    await cluster.close()
+    async with DropletCluster(asynchronous=True) as cluster:
+        yield cluster
 
 
 @pytest.mark.asyncio
-async def test_init(gen_cluster):
-    cluster = gen_cluster
+async def test_init():
+    cluster = DropletCluster(asynchronous=True)
     assert cluster.status == Status.created
 
 
@@ -26,9 +25,11 @@ async def test_create_cluster(gen_cluster):
     cluster = await gen_cluster
     assert cluster.status == Status.running
 
-    client = Client(cluster)  # noqa
-
     cluster.scale(2)
 
-    arr = da.random.random((1000, 1000), chunks=(100, 100))
-    assert arr.mean().compute() < 1
+    await cluster
+
+    assert len(cluster.workers) == 2
+
+    client = Client(cluster, asynchronous=True)  # noqa
+    await client
