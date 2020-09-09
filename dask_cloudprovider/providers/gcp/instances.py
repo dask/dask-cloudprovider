@@ -23,6 +23,22 @@ except ImportError as e:
 
 
 class GCPMixin:
+    def create_docker_space(self):
+        spec =f"""spec:
+  containers:
+    - name: {self.name}
+    image: '{self.docker_image}'
+    command:
+        - {self.command}
+    stdin: false
+    tty: false
+  restartPolicy: Always
+
+# This container declaration format is not public API and may change without notice. Please
+# use gcloud command-line tool or Google Cloud Console to run Containers on Google Compute Engine.
+"""
+        return str(spec)
+
     def create_gcp_config(self):
         config = {
             "name": self.name,
@@ -44,9 +60,10 @@ class GCPMixin:
                     "autoDelete": "true",
                     "deviceName": self.name,
                     "initializeParams": {
-                        "sourceImage": "projects/ubuntu-os-cloud/global/images/ubuntu-minimal-1804-bionic-v20200908",
+                        # "sourceImage": "projects/ubuntu-os-cloud/global/images/ubuntu-minimal-1804-bionic-v20200908",
+                        "sourceImage": "projects/nvidia-ngc-public/global/images/nvidia-gpu-cloud-image-20200730",
                         "diskType": f"projects/{self.projectid}/zones/us-central1-a/diskTypes/pd-standard",
-                        "diskSizeGb": "10",
+                        "diskSizeGb": "32", # nvidia-gpu-cloud cannot be smaller than 32 GB
                         "labels": {},
                     },
                     "diskEncryptionKey": {},
@@ -87,7 +104,10 @@ class GCPMixin:
                         # instance upon startup.
                         "key": "install-nvidia-driver",
                         "value": "True",
-                    }
+                    },
+                    {"key": "gce-container-declaration",
+                     "value": self.docker_spec
+                    },
                 ]
             },
             "scheduling": {
@@ -100,7 +120,9 @@ class GCPMixin:
         return config
 
     async def create_vm(self):
+        self.docker_spec = self.create_docker_space()
         self.gcp_config = self.create_gcp_config()
+        breakpoint()
         try:
             inst = (
                 self.compute.instances()
@@ -255,3 +277,30 @@ class GCPCluster(VMCluster):
 # sudo add-apt-repository "deb http://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/ /"
 # sudo apt-get update
 # sudo apt-get install cuda-toolkit-11-0 cuda
+
+# nvidia-gpu-cloud-image-20200730
+# gcloud compute images list --project=nvidia-ngc-public
+# long wait time for nvidia drivers to install
+
+"""
+spec:
+  containers:
+    - name: {self.name}
+      image: '{self.docker_image}'
+      command:
+        - {self.command}
+      args:
+        - '--ip=0.0.0.0'
+        - '--no-bokeh'
+      securityContext:
+        privileged: true
+      env:
+        - name: UCX_NVLINK_ENABLED
+          value: 'False'
+      stdin: false
+      tty: false
+  restartPolicy: Always
+
+# This container declaration format is not public API and may change without notice. Please
+# use gcloud command-line tool or Google Cloud Console to run Containers on Google Compute Engine.
+"""
