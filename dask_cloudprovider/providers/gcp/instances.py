@@ -23,92 +23,179 @@ except ImportError as e:
 
 
 class GCPMixin:
+    def create_gcp_config(self):
+        config = {
+            "name": self.name,
+            "machineType": self.machine_type,
+            "tags": {"items": ["http-server", "https-server"]},
+            "guestAccelerators": [
+                {
+                    "acceleratorCount": 1,
+                    "acceleratorType": f"projects/{self.projectid}/zones/{self.zone}/acceleratorTypes/nvidia-tesla-t4",
+                }
+            ],
+            # Specify the boot disk and the image to use as a source.
+            "disks": [
+                {
+                    "kind": "compute#attachedDisk",
+                    "type": "PERSISTENT",
+                    "boot": "true",
+                    "mode": "READ_WRITE",
+                    "autoDelete": "true",
+                    "deviceName": self.name,
+                    "initializeParams": {
+                        "sourceImage": "projects/ubuntu-os-cloud/global/images/ubuntu-minimal-1804-bionic-v20200908",
+                        "diskType": f"projects/{self.projectid}/zones/us-central1-a/diskTypes/pd-standard",
+                        "diskSizeGb": "10",
+                        "labels": {},
+                    },
+                    "diskEncryptionKey": {},
+                }
+            ],
+            "canIpForward": "false",
+            "networkInterfaces": [
+                {
+                    "kind": "compute#networkInterface",
+                    "subnetwork": f"projects/{self.projectid}/regions/us-central1/subnetworks/default",
+                    "accessConfigs": [
+                        {
+                            "kind": "compute#accessConfig",
+                            "name": "External NAT",
+                            "type": "ONE_TO_ONE_NAT",
+                            "networkTier": "PREMIUM",
+                        }
+                    ],
+                    "aliasIpRanges": [],
+                }
+            ],
+            # Allow the instance to access cloud storage and logging.
+            "serviceAccounts": [
+                {
+                    "email": "default",
+                    "scopes": [
+                        "https://www.googleapis.com/auth/devstorage.read_write",
+                        "https://www.googleapis.com/auth/logging.write",
+                    ],
+                }
+            ],
+            # Metadata is readable from the instance and allows you to
+            # pass configuration from deployment scripts to instances.
+            "metadata": {
+                "items": [
+                    {
+                        # Startup script is automatically executed by the
+                        # instance upon startup.
+                        "key": "install-nvidia-driver",
+                        "value": "True",
+                    }
+                ]
+            },
+            "scheduling": {
+                "preemptible": "false",
+                "onHostMaintenance": "TERMINATE",
+                "automaticRestart": "true",
+                "nodeAffinities": [],
+            },
+        }
+        return config
+
     async def create_vm(self):
+        self.gcp_config = self.create_gcp_config()
         try:
             inst = (
                 self.compute.instances()
-                .insert(project=self.projectid, zone=self.zone, body=self.config)
+                .insert(project=self.projectid, zone=self.zone, body=self.gcp_config)
                 .execute()
             )
             self.gcp_inst = inst
-            self.id = self.gcp_inst['id']
+            self.id = self.gcp_inst["id"]
         except HttpError as e:
             # something failed
             print(str(e))
-        while self.status() != "RUNNING":
-            await asyncio.sleep(0.1)
-        return await self.get_ip()
+            raise Exception(str(e))
+        while self.update_status() != "RUNNING":
+            await asyncio.sleep(0.5)
+        return self.get_ip()
 
-    async def close(self):
-        self.droplet.destroy()
-
-    async def get_ip(self):
+    def get_ip(self):
         return (
             self.compute.instances()
             .list(project=self.projectid, zone=self.zone, filter=f"name={self.name}")
             .execute()["items"][0]["networkInterfaces"][0]["accessConfigs"][0]["natIP"]
         )
 
-    async def status(self):
+    def update_status(self):
         d = (
-            compute.instances()
+            self.compute.instances()
             .list(project=self.projectid, zone=self.zone, filter=f"name={self.name}")
             .execute()
         )
         self.gcp_inst = d
+
+        if not d.get('items', None):
+            print("FAILURE")
+            print(self.gcp_inst)
+            raise Exception(f"Missing Instance {self.name}")
+
         return d["items"][0]["status"]
 
     async def close(self):
         self.compute.instances().delete(
-            project=projectid, zone=zone, instance=self.name
+            project=self.projectid, zone=self.zone, instance=self.name
         ).execute()
 
 
 class GCPScheduler(VMScheduler, GCPMixin):
-    """Scheduler running in a Digital Ocean droplet.
+    """Scheduler running in a GCP Instances."""
 
-    """
-
-    def __init__(self, cluster, config=None, zone=None, projectid=None, size=None, **kwargs):
+    def __init__(
+        self,
+        cluster,
+        name,
+        config=None,
+        zone=None,
+        projectid=None,
+        machine_type=None,
+        **kwargs,
+    ):
         super().__init__(**kwargs)
         self.compute = googleapiclient.discovery.build("compute", "v1")
-        self.config =  config
+        self.config = config
         self.cluster = cluster
         self.projectid = projectid
         self.zone = zone
-        self.size = size
+        self.machine_type = f"zones/{zone}/machineTypes/{machine_type}"
 
-        self.name = "dask-scheduler"
+        self.name = name + "-scheduler"
         self.address = None
         self.command = "dask-scheduler --idle-timeout 300"
 
     async def start(self):
         await super().start()
-        self.cluster._log("Creating scheduler gcp instance")
+        print("Creating scheduler gcp instance")
         ip = await self.create_vm()
-        self.cluster._log(f"Created GCP Instance {self.id}")
+        print(f"Created GCP Instance {self.id}")
 
-        self.cluster._log("Waiting for scheduler to run")
+        print("Waiting for scheduler to run")
         while not is_socket_open(ip, 8786):
             await asyncio.sleep(0.1)
-        self.cluster._log("Scheduler is running")
+        print("Scheduler is running")
         self.address = f"tcp://{ip}:8786"
 
 
 class GCPWorker(VMWorker, GCPMixin):
-    """Worker running in a GCP Instance.
-
-    """
+    """Worker running in a GCP Instance."""
 
     def __init__(
         self,
+        name,
         scheduler,
         cluster,
         config,
         worker_command,
-        project=None,
+        projectid=None,
         zone=None,
-        size=None,
+        machine_type=None,
         **kwargs,
     ):
         super().__init__(scheduler)
@@ -117,12 +204,11 @@ class GCPWorker(VMWorker, GCPMixin):
         self.config = config
         self.projectid = projectid
         self.zone = zone
-        self.size = size
+        self.machine_type = f"zones/{zone}/machineTypes/{machine_type}"
         self.worker_command = worker_command
 
-        self.name = f"dask-worker-{str(uuid.uuid4())[:8]}"
+        self.name = name+f"dask-worker-{str(uuid.uuid4())[:8]}"
         self.address = None
-        self.droplet = None
         self.command = f"{self.worker_command} {self.scheduler}"  # FIXME this is ending up as None for some reason
 
     async def start(self):
@@ -131,107 +217,41 @@ class GCPWorker(VMWorker, GCPMixin):
 
 
 class GCPCluster(VMCluster):
-    """Cluster running on Digital Ocean droplets.
-
-    """
+    """Cluster running on GCP Instances."""
 
     def __init__(
         self,
         n_workers=0,
-        region=None,
-        size=None,
+        name="dask-gcp-example",
+        zone=None,
+        machine_type=None,
+        projectid=None,
         worker_command="dask-worker",
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self.config = dask.config.get("cloudprovider.digitalocean", {})
+        self.config = dask.config.get("cloudprovider.gcp", {})
         self._n_workers = n_workers
+        self.name = name
         self.scheduler_class = GCPScheduler
         self.worker_class = GCPWorker
         self.options = {
+            "name": self.name,
             "cluster": self,
             "config": self.config,
-            "region": region,
-            "size": size,
+            "projectid": projectid,
+            "zone": zone,
+            "machine_type": machine_type,
         }
         self.scheduler_options = {**self.options}
         self.worker_options = {"worker_command": worker_command, **self.options}
 
 
-_gcp_config = {
-    'name': name,
-    'machineType': machine_type,
-    'tags': {
-        'items': ["http-server", "https-server"]
-    },
-    'guestAccelerators': [
-        {
-        "acceleratorCount": 1,
-        "acceleratorType": f"projects/{projectid}/zones/{zone}/acceleratorTypes/nvidia-tesla-t4"
-        }
-    ],
-
-    # Specify the boot disk and the image to use as a source.
-    "disks": [
-    {
-      "kind": "compute#attachedDisk",
-      "type": "PERSISTENT",
-      "boot": "true",
-      "mode": "READ_WRITE",
-      "autoDelete": "true",
-      "deviceName": "dask-rapids-gcp-test",
-      "initializeParams": {
-        "sourceImage": "projects/debian-cloud/global/images/debian-9-stretch-v20200902",
-        "diskType": f"projects/{projectid}/zones/us-central1-a/diskTypes/pd-standard",
-        "diskSizeGb": "10",
-        "labels": {}
-      },
-      "diskEncryptionKey": {}
-    }
-   ],
-
-   "canIpForward": "false",
-   "networkInterfaces": [
-    {
-      "kind": "compute#networkInterface",
-      "subnetwork": f"projects/{projectid}/regions/us-central1/subnetworks/default",
-      "accessConfigs": [
-        {
-          "kind": "compute#accessConfig",
-          "name": "External NAT",
-          "type": "ONE_TO_ONE_NAT",
-          "networkTier": "PREMIUM"
-        }
-      ],
-      "aliasIpRanges": []
-    }
-   ],
-
-    # Allow the instance to access cloud storage and logging.
-    'serviceAccounts': [{
-        'email': 'default',
-        'scopes': [
-            'https://www.googleapis.com/auth/devstorage.read_write',
-            'https://www.googleapis.com/auth/logging.write'
-        ]
-    }],
-
-
-
-    # Metadata is readable from the instance and allows you to
-    # pass configuration from deployment scripts to instances.
-    'metadata': {
-        'items': [{
-            # Startup script is automatically executed by the
-            # instance upon startup.
-            'key': 'install-nvidia-driver',
-            'value': 'True'
-        }]
-    },
-    "scheduling": {
-      "preemptible": "false",
-      "onHostMaintenance": "TERMINATE",
-      "automaticRestart": "true",
-      "nodeAffinities": []
-    },
-}
+# sudo apt-get update
+# sudo apt-get install software-properties-common
+# curl -O https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/cuda-ubuntu1804.pin
+# sudo mv cuda-ubuntu1804.pin /etc/apt/preferences.d/cuda-repository-pin-600
+# sudo apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/7fa2af80.pub
+# sudo add-apt-repository "deb http://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/ /"
+# sudo apt-get update
+# sudo apt-get install cuda-toolkit-11-0 cuda
