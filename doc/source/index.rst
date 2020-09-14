@@ -91,7 +91,7 @@ will be created automatically like in ``FargateCluster``.
 IAM Permissions
 ~~~~~~~~~~~~~~~
 
-To create a ``FargateCluster`` the cluster manager will need to various AWS resources ranging from IAM roles to VPCs to ECS tasks. Depending on your use case you may want the cluster to create all of these for you, or you may wish to specify them youself ahead of time.
+To create a ``FargateCluster`` the cluster manager will need to various AWS resources ranging from IAM roles to VPCs to ECS tasks. Depending on your use case you may want the cluster to create all of these for you, or you may wish to specify them yourself ahead of time.
 
 Here is the full minimal IAM policy that you need to create the whole cluster:
 

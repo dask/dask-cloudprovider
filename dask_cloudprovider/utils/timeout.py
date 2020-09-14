@@ -32,7 +32,7 @@ class Timeout:
     ...     time.sleep(1)  # Will timeout after 10 iterations
     TimeoutException: Oh no! We timed out.
 
-    You can also pass an exception to raise if you are supressing for a set
+    You can also pass an exception to raise if you are suppressing for a set
     amount of time.
 
     >>> timeout = Timeout(10, "Oh no! We timed out.")
