@@ -42,7 +42,7 @@ class AzureMLCluster(Cluster):
     vm_size: str (optional)
         Azure VM size to be used in the Compute Target - see https://aka.ms/azureml/vmsizes.
 
-    datastores: List[str] (optional)
+    datastores: List[Datastore] (optional)
         List of Azure ML Datastores to be mounted on the headnode -
         see https://aka.ms/azureml/data and https://aka.ms/azureml/datastores.
 
