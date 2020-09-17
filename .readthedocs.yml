@@ -1,7 +1,7 @@
 version: 2
 
 sphinx:
-  configuration: docs/conf.py
+  configuration: doc/conf.py
 
 formats: all
 
@@ -12,7 +12,7 @@ python:
       path: .
       extra_requirements:
         - all
-    - requirements: docs/requirements-docs.txt
+    - requirements: doc/requirements-docs.txt
 
 submodules:
   include: all
