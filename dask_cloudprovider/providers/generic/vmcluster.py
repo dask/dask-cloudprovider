@@ -1,26 +1,45 @@
 import asyncio
 import os
+import uuid
 
 from jinja2 import Environment, FileSystemLoader
 
 from distributed.deploy.spec import SpecCluster, ProcessInterface
 from distributed.utils import warn_on_duration
 
+from dask_cloudprovider.utils.socket import is_socket_open
 
-class VM(ProcessInterface):
+
+class VMInterface(ProcessInterface):
     """A superclass for VM Schedulers, Workers and Nannies.
 
     """
 
     def __init__(self, **kwargs):
-        self.docker_image = "daskdev/dask:latest"
         super().__init__(**kwargs)
+        self.name = None
+        self.command = None
+        self.address = None
+        self.cluster = None
+        self.docker_image = "daskdev/dask:latest"
 
     def render_cloud_init(self, *args, **kwargs):
         loader = FileSystemLoader([os.path.dirname(os.path.abspath(__file__))])
         environment = Environment(loader=loader)
         template = environment.get_template("cloud-init.yaml.j2")
         return template.render(*args, **kwargs)
+
+    def create_vm(self):
+        raise NotImplementedError("create_vm is a required method of the VMInterface")
+
+    async def wait_for_scheduler(self):
+        _, address = self.address.split("://")
+        ip, port = address.split(":")
+
+        self.cluster._log("Waiting for scheduler to run")
+        while not is_socket_open(ip, port):
+            await asyncio.sleep(0.1)
+        self.cluster._log("Scheduler is running")
 
     async def start(self):
         """Create a VM."""
@@ -31,38 +50,44 @@ class VM(ProcessInterface):
         await super().close()
 
 
-class VMScheduler(VM):
-    """A Remote Dask Scheduler running on a VM.
+class SchedulerMixin(object):
+    """A mixin for Schedulers.
 
     """
 
-    def __init__(self,):
-        super().__init__()
-        self.address = None
+    def init_scheduler(self,):
+        self.name = "dask-scheduler"
+        self.command = "dask-scheduler --idle-timeout 300"
 
-    async def start(self):
-        await super().start()
+    async def start_scheduler(self):
+        self.cluster._log("Creating scheduler instance")
+        ip = await self.create_vm()
+        self.address = f"tcp://{ip}:8786"
+        await self.wait_for_scheduler()
 
 
-class VMWorker(VM):
+class WorkerMixin(object):
     """A Remote Dask Worker running on a VM.
 
     """
 
-    def __init__(self, scheduler: str):
-        super().__init__()
-        self.address = None
+    def init_worker(self, scheduler: str, *args, worker_command=None, **kwargs):
         self.scheduler = scheduler
+        self.worker_command = worker_command
 
-    async def start(self):
-        await super().start()
+        self.name = f"dask-worker-{str(uuid.uuid4())[:8]}"
+        self.command = f"{self.worker_command} {self.scheduler}"
+
+    async def start_worker(self):
+        self.cluster._log("Creating worker instance")
+        self.address = await self.create_vm()
 
 
 class VMCluster(SpecCluster):
     def __init__(self, n_workers=0, **kwargs):
         self._n_workers = n_workers
-        self.scheduler_class = VMScheduler
-        self.worker_class = VMWorker
+        self.scheduler_class = None
+        self.worker_class = None
         self.scheduler_options = {}
         self.worker_options = {}
         super().__init__(**kwargs)
@@ -89,14 +114,3 @@ class VMCluster(SpecCluster):
             "Hang tight! ",
         ):
             await super()._start()
-
-    async def _close(self):
-        await asyncio.gather(
-            self.scheduler.close(), *[worker.close() for worker in self.workers]
-        )
-
-    def close(self, timeout=10):
-        super().close()
-        return self.sync(
-            self._close
-        )  # FIXME Event loop seems to be closed here already

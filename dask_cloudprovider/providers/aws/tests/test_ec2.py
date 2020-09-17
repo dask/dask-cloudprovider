@@ -1,20 +1,21 @@
 import asyncio
 import pytest
 
-from dask_cloudprovider.providers.digitalocean.droplet import DropletCluster
+from dask_cloudprovider.providers.aws.ec2 import EC2Cluster
 from dask.distributed import Client
+import dask.array as da
 from distributed.core import Status
 
 
 @pytest.fixture
 async def cluster():
-    async with DropletCluster(asynchronous=True) as cluster:
+    async with EC2Cluster(asynchronous=True) as cluster:
         yield cluster
 
 
 @pytest.mark.asyncio
 async def test_init():
-    cluster = DropletCluster(asynchronous=True)
+    cluster = EC2Cluster(asynchronous=True)
     assert cluster.status == Status.created
 
 
@@ -24,13 +25,10 @@ async def test_init():
 async def test_create_cluster(cluster):
     assert cluster.status == Status.running
 
-    cluster.scale(1)
+    cluster.scale(2)
     await cluster
-    assert len(cluster.workers) == 1
+    assert len(cluster.workers) == 2
 
     async with Client(cluster, asynchronous=True) as client:
-
-        def inc(x):
-            return x + 1
-
+        inc = lambda x: x + 1
         assert await client.submit(inc, 10).result() == 11
