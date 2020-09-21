@@ -34,6 +34,15 @@ cloudprovider:
     find_address_timeout: 60 # Configurable timeout in seconds for finding the task IP from the cloudwatch logs.
     skip_cleanup: False # Skip cleaning up of stale resources
 
+  ec2:
+    # region: "" # AWS region to create cluster. Defaults to environment or account default region.
+    # ami: "" # AMI ID to use for all instances. Defaults to latest Ubuntu 18.04 image.
+    instance_type: "t2.micro" # Instance type for all workers
+    # vpc: "" # VPC id for instances to join. Defaults to default VPC.
+    # subnet_id: "" # Subnet ID for instances to. Defaults to all subnets in default VPC.
+    # security_groups: [] # Security groups for instances. Will create a minimal Dask security group by default.
+    filesystem_size: 40 # Default root filesystem size for scheduler and worker VMs in GB
+
   azure:
     experiment_name: "dask-cloudprovider" # default name of the Experiment to submit
     initial_node_count: 1 # Initial node count

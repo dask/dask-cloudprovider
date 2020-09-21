@@ -4,8 +4,9 @@ import uuid
 import dask
 from dask_cloudprovider.providers.generic.vmcluster import (
     VMCluster,
-    VMScheduler,
-    VMWorker,
+    VMInterface,
+    SchedulerMixin,
+    WorkerMixin,
 )
 from dask_cloudprovider.utils.socket import is_socket_open
 
@@ -21,15 +22,25 @@ except ImportError as e:
     raise ImportError(msg) from e
 
 
-class DropletMixin:
-    async def create_droplet(self):
-        # FIXME make configurable
+class Droplet(VMInterface):
+    def __init__(
+        self, cluster, config, *args, region=None, size=None, image=None, **kwargs
+    ):
+        super().__init__(*args, **kwargs)
+        self.droplet = None
+        self.cluster = cluster
+        self.config = config
+        self.region = region
+        self.size = size
+        self.image = image
+
+    async def create_vm(self):
         self.droplet = digitalocean.Droplet(
             token=self.config.get("token"),
             name=self.name,
-            region=self.region or "nyc3",
-            image="ubuntu-20-04-x64",  # Ubuntu 20.04 x64
-            size_slug=self.size or "s-1vcpu-1gb",  # 1GB RAM, 1 vCPU
+            region=self.region,
+            image=self.image,
+            size_slug=self.size,
             backups=False,
             user_data=self.render_cloud_init(
                 image=self.docker_image, command=self.command
@@ -43,76 +54,42 @@ class DropletMixin:
         while self.droplet.ip_address is None:
             self.droplet.load()
             await asyncio.sleep(0.1)
+        self.cluster._log(f"Created droplet {self.name}")
 
         return self.droplet.ip_address
 
     async def close(self):
         self.droplet.destroy()
+        self.cluster._log(f"Terminated droplet {self.name}")
+        await super().close()
 
 
-class DropletScheduler(VMScheduler, DropletMixin):
-    """Scheduler running in a Digital Ocean droplet.
-
-    """
-
-    def __init__(self, cluster, config, region=None, size=None, **kwargs):
-        super().__init__(**kwargs)
-        self.cluster = cluster
-        self.config = config
-        self.region = region
-        self.size = size
-
-        self.name = "dask-scheduler"
-        self.address = None
-        self.droplet = None
-        self.command = "dask-scheduler --idle-timeout 300"
-
-    async def start(self):
-        await super().start()
-        self.cluster._log("Creating scheduler droplet")
-        ip = await self.create_droplet()
-        self.cluster._log(f"Created droplet {self.droplet.id}")
-
-        self.cluster._log("Waiting for scheduler to run")
-        while not is_socket_open(ip, 8786):
-            await asyncio.sleep(0.1)
-        self.cluster._log("Scheduler is running")
-        self.address = f"tcp://{ip}:8786"
-
-
-class DropletWorker(VMWorker, DropletMixin):
-    """Worker running in a Digital Ocean droplet.
+class DropletScheduler(Droplet, SchedulerMixin):
+    """Scheduler running in an EC2 instance.
 
     """
 
-    def __init__(
-        self,
-        scheduler,
-        cluster,
-        config,
-        worker_command,
-        region=None,
-        size=None,
-        **kwargs,
-    ):
-        super().__init__(scheduler)
-        self.scheduler = scheduler
-        self.cluster = cluster
-        self.config = config
-        self.region = region
-        self.size = size
-        self.worker_command = worker_command
-
-        self.name = f"dask-worker-{str(uuid.uuid4())[:8]}"
-        self.address = None
-        self.droplet = None
-        self.command = (
-            f"{self.worker_command} {self.scheduler}"
-        )  # FIXME this is ending up as None for some reason
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.init_scheduler()
 
     async def start(self):
         await super().start()
-        self.address = await self.create_droplet()
+        await self.start_scheduler()
+
+
+class DropletWorker(Droplet, WorkerMixin):
+    """Worker running in an EC2 instance.
+
+    """
+
+    def __init__(self, scheduler, *args, worker_command=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.init_worker(scheduler, *args, worker_command=worker_command, **kwargs)
+
+    async def start(self):
+        await super().start()
+        await self.start_worker()
 
 
 class DropletCluster(VMCluster):
@@ -122,22 +99,22 @@ class DropletCluster(VMCluster):
 
     def __init__(
         self,
-        n_workers=0,
-        region=None,
-        size=None,
+        region="nyc3",
+        size="s-1vcpu-1gb",  # 1GB RAM, 1 vCPU
+        image="ubuntu-20-04-x64",
         worker_command="dask-worker",
         **kwargs,
     ):
         super().__init__(**kwargs)
         self.config = dask.config.get("cloudprovider.digitalocean", {})
-        self._n_workers = n_workers
         self.scheduler_class = DropletScheduler
         self.worker_class = DropletWorker
-        self.options = {
+        self.options = {  # TODO get defaults from config
             "cluster": self,
             "config": self.config,
             "region": region,
             "size": size,
+            "image": image,
         }
         self.scheduler_options = {**self.options}
         self.worker_options = {"worker_command": worker_command, **self.options}

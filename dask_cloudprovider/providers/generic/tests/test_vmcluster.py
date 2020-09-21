@@ -13,3 +13,10 @@ async def gen_cluster():
 async def test_init(gen_cluster):
     cluster = gen_cluster
     assert cluster.status == Status.created
+
+
+# @pytest.mark.asyncio
+# async def test_close_async(gen_cluster):
+#     gen_cluster.scheduler = VMScheduler()
+#     gen_cluster.workers["abc123"] = VMWorker(None)
+#     await gen_cluster.close()
