@@ -1,13 +1,42 @@
 import asyncio
 import pytest
 
+import dask
+
 from dask_cloudprovider.providers.digitalocean.droplet import DropletCluster
 from dask.distributed import Client
 from distributed.core import Status
 
 
+async def skip_without_credentials():
+    if config.get("token") is None:
+        pytest.skip(
+            """
+        You must configure a Digital Ocean API token to run this test.
+
+        Either set this in your config
+
+            # cloudprovider.yaml
+            cloudprovider:
+              digitalocean:
+                token: "yourtoken"
+
+        Or by setting it as an environment variable
+
+            export DASK_CLOUDPROVIDER__DIGITALOCEAN__TOKEN="yourtoken"
+
+        """
+        )
+
+
 @pytest.fixture
-async def cluster():
+async def config():
+    return dask.config.get("cloudprovider.digitalocean", {})
+
+
+@pytest.fixture
+async def cluster(config):
+    await skip_without_credentials()
     async with DropletCluster(asynchronous=True) as cluster:
         yield cluster
 
@@ -20,7 +49,6 @@ async def test_init():
 
 @pytest.mark.asyncio
 @pytest.mark.timeout(600)
-# @pytest.mark.integration
 async def test_create_cluster(cluster):
     assert cluster.status == Status.running
 

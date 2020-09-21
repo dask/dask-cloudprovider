@@ -13,6 +13,9 @@ from dask_cloudprovider.providers.aws.helper import (
     dict_to_aws,
     aws_to_dict,
     get_sleep_duration,
+    get_default_vpc,
+    get_vpc_subnets,
+    create_default_security_group,
 )
 
 from distributed.deploy.spec import SpecCluster
@@ -803,12 +806,14 @@ class ECSCluster(SpecCluster):
             self._vpc = self.config.get("vpc")
 
         if self._vpc == "default":
-            self._vpc = await self._get_default_vpc()
+            async with self._client("ec2") as client:
+                self._vpc = await get_default_vpc(client)
 
         if self._vpc_subnets is None:
-            self._vpc_subnets = (
-                self.config.get("subnets") or await self._get_vpc_subnets()
-            )
+            async with self._client("ec2") as client:
+                self._vpc_subnets = self.config.get("subnets") or await get_vpc_subnets(
+                    client, self._vpc
+                )
 
         if self._security_groups is None:
             self._security_groups = (
@@ -998,59 +1003,13 @@ class ECSCluster(SpecCluster):
         # Note: Not cleaning up the logs here as they may be useful after the cluster is destroyed
         return log_group_name
 
-    async def _get_default_vpc(self):
-        async with self._client("ec2") as ec2:
-            vpcs = (await ec2.describe_vpcs())["Vpcs"]
-            [vpc] = [vpc for vpc in vpcs if vpc["IsDefault"]]
-            return vpc["VpcId"]
-
-    async def _get_vpc_subnets(self):
-        async with self._client("ec2") as ec2:
-            vpcs = (await ec2.describe_vpcs())["Vpcs"]
-            [vpc] = [vpc for vpc in vpcs if vpc["VpcId"] == self._vpc]
-            subnets = (await ec2.describe_subnets())["Subnets"]
-            return [
-                subnet["SubnetId"]
-                for subnet in subnets
-                if subnet["VpcId"] == vpc["VpcId"]
-            ]
-
     async def _create_security_groups(self):
-        async with self._client("ec2") as ec2:
-            response = await ec2.create_security_group(
-                Description="A security group for dask-ecs",
-                GroupName=self.cluster_name,
-                VpcId=self._vpc,
-                DryRun=False,
+        async with self._client("ec2") as client:
+            group = await create_default_security_group(
+                client, self.cluster_name, self._vpc
             )
-
-            await ec2.authorize_security_group_ingress(
-                GroupId=response["GroupId"],
-                IpPermissions=[
-                    {
-                        "IpProtocol": "TCP",
-                        "FromPort": 8786,
-                        "ToPort": 8787,
-                        "IpRanges": [
-                            {"CidrIp": "0.0.0.0/0", "Description": "Anywhere"}
-                        ],
-                        "Ipv6Ranges": [{"CidrIpv6": "::/0", "Description": "Anywhere"}],
-                    },
-                    {
-                        "IpProtocol": "TCP",
-                        "FromPort": 0,
-                        "ToPort": 65535,
-                        "UserIdGroupPairs": [{"GroupId": response["GroupId"]}],
-                    },
-                ],
-                DryRun=False,
-            )
-            # await ec2.create_tags(
-            #     Resources=[response["GroupId"]], Tags=dict_to_aws(self.tags, upper=True)
-            #  )
-
-            weakref.finalize(self, self.sync, self._delete_security_groups)
-            return [response["GroupId"]]
+        weakref.finalize(self, self.sync, self._delete_security_groups)
+        return [group]
 
     async def _delete_security_groups(self):
         timeout = Timeout(
