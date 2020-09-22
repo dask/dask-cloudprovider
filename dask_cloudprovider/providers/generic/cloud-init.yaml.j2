@@ -14,16 +14,26 @@ write_files:
       net.ipv4.conf.all.forwarding=1
 
 
+{% if bootstrap %}
 # create the docker group
 groups:
   - docker
 
-runcmd:
-  # Open firewall ports
-  - ufw allow 8786
-  - ufw allow 8787
-  - ufw allow 49152:65535/tcp
+# Add default auto created user to docker group
+system_info:
+  default_user:
+    groups: [docker]
+{% endif %}
 
+{% if bootstrap and gpu_instance %}
+# Install NVIDIA driver if GPU instance
+drivers:
+  nvidia:
+    license-accepted: true
+{% endif %}
+
+runcmd:
+  {% if bootstrap %}
   # Install Docker
   - curl -fsSL https://download.docker.com/linux/ubuntu/gpg | apt-key add -
   - add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
@@ -31,14 +41,10 @@ runcmd:
   - apt-get install -y docker-ce docker-ce-cli containerd.io
   - systemctl start docker
   - systemctl enable docker
+  {% endif %}
 
   # Run container
-  - docker run --net=host {{image}} {{ command }}
+  - docker run --net=host {%+ if gpu_instance %}--gpus=all{% endif %} {{image}} {{ command }}
 
   # Shutdown when command is done
   - shutdown -h now
-
-# Add default auto created user to docker group
-system_info:
-  default_user:
-    groups: [docker]

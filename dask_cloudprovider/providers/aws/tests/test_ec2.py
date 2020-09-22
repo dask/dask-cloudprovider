@@ -33,6 +33,20 @@ async def cluster():
 
 
 @pytest.fixture
+async def cluster_rapids():
+    await skip_without_credentials()
+    async with EC2Cluster(
+        asynchronous=True,
+        ami="ami-0c7c7d78f752f8f17",  # Deep Learning AMI (Ubuntu 18.04)
+        docker_image="rapidsai/rapidsai:cuda10.1-runtime-ubuntu18.04-py3.8",  # Python version must match local version and CUDA version must match AMI CUDA version
+        instance_type="p3.2xlarge",
+        bootstrap=False,
+        filesystem_size=120,
+    ) as cluster:
+        yield cluster
+
+
+@pytest.fixture
 async def ec2_client():
     await skip_without_credentials()
     async with aiobotocore.get_session().create_client("ec2") as client:
@@ -57,6 +71,25 @@ async def test_create_cluster(cluster):
     async with Client(cluster, asynchronous=True) as client:
         inc = lambda x: x + 1
         assert await client.submit(inc, 10).result() == 11
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(1200)
+async def test_create_rapids_cluster(cluster_rapids):
+    assert cluster_rapids.status == Status.running
+
+    cluster_rapids.scale(1)
+    await cluster_rapids
+    assert len(cluster_rapids.workers) == 1
+
+    async with Client(cluster_rapids, asynchronous=True) as client:
+
+        def f():
+            import cupy
+
+            return float(cupy.random.random(100).mean())
+
+        assert await client.submit(f).result() < 1
 
 
 @pytest.mark.asyncio
