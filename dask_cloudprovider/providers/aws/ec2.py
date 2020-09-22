@@ -73,7 +73,7 @@ class EC2Instance(VMInterface):
             ]
             self.ami = self.ami or await get_latest_ami_id(
                 client,
-                "ubuntu/images/hvm-instance/ubuntu-bionic-18.04-amd64-server-*",
+                "ubuntu/images/hvm-ssd/ubuntu-focal-20.04-amd64-server-*",
                 "099720109477",  # Canonical
             )
 

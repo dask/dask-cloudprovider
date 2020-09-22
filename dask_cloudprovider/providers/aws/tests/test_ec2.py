@@ -63,7 +63,7 @@ async def test_create_cluster(cluster):
 async def test_get_ubuntu_image(ec2_client):
     image = await get_latest_ami_id(
         ec2_client,
-        "ubuntu/images/hvm-instance/ubuntu-bionic-18.04-amd64-server-*",
+        "ubuntu/images/hvm-ssd/ubuntu-focal-20.04-amd64-server-*",
         "099720109477",  # Canonical
     )
     assert "ami-" in image
