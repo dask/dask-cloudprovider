@@ -8,7 +8,7 @@ from dask.distributed import Client
 from distributed.core import Status
 
 
-async def skip_without_credentials():
+async def skip_without_credentials(config):
     if config.get("token") is None:
         pytest.skip(
             """
@@ -36,7 +36,7 @@ async def config():
 
 @pytest.fixture
 async def cluster(config):
-    await skip_without_credentials()
+    await skip_without_credentials(config)
     async with DropletCluster(asynchronous=True) as cluster:
         yield cluster
 

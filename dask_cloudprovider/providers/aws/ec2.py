@@ -34,7 +34,9 @@ class EC2Instance(VMInterface):
         config,
         *args,
         region=None,
+        bootstrap=None,
         ami=None,
+        docker_image=None,
         instance_type=None,
         vpc=None,
         subnet_id=None,
@@ -46,13 +48,16 @@ class EC2Instance(VMInterface):
         self.instance = None
         self.cluster = cluster
         self.config = config
-        self.region = region or self.config.get("region")
-        self.ami = ami or self.config.get("ami")
-        self.instance_type = instance_type or self.config.get("instance_type")
-        self.vpc = vpc or self.config.get("vpc")
-        self.subnet_id = subnet_id or self.config.get("subnet_id")
-        self.security_groups = security_groups or self.config.get("security_groups")
-        self.filesystem_size = filesystem_size or self.config.get("filesystem_size")
+        self.region = region
+        self.bootstrap = bootstrap
+        self.ami = ami
+        self.docker_image = docker_image
+        self.instance_type = instance_type
+        self.gpu_instance = self.instance_type.startswith(("p", "g"))
+        self.vpc = vpc
+        self.subnet_id = subnet_id
+        self.security_groups = security_groups
+        self.filesystem_size = filesystem_size
 
     async def create_vm(self):
         """
@@ -96,7 +101,10 @@ class EC2Instance(VMInterface):
                 MinCount=1,
                 Monitoring={"Enabled": False},
                 UserData=self.render_cloud_init(
-                    image=self.docker_image, command=self.command
+                    image=self.docker_image,
+                    command=self.command,
+                    gpu_instance=self.gpu_instance,
+                    bootstrap=self.bootstrap,
                 ),
                 InstanceInitiatedShutdownBehavior="terminate",
                 NetworkInterfaces=[
@@ -163,7 +171,12 @@ class EC2Worker(EC2Instance, WorkerMixin):
 
     def __init__(self, scheduler, *args, worker_command=None, **kwargs):
         super().__init__(*args, **kwargs)
-        self.init_worker(scheduler, *args, worker_command=worker_command, **kwargs)
+        self.worker_command = worker_command
+        if not self.worker_command:
+            self.worker_command = (
+                "dask-cuda-worker" if self.gpu_instance else "dask-worker"
+            )
+        self.init_worker(scheduler, *args, worker_command=self.worker_command, **kwargs)
 
     async def start(self):
         await super().start()
@@ -171,15 +184,100 @@ class EC2Worker(EC2Instance, WorkerMixin):
 
 
 class EC2Cluster(VMCluster):
-    """Cluster running on EC2 instances.
+    """Deploy a Dask cluster using EC2.
 
+    This creates a Dask scheduler and workers on EC2 instances.
+
+    All instances will run a single configurable Docker container which should contain
+    a valid Python environment with Dask and any other dependencies.
+
+    All optional parameters can also be configured in a `cloudprovider.yaml` file
+    in your Dask configuration directory or via environment variables.
+
+    For example ``ami`` can be set via ``DASK_CLOUDPROVIDER__EC2__AMI``.
+
+    See https://docs.dask.org/en/latest/configuration.html for more info.
+
+    Parameters
+    ----------
+    region: string (optional)
+        The region to start you clusters. By default this will be detected from your config.
+    bootstrap: bool (optional)
+        It is assumed that the ``ami`` will not have Docker installed (or the NVIDIA drivers for GPU instances).
+        If ``bootstrap`` is ``True`` these dependencies will be installed on instance start. If you are using
+        a custom AMI which already has these dependencies set this to ``False.``
+    worker_command: string (optional)
+        The command workers should run when starting. By default this will be ``"dask-worker"`` unless
+        ``instance_type`` is a GPU instance in which case ``dask-cuda-worker`` will be used.
+    ami: string (optional)
+        The base OS AMI to use for scheduler and workers.
+
+        This must be a Debian flavour distribution. By default this will be the latest official
+        Ubuntu 20.04 LTS release from canonical.
+
+        If the AMI does not include Docker it will be installed at runtime.
+        If the instance_type is a GPU instance the NVIDIA drivers and Docker GPU runtime will be installed
+        at runtime.
+    docker_image: string (optional)
+        The Docker image to run on all instances.
+
+        This image must have a valid Python environment and have ``dask`` installed in order for the
+        ``dask-scheduler`` and ``dask-worker`` commands to be available. It is recommended the Python
+        environment matches your local environment where ``EC2Cluster`` is being created from.
+
+        For GPU instance types the Docker image much have NVIDIA drivers and ``dask-cuda`` installed.
+
+        By default the ``daskdev/dask:latest`` image will be used.
+    instance_type: string (optional)
+        A valid EC2 instance type. This will determine the resources available to your workers.
+
+        See https://aws.amazon.com/ec2/instance-types/.
+
+        By default will use ``t2.micro``.
+    vpc: string (optional)
+        The VPC ID in which to launch the instances.
+
+        Will detect and use the default VPC if not specified.
+    subnet_id: string (optional)
+        The Subnet ID in which to launch the instances.
+
+        Will use all subnets for the VPC if not specified.
+    security_groups: List(string) (optional)
+        The security group ID that will be attached to the workers.
+
+        Must allow all traffic between instances in the security group and ports 8786 and 8787 between
+        the scheduler instance and wherever you are calling ``EC2Cluster`` from.
+
+        By default a Dask security group will be created with ports 8786 and 8787 exposed to the internet.
+    filesystem_size: int (optional)
+        The instance filesystem size in GB.
+
+        Defaults to ``40``.
+    **kwargs: dict
+        Additional keyword arguments to pass to ``VMCluster``.
+
+    Examples
+    --------
+
+    Regular cluster.
+    >>> cluster = EC2Cluster()
+    >>> cluster.scale(5)
+
+    RAPIDS Cluster.
+    >>> cluster = EC2Cluster(ami="ami-0c7c7d78f752f8f17",  # Example Deep Learning AMI (Ubuntu 18.04)
+                             docker_image="rapidsai/rapidsai:cuda10.1-runtime-ubuntu18.04",
+                             instance_type="p3.2xlarge",
+                             bootstrap=False,
+                             filesystem_size=120)
     """
 
     def __init__(
         self,
         region="eu-west-2",
-        worker_command="dask-worker",
+        bootstrap=None,
+        worker_command=None,
         ami=None,
+        docker_image=None,
         instance_type=None,
         vpc=None,
         subnet_id=None,
@@ -195,13 +293,30 @@ class EC2Cluster(VMCluster):
         self.options = {
             "cluster": self,
             "config": self.config,
-            "region": region,
-            "ami": ami,
-            "instance_type": instance_type,
-            "vpc": vpc,
-            "subnet_id": subnet_id,
-            "security_groups": security_groups,
-            "filesystem_size": filesystem_size,
+            "region": region if region is not None else self.config.get("region"),
+            "bootstrap": bootstrap
+            if bootstrap is not None
+            else self.config.get("bootstrap"),
+            "ami": ami if ami is not None else self.config.get("ami"),
+            "docker_image": docker_image
+            if docker_image is not None
+            else self.config.get("docker_image"),
+            "instance_type": instance_type
+            if instance_type is not None
+            else self.config.get("instance_type"),
+            "vpc": vpc if vpc is not None else self.config.get("vpc"),
+            "subnet_id": subnet_id
+            if subnet_id is None
+            else self.config.get("subnet_id"),
+            "security_groups": security_groups
+            if security_groups is not None
+            else self.config.get("security_groups"),
+            "filesystem_size": filesystem_size
+            if filesystem_size is not None
+            else self.config.get("filesystem_size"),
         }
         self.scheduler_options = {**self.options}
-        self.worker_options = {"worker_command": worker_command, **self.options}
+        self.worker_options = {
+            "worker_command": worker_command or self.config.get("worker_command"),
+            **self.options,
+        }
