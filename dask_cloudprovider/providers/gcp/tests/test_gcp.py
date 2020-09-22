@@ -8,13 +8,35 @@ from distributed.core import Status
 
 @pytest.fixture
 async def gen_cluster():
-    async with GCPCluster(asynchronous=True) as cluster:
+    name = "aa-dask-rapids-gcp-test"
+    zone = "us-east1-c"
+    projectid = "nv-ai-infra"
+    machine_type = "n1-standard-1"
+
+    async with GCPCluster(
+        asynchronous=True,
+        name=name,
+        zone=zone,
+        projectid=projectid,
+        machine_type=machine_type,
+    ) as cluster:
         yield cluster
 
 
 @pytest.mark.asyncio
 async def test_init():
-    cluster = GCPCluster(asynchronous=True)
+    name = "aa-dask-rapids-gcp-test"
+    zone = "us-east1-c"
+    projectid = "nv-ai-infra"
+    machine_type = "n1-standard-1"
+
+    cluster = GCPCluster(
+        asynchronous=True,
+        name=name,
+        zone=zone,
+        projectid=projectid,
+        machine_type=machine_type,
+    )
     assert cluster.status == Status.created
 
 
@@ -30,6 +52,8 @@ async def test_create_cluster(gen_cluster):
     await cluster
 
     assert len(cluster.workers) == 2
+    breakpoint()
+    1+1
 
     client = Client(cluster, asynchronous=True)  # noqa
     await client
