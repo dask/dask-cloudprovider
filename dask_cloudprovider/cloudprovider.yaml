@@ -63,3 +63,14 @@ cloudprovider:
 
   digitalocean:
     token: null # API token for interacting with the Digital Ocean API
+
+
+  gcs:
+    source_image: "" # the gcp image to use for all instances
+    zone: "us-east1-c" # the zone of of where to launch the instances
+    projectid: "" # name of the google cloud project
+    machine_type: "n1-standard-1" # size of the machine type to use
+    filesystem_size: 50  # amount in GBs of hard drive space to allocate
+    ngpus: "" # number of GPUs to use
+    gpu_type: "" # type of gpus to use: nvidia-tesla-k80, nvidia-tesla-p100, nvidia-tesla-t4
+    docker_image: "rapidsai/rapidsai-nightly:0.16-cuda11.0-runtime-ubuntu18.04" # docker image to use

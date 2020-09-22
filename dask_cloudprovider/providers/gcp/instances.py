@@ -18,7 +18,7 @@ except ImportError as e:
     msg = (
         "Dask Cloud Provider GCP requirements are not installed.\n\n"
         "Please either conda or pip install as follows:\n\n"
-        "  conda install google-api-python-client                        # either conda install\n"
+        "  conda install -c conda-forge google-api-python-client  # either conda install\n"
         '  python -m pip install "dask-cloudprovider[gcp]" --upgrade  # or python -m pip install'
     )
     raise ImportError(msg) from e
@@ -33,65 +33,38 @@ class GCPInstance(VMInterface):
         zone=None,
         projectid=None,
         machine_type=None,
+        filesystem_size=None,
+        source_image=None,
+        docker_image=None,
+        ngpus=None,
+        gpu_type=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
         self.cluster = cluster
         self.name = name
         self.config = config
-        self.projectid = projectid
-        self.zone = zone
-        self.machine_type = f"zones/{zone}/machineTypes/{machine_type}"
+        self.projectid = projectid or self.config.get("projectid")
+        self.zone = zone or self.config.get("zone")
 
-    def create_docker_space(self):
-        spec =f"""spec:
-  containers:
-    - name: {self.name}
-      image: 'gcr.io/nv-ai-infra/rapidsai-nightly:0.16-cuda11.0-runtime-ubuntu18.04'
-      command:
-        - {self.command}
-      securityContext:
-        privileged: true
-      stdin: false
-      tty: false
-  restartPolicy: Always
+        self.machine_type = machine_type or self.config.get("machine_type")
 
-# This container declaration format is not public API and may change without notice. Please
-# use gcloud command-line tool or Google Cloud Console to run Containers on Google Compute Engine.
-"""
-        return str(spec)
+        self.source_image = source_image or self.config.get('source_image')
+        self.docker_image = docker_image or self.config.get('docker_image')
+        self.filesystem_size = filesystem_size or self.config.get("filesystem_size")
+        self.ngpus = ngpus or self.config.get("ngpus")
+        self.gpu_type = gpu_type or self.config.get("gpu_type")
 
-    def create_cloud_init(self):
-        spec = f"""#cloud-config
-packages:
-  - apt-transport-https
-  - ca-certificates
-  - curl
-  - gnupg-agent
-  - software-properties-common
-  - tmux
+        self.general_zone = '-'.join(self.zone.split('-')[:2])  # us-east1-c -> us-east1
 
-runcmd:
-  # Run container
-  - docker run --gpus=all --net=host rapidsai/rapidsai-nightly:0.16-cuda11.0-runtime-ubuntu18.04 {self.command}
-"""
-        return spec
 
 
     def create_gcp_config(self):
         config = {
             "name": self.name,
-            "machineType": self.machine_type,
-            "displayDevice": {
-                "enableDisplay": "false"
-            },
+            "machineType": f"zones/{self.zone}/machineTypes/{self.machine_type}",
+            "displayDevice": {"enableDisplay": "false"},
             "tags": {"items": ["http-server", "https-server"]},
-            "guestAccelerators": [
-                {
-                    "acceleratorCount": 1,
-                    "acceleratorType": f"projects/{self.projectid}/zones/{self.zone}/acceleratorTypes/nvidia-tesla-t4",
-                }
-            ],
             # Specify the boot disk and the image to use as a source.
             "disks": [
                 {
@@ -102,15 +75,11 @@ runcmd:
                     "autoDelete": "true",
                     "deviceName": self.name,
                     "initializeParams": {
-                        # "sourceImage": "projects/ubuntu-os-cloud/global/images/ubuntu-minimal-1804-bionic-v20200908",
-                        "sourceImage": "projects/nv-ai-infra/global/images/ngc-docker-11-20200916",
-                        # "sourceImage": "projects/cos-cloud/global/images/cos-beta-85-13310-1040-0", # has to be cos 85
-                        # "sourceImage": "projects/nvidia-ngc-public/global/images/nvidia-gpu-cloud-image-20200730",
-                        # "sourceImage": "projects/nvidia-ngc-public/global/images/nvidia-gpu-cloud-image-pytorch-20200730",
+                        "sourceImage": self.source_image,
                         "diskType": f"projects/{self.projectid}/zones/{self.zone}/diskTypes/pd-standard",
-                        "diskSizeGb": "50", # nvidia-gpu-cloud cannot be smaller than 32 GB
+                        "diskSizeGb": "50",  # nvidia-gpu-cloud cannot be smaller than 32 GB
                         "labels": {},
-                        "source": "projects/nv-ai-infra/zones/us-east1-c/disks/ngc-gpu-dask-rapids-docker-experiment",
+                        # "source": "projects/nv-ai-infra/zones/us-east1-c/disks/ngc-gpu-dask-rapids-docker-experiment",
                     },
                     "diskEncryptionKey": {},
                 }
@@ -119,7 +88,7 @@ runcmd:
             "networkInterfaces": [
                 {
                     "kind": "compute#networkInterface",
-                    "subnetwork": f"projects/{self.projectid}/regions/us-east1/subnetworks/default",
+                    "subnetwork": f"projects/{self.projectid}/regions/{self.general_zone}/subnetworks/default",
                     "accessConfigs": [
                         {
                             "kind": "compute#accessConfig",
@@ -151,17 +120,10 @@ runcmd:
                         "key": "google-logging-enabled",
                         "value": "true",
                     },
-                    {"key": "gce-container-declaration",
-                     "value": self.docker_spec
-                    },
-                    {"key": "user-data",
-                     "value": self.cloud_init
-                    }
+                    {"key": "user-data", "value": self.cloud_init},
                 ]
             },
-            "labels": {
-                "container-vm": "cos-stable-81-12871-1196-0"
-            },
+            "labels": {"container-vm": "dask-cloudprovider"},
             "scheduling": {
                 "preemptible": "false",
                 "onHostMaintenance": "TERMINATE",
@@ -171,18 +133,29 @@ runcmd:
             "shieldedInstanceConfig": {
                 "enableSecureBoot": "false",
                 "enableVtpm": "true",
-                "enableIntegrityMonitoring": "true"
+                "enableIntegrityMonitoring": "true",
             },
             "deletionProtection": "false",
-            "reservationAffinity": {
-                "consumeReservationType": "ANY_RESERVATION"
-            },
+            "reservationAffinity": {"consumeReservationType": "ANY_RESERVATION"},
         }
+
+        if self.ngpus:
+            config["guestAccelerators"] = [
+                {
+                    "acceleratorCount": self.ngpus,
+                    "acceleratorType": f"projects/{self.projectid}/zones/{self.zone}/acceleratorTypes/{self.gpu_type}",
+                }
+            ]
+
         return config
 
     async def create_vm(self):
-        self.docker_spec = self.create_docker_space()
-        self.cloud_init = self.create_cloud_init()
+        self.cloud_init =  self.render_cloud_init(
+                    image=self.docker_image,
+                    command=self.command,
+                    gpu_instance=bool(self.ngpus),
+                    bootstrap=False)
+
         self.gcp_config = self.create_gcp_config()
         try:
             inst = (
@@ -208,7 +181,7 @@ runcmd:
         return (
             self.cluster.compute.instances()
             .list(project=self.projectid, zone=self.zone, filter=f"name={self.name}")
-            .execute()["items"][0]["networkInterfaces"][0]['networkIP']
+            .execute()["items"][0]["networkInterfaces"][0]["networkIP"]
         )
 
     def get_external_ip(self):
@@ -226,7 +199,7 @@ runcmd:
         )
         self.gcp_inst = d
 
-        if not d.get('items', None):
+        if not d.get("items", None):
             print("FAILURE")
             print(self.gcp_inst)
             raise Exception(f"Missing Instance {self.name}")
@@ -240,18 +213,16 @@ runcmd:
 
 
 class GCPScheduler(GCPInstance, SchedulerMixin):
-    """Scheduler running in a GCP instance.
-    """
+    """Scheduler running in a GCP instance."""
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.command = "dask-scheduler --host 0.0.0.0"
-        self.name = "aa-dask-scheduler"
+        self.name = "aa-dask-scheduler"  # common_name
 
     async def start(self):
         await super().start()
         await self.start_scheduler()
-
 
     async def start_scheduler(self):
         self.cluster._log("Creating scheduler instance")
@@ -265,10 +236,8 @@ class GCPScheduler(GCPInstance, SchedulerMixin):
         self.cluster.scheduler_external_ip = self.external_ip
 
 
-
 class GCPWorker(GCPInstance, WorkerMixin):
-    """Worker running in an GCP instance.
-    """
+    """Worker running in an GCP instance."""
 
     def __init__(self, scheduler, *args, worker_command=None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -282,93 +251,17 @@ class GCPWorker(GCPInstance, WorkerMixin):
         self.scheduler = scheduler
         self.worker_command = worker_command
 
-        print('# use internal address for workers')
+        print("# use internal address for workers")
         self.name = f"dask-worker-{str(uuid.uuid4())[:8]}"
-        self.command = f"{self.worker_command} {self.cluster.scheduler_internal_ip}:8786"
+        self.command = (
+            f"{self.worker_command} {self.cluster.scheduler_internal_ip}:8786"
+        )
         print(self.command)
-
 
     async def start_worker(self):
         self.cluster._log("Creating worker instance")
         self.internal_ip, self.external_ip = await self.create_vm()
         self.address = self.external_ip
-
-
-# class GCPScheduler(GCPInstance):
-#     """Scheduler running in a GCP Instances."""
-
-#     def __init__(
-#         self,
-#         cluster,
-#         name,
-#         config=None,
-#         zone=None,
-#         projectid=None,
-#         machine_type=None,
-#         **kwargs,
-#     ):
-#         super().__init__(**kwargs)
-#         self.compute = googleapiclient.discovery.build("compute", "v1")
-#         self.config = config
-#         self.cluster = cluster
-#         self.projectid = projectid
-#         self.zone = zone
-#         self.machine_type = f"zones/{zone}/machineTypes/{machine_type}"
-
-#         self.name = name + "-scheduler"
-#         self.address = None
-#         self.command = "dask-scheduler --host 0.0.0.0"
-
-    # async def start(self):
-    #     await super().start()
-    #     print("Creating scheduler gcp instance")
-    #     self.internal_ip, self.external_ip = await self.create_vm()
-    #     print(f"Created GCP Instance {self.id}")
-
-    #     print("Waiting for scheduler to run")
-    #     while not is_socket_open(self.external_ip, 8786):
-    #         await asyncio.sleep(0.1)
-    #     print("Scheduler is running")
-    #     print(f"Command: {self.command}")
-
-    #     self.address = f"tcp://{self.external_ip}:8786"
-
-
-# class GCPWorker(VMWorker, GCPMixin):
-#     """Worker running in a GCP Instance."""
-
-#     def __init__(
-#         self,
-#         scheduler,
-#         cluster,
-#         config,
-#         worker_command,
-#         projectid=None,
-#         zone=None,
-#         machine_type=None,
-#         **kwargs,
-#     ):
-#         super().__init__(scheduler)
-#         self.scheduler = scheduler
-#         self.compute = googleapiclient.discovery.build("compute", "v1")
-#         self.cluster = cluster
-#         self.config = config
-#         self.projectid = projectid
-#         self.zone = zone
-#         self.machine_type = f"zones/{zone}/machineTypes/{machine_type}"
-#         self.worker_command = worker_command
-
-#         self.name = f"dask-worker-{str(uuid.uuid4())[:8]}"
-#         self.address = None
-#         breakpoint()
-#         self.command = f"{self.worker_command} {self.scheduler}"  # FIXME this is ending up as None for some reason
-
-#     async def start(self):
-#         await super().start()
-#         breakpoint()
-#         self.address = await self.create_vm()
-#         # print(f"Command: {self.command}")
-
 
 
 class GCPCluster(VMCluster):
@@ -380,6 +273,10 @@ class GCPCluster(VMCluster):
         zone=None,
         machine_type=None,
         projectid=None,
+        source_image=None,
+        docker_image=None,
+        ngpus=None,
+        gpu_type=None,
         worker_command="dask-cuda-worker",
         **kwargs,
     ):
@@ -394,53 +291,12 @@ class GCPCluster(VMCluster):
             "cluster": self,
             "config": self.config,
             "projectid": projectid,
+            "source_image": source_image,
+            "docker_image": docker_image,
             "zone": zone,
             "machine_type": machine_type,
+            "ngpus": ngpus,
+            "gpu_type": gpu_type,
         }
         self.scheduler_options = {**self.options}
         self.worker_options = {"worker_command": worker_command, **self.options}
-
-
-# sudo apt-get update
-# sudo apt-get install software-properties-common
-# curl -O https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/cuda-ubuntu1804.pin
-# sudo mv cuda-ubuntu1804.pin /etc/apt/preferences.d/cuda-repository-pin-600
-# sudo apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/7fa2af80.pub
-# sudo add-apt-repository "deb http://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/ /"
-# sudo apt-get update
-# sudo apt-get install cuda-toolkit-11-0 cuda
-
-# nvidia-gpu-cloud-image-20200730
-# gcloud compute images list --project=nvidia-ngc-public
-# long wait time for nvidia drivers to install
-# docker pull rapidsai/rapidsai-nightly:0.16-cuda11.0-runtime-ubuntu18.04
-# sudo journalctl -u konlet-startup
-# #! /bin/bash
-# cos-extensions install gpu
-# sudo mount --bind /var/lib/nvidia /var/lib/nvidia
-# sudo mount -o remount,exec /var/lib/nvidia
-# /var/lib/nvidia/bin/nvidia-smi"
-# tail -f /var/log/cloud-init.log /var/log/cloud-init-output.log
-
-"""
-spec:
-  containers:
-    - name: {self.name}
-      image: '{self.docker_image}'
-      command:
-        - {self.command}
-      args:
-        - '--ip=0.0.0.0'
-        - '--no-bokeh'
-      securityContext:
-        privileged: true
-      env:
-        - name: UCX_NVLINK_ENABLED
-          value: 'False'
-      stdin: false
-      tty: false
-  restartPolicy: Always
-
-# This container declaration format is not public API and may change without notice. Please
-# use gcloud command-line tool or Google Cloud Console to run Containers on Google Compute Engine.
-"""
