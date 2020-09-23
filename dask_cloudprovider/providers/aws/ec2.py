@@ -38,6 +38,7 @@ class EC2Instance(VMInterface):
         ami=None,
         docker_image=None,
         instance_type=None,
+        gpu_instance=None,
         vpc=None,
         subnet_id=None,
         security_groups=None,
@@ -53,7 +54,7 @@ class EC2Instance(VMInterface):
         self.ami = ami
         self.docker_image = docker_image
         self.instance_type = instance_type
-        self.gpu_instance = self.instance_type.startswith(("p", "g"))
+        self.gpu_instance = gpu_instance
         self.vpc = vpc
         self.subnet_id = subnet_id
         self.security_groups = security_groups
@@ -100,7 +101,7 @@ class EC2Instance(VMInterface):
                 MaxCount=1,
                 MinCount=1,
                 Monitoring={"Enabled": False},
-                UserData=self.render_cloud_init(
+                UserData=self.cluster.render_cloud_init(
                     image=self.docker_image,
                     command=self.command,
                     gpu_instance=self.gpu_instance,
@@ -290,30 +291,50 @@ class EC2Cluster(VMCluster):
         self.config = dask.config.get("cloudprovider.ec2", {})
         self.scheduler_class = EC2Scheduler
         self.worker_class = EC2Worker
+        self.region = region if region is not None else self.config.get("region")
+        self.bootstrap = (
+            bootstrap if bootstrap is not None else self.config.get("bootstrap")
+        )
+        self.ami = ami if ami is not None else self.config.get("ami")
+        self.docker_image = (
+            docker_image
+            if docker_image is not None
+            else self.config.get("docker_image")
+        )
+        self.instance_type = (
+            instance_type
+            if instance_type is not None
+            else self.config.get("instance_type")
+        )
+        self.gpu_instance = self.instance_type.startswith(("p", "g"))
+        self.vpc = vpc if vpc is not None else self.config.get("vpc")
+        self.subnet_id = (
+            subnet_id if subnet_id is None else self.config.get("subnet_id")
+        )
+        self.security_groups = (
+            security_groups
+            if security_groups is not None
+            else self.config.get("security_groups")
+        )
+        self.filesystem_size = (
+            filesystem_size
+            if filesystem_size is not None
+            else self.config.get("filesystem_size")
+        )
+
         self.options = {
             "cluster": self,
             "config": self.config,
-            "region": region if region is not None else self.config.get("region"),
-            "bootstrap": bootstrap
-            if bootstrap is not None
-            else self.config.get("bootstrap"),
-            "ami": ami if ami is not None else self.config.get("ami"),
-            "docker_image": docker_image
-            if docker_image is not None
-            else self.config.get("docker_image"),
-            "instance_type": instance_type
-            if instance_type is not None
-            else self.config.get("instance_type"),
-            "vpc": vpc if vpc is not None else self.config.get("vpc"),
-            "subnet_id": subnet_id
-            if subnet_id is None
-            else self.config.get("subnet_id"),
-            "security_groups": security_groups
-            if security_groups is not None
-            else self.config.get("security_groups"),
-            "filesystem_size": filesystem_size
-            if filesystem_size is not None
-            else self.config.get("filesystem_size"),
+            "region": self.region,
+            "bootstrap": self.bootstrap,
+            "ami": self.ami,
+            "docker_image": self.docker_image,
+            "instance_type": self.instance_type,
+            "gpu_instance": self.gpu_instance,
+            "vpc": self.vpc,
+            "subnet_id": self.subnet_id,
+            "security_groups": self.security_groups,
+            "filesystem_size": self.filesystem_size,
         }
         self.scheduler_options = {**self.options}
         self.worker_options = {
