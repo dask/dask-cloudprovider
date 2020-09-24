@@ -14,6 +14,7 @@ from dask_cloudprovider.utils.socket import is_socket_open
 try:
     import googleapiclient.discovery
     from googleapiclient.errors import HttpError
+    from google.auth.exceptions import DefaultCredentialsError
 except ImportError as e:
     msg = (
         "Dask Cloud Provider GCP requirements are not installed.\n\n"
@@ -49,15 +50,13 @@ class GCPInstance(VMInterface):
 
         self.machine_type = machine_type or self.config.get("machine_type")
 
-        self.source_image = source_image or self.config.get('source_image')
-        self.docker_image = docker_image or self.config.get('docker_image')
+        self.source_image = source_image or self.config.get("source_image")
+        self.docker_image = docker_image or self.config.get("docker_image")
         self.filesystem_size = filesystem_size or self.config.get("filesystem_size")
         self.ngpus = ngpus or self.config.get("ngpus")
         self.gpu_type = gpu_type or self.config.get("gpu_type")
 
-        self.general_zone = '-'.join(self.zone.split('-')[:2])  # us-east1-c -> us-east1
-
-
+        self.general_zone = "-".join(self.zone.split("-")[:2])  # us-east1-c -> us-east1
 
     def create_gcp_config(self):
         config = {
@@ -150,11 +149,12 @@ class GCPInstance(VMInterface):
         return config
 
     async def create_vm(self):
-        self.cloud_init =  self.render_cloud_init(
-                    image=self.docker_image,
-                    command=self.command,
-                    gpu_instance=bool(self.ngpus),
-                    bootstrap=False)
+        self.cloud_init = self.render_cloud_init(
+            image=self.docker_image,
+            command=self.command,
+            gpu_instance=bool(self.ngpus),
+            bootstrap=False,
+        )
 
         self.gcp_config = self.create_gcp_config()
         try:
@@ -281,7 +281,13 @@ class GCPCluster(VMCluster):
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self.compute = googleapiclient.discovery.build("compute", "v1")
+        try:
+            self.compute = googleapiclient.discovery.build("compute", "v1")
+        except DefaultCredentialsError as e:
+            raise Exception(
+                "GCP Credentials have not been provided.  Please set the following environment variable:\n export GOOGLE_APPLICATION_CREDENTIALS=<Path-To-GCP-JSON-Credentials> "
+            )
+
         self.config = dask.config.get("cloudprovider.gcp", {})
         self.name = name
         self.scheduler_class = GCPScheduler

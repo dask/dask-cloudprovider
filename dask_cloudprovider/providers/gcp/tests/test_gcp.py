@@ -39,8 +39,11 @@ async def cluster(config):
 def test_config(config):
     print(config)
 
+
 @pytest.mark.asyncio
 async def test_init():
+    await skip_without_credentials()
+
     cluster = GCPCluster(asynchronous=True)
     assert cluster.status == Status.created
 
