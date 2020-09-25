@@ -33,6 +33,8 @@ class Droplet(VMInterface):
         self.region = region
         self.size = size
         self.image = image
+        self.gpu_instance = False
+        self.bootstrap = True
 
     async def create_vm(self):
         self.droplet = digitalocean.Droplet(
@@ -42,8 +44,11 @@ class Droplet(VMInterface):
             image=self.image,
             size_slug=self.size,
             backups=False,
-            user_data=self.render_cloud_init(
-                image=self.docker_image, command=self.command
+            user_data=self.cluster.render_cloud_init(
+                image=self.docker_image,
+                command=self.command,
+                gpu_instance=self.gpu_instance,
+                bootstrap=self.bootstrap,
             ),
         )
         self.droplet.create()

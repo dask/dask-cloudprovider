@@ -21,13 +21,9 @@ class VMInterface(ProcessInterface):
         self.command = None
         self.address = None
         self.cluster = None
+        self.gpu_instance = None
+        self.bootstrap = None
         self.docker_image = "daskdev/dask:latest"
-
-    def render_cloud_init(self, *args, **kwargs):
-        loader = FileSystemLoader([os.path.dirname(os.path.abspath(__file__))])
-        environment = Environment(loader=loader)
-        template = environment.get_template("cloud-init.yaml.j2")
-        return template.render(*args, **kwargs)
 
     def create_vm(self):
         raise NotImplementedError("create_vm is a required method of the VMInterface")
@@ -90,6 +86,11 @@ class VMCluster(SpecCluster):
         self.worker_class = None
         self.scheduler_options = {}
         self.worker_options = {}
+        self.docker_image = None
+        self.command = None
+        self.gpu_instance = None
+        self.bootstrap = None
+        self.auto_shutdown = True
         super().__init__(**kwargs)
 
     async def _start(self,):
@@ -114,3 +115,21 @@ class VMCluster(SpecCluster):
             "Hang tight! ",
         ):
             await super()._start()
+
+    def render_cloud_init(self, *args, **kwargs):
+        loader = FileSystemLoader([os.path.dirname(os.path.abspath(__file__))])
+        environment = Environment(loader=loader)
+        template = environment.get_template("cloud-init.yaml.j2")
+        return template.render(**kwargs)
+
+    @classmethod
+    def get_cloud_init(cls, *args, **kwargs):
+        cluster = cls(*args, asynchronous=True, **kwargs)
+        cluster.auto_shutdown = False
+        return cluster.render_cloud_init(
+            image=cluster.docker_image,
+            command="dask-scheduler --version",
+            gpu_instance=cluster.gpu_instance,
+            bootstrap=cluster.bootstrap,
+            auto_shutdown=cluster.auto_shutdown,
+        )

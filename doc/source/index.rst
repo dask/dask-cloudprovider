@@ -270,3 +270,4 @@ Alternatively, you can delete the Azure ML Compute Target or cancel the Run from
    :hidden:
 
    api
+   packer

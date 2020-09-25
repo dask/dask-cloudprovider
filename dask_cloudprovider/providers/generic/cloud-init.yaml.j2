@@ -1,5 +1,6 @@
 #cloud-config
 
+{% if bootstrap %}
 packages:
   - apt-transport-https
   - ca-certificates
@@ -13,8 +14,6 @@ write_files:
     content: |
       net.ipv4.conf.all.forwarding=1
 
-
-{% if bootstrap %}
 # create the docker group
 groups:
   - docker
@@ -46,5 +45,7 @@ runcmd:
   # Run container
   - docker run --net=host {%+ if gpu_instance %}--gpus=all{% endif %} {{image}} {{ command }}
 
+  {% if auto_shutdown %}
   # Shutdown when command is done
   - shutdown -h now
+  {% endif %}
