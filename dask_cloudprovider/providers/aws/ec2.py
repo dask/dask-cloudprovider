@@ -276,6 +276,7 @@ class EC2Cluster(VMCluster):
         self,
         region="eu-west-2",
         bootstrap=None,
+        auto_shutdown=None,
         worker_command=None,
         ami=None,
         docker_image=None,
@@ -294,6 +295,11 @@ class EC2Cluster(VMCluster):
         self.region = region if region is not None else self.config.get("region")
         self.bootstrap = (
             bootstrap if bootstrap is not None else self.config.get("bootstrap")
+        )
+        self.auto_shutdown = (
+            auto_shutdown
+            if auto_shutdown is not None
+            else self.config.get("auto_shutdown")
         )
         self.ami = ami if ami is not None else self.config.get("ami")
         self.docker_image = (
