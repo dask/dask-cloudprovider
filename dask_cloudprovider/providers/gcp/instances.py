@@ -174,7 +174,7 @@ class GCPInstance(VMInterface):
 
         self.internal_ip = self.get_internal_ip()
         self.external_ip = self.get_external_ip()
-        print("IP ADDR: ", self.internal_ip, self.external_ip)
+        self.cluster._log(f"{self.name}\n\tInternal IP: {self.internal_ip}\n\tExternal IP: {self.external_ip}")
         return self.internal_ip, self.external_ip
 
     def get_internal_ip(self):
@@ -200,13 +200,14 @@ class GCPInstance(VMInterface):
         self.gcp_inst = d
 
         if not d.get("items", None):
-            print("FAILURE")
-            print(self.gcp_inst)
+            self.cluster._log("Failed to find running VMI...")
+            self.cluster._log(self.gcp_inst)
             raise Exception(f"Missing Instance {self.name}")
 
         return d["items"][0]["status"]
 
     async def close(self):
+        self.cluster._log(f"Closing Instance: {self.name}")
         self.cluster.compute.instances().delete(
             project=self.projectid, zone=self.zone, instance=self.name
         ).execute()
@@ -225,6 +226,14 @@ class GCPScheduler(GCPInstance, SchedulerMixin):
         await self.start_scheduler()
 
     async def start_scheduler(self):
+        self.cluster._log(f"Launching cluster with the following configuration: " \
+                           f"\n  Source Image: {self.source_image} " \
+                           f"\n  Docker Image: {self.docker_image} " \
+                           f"\n  Machine Type: {self.machine_type} " \
+                           f"\n  Filesytsem Size: {self.filesystem_size} " \
+                           f"\n  N-GPU Type: {self.ngpus} {self.gpu_type}" \
+                           f"\n  Zone: {self.zone} " \
+                           )
         self.cluster._log("Creating scheduler instance")
         self.internal_ip, self.external_ip = await self.create_vm()
         self.address = f"tcp://{self.external_ip}:8786"
@@ -251,12 +260,11 @@ class GCPWorker(GCPInstance, WorkerMixin):
         self.scheduler = scheduler
         self.worker_command = worker_command
 
-        print("# use internal address for workers")
         self.name = f"dask-worker-{str(uuid.uuid4())[:8]}"
         self.command = (
             f"{self.worker_command} {self.cluster.scheduler_internal_ip}:8786"
         )
-        print(self.command)
+        self.cluster._log(f"Starting worker: {self.name} with command: {self.command}")
 
     async def start_worker(self):
         self.cluster._log("Creating worker instance")
@@ -288,8 +296,8 @@ class GCPCluster(VMCluster):
                 "GCP Credentials have not been provided.  Please set the following environment variable:\n export GOOGLE_APPLICATION_CREDENTIALS=<Path-To-GCP-JSON-Credentials> "
             )
 
-        self.config = dask.config.get("cloudprovider.gcp", {})
         self.name = name
+        self.config = dask.config.get("cloudprovider.gcp", {})
         self.scheduler_class = GCPScheduler
         self.worker_class = GCPWorker
         self.options = {
