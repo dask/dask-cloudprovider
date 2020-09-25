@@ -149,11 +149,12 @@ class GCPInstance(VMInterface):
         return config
 
     async def create_vm(self):
-        self.cloud_init = self.render_cloud_init(
+        self.cloud_init = self.cluster.render_cloud_init(
             image=self.docker_image,
             command=self.command,
             gpu_instance=bool(self.ngpus),
             bootstrap=False,
+            auto_shutdown=self.cluster.auto_shutdown,
         )
 
         self.gcp_config = self.create_gcp_config()
@@ -286,6 +287,7 @@ class GCPCluster(VMCluster):
         ngpus=None,
         gpu_type=None,
         worker_command="dask-cuda-worker",
+        auto_shutdown=True,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -298,6 +300,7 @@ class GCPCluster(VMCluster):
 
         self.name = name
         self.config = dask.config.get("cloudprovider.gcp", {})
+        self.auto_shutdown = auto_shutdown
         self.scheduler_class = GCPScheduler
         self.worker_class = GCPWorker
         self.options = {

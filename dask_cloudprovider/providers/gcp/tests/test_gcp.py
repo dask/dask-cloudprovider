@@ -49,6 +49,13 @@ async def test_init():
 
 
 @pytest.mark.asyncio
+async def test_get_cloud_init():
+    cloud_init = GCPCluster.get_cloud_init()
+    print(cloud_init)
+    # assert "systemctl start docker" in cloud_init
+
+
+@pytest.mark.asyncio
 @pytest.mark.timeout(300)
 async def test_create_cluster(cluster):
     assert cluster.status == Status.running
