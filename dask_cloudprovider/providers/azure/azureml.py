@@ -225,13 +225,9 @@ class AzureMLCluster(Cluster):
         self.use_gpu = True if self.n_gpus_per_node > 0 else False
         if self.environment is None:
             if self.use_gpu:
-                self.environment = self.workspace.environments[
-                    "AzureML-Dask-GPU"
-                ]
+                self.environment = self.workspace.environments["AzureML-Dask-GPU"]
             else:
-                self.environment = self.workspace.environments[
-                    "AzureML-Dask-CPU"
-                ]
+                self.environment = self.workspace.environments["AzureML-Dask-CPU"]
 
         ### JUPYTER AND PORT FORWARDING
         self.jupyter = jupyter
