@@ -535,7 +535,6 @@ class AzureMLCluster(Cluster):
             compute_target=self.compute_target,
             environment=self.environment,
             arguments=[x for t in self.scheduler_params.items() for x in t],
-            node_count=1,  ### start only scheduler
             distributed_job_config=MpiConfiguration(),
         )
 
