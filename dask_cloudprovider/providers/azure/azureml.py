@@ -529,7 +529,7 @@ class AzureMLCluster(Cluster):
     async def __create_cluster(self):
         self.__print_message("Setting up cluster")
         exp = Experiment(self.workspace, self.experiment_name)
-        estimator = ScriptRunConfig(
+        src = ScriptRunConfig(
             source_directory=os.path.join(self.abs_path, "setup"),
             script="start_scheduler.py",
             compute_target=self.compute_target,
@@ -538,7 +538,7 @@ class AzureMLCluster(Cluster):
             distributed_job_config=MpiConfiguration(),
         )
 
-        run = exp.submit(estimator, tags=self.tags)
+        run = exp.submit(src, tags=self.tags)
 
         self.__print_message("Waiting for scheduler node's IP")
         status = run.get_status()
