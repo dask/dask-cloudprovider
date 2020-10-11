@@ -1,5 +1,5 @@
 try:
-    from azureml.core import Experiment, RunConfiguration, ScriptRunConfig
+    from azureml.core import Experiment, ScriptRunConfig
     from azureml.core.compute import AmlCompute, ComputeTarget
     from azureml.core.compute_target import ComputeTargetException
     from azureml.core.runconfig import MpiConfiguration
@@ -921,9 +921,6 @@ class AzureMLCluster(Cluster):
     def scale_up(self, workers=1):
         """ Scale up the number of workers.
         """
-        run_config = RunConfiguration()
-        run_config.target = self.compute_target
-        run_config.environment = self.environment
 
         scheduler_ip = self.run.get_metrics()["scheduler"]
         args = [
@@ -937,7 +934,8 @@ class AzureMLCluster(Cluster):
             source_directory=os.path.join(self.abs_path, "setup"),
             script="start_worker.py",
             arguments=args,
-            run_config=run_config,
+            compute_target=self.compute_target,
+            environment=self.environment,
         )
 
         for i in range(workers):
