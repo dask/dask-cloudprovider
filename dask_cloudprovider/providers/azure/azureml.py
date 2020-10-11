@@ -2,7 +2,6 @@ try:
     from azureml.core import Experiment, RunConfiguration, ScriptRunConfig
     from azureml.core.compute import AmlCompute, ComputeTarget
     from azureml.core.compute_target import ComputeTargetException
-    from azureml.train.estimator import Estimator
     from azureml.core.runconfig import MpiConfiguration
 
     import time, os, socket, subprocess, logging
@@ -42,14 +41,7 @@ class AzureMLCluster(Cluster):
     vm_size: str (optional)
         Azure VM size to be used in the Compute Target - see https://aka.ms/azureml/vmsizes.
 
-    datastores: List[Datastore] (optional)
-        List of Azure ML Datastores to be mounted on the headnode -
-        see https://aka.ms/azureml/data and https://aka.ms/azureml/datastores.
-
-        Defaults to ``[]``. To mount all datastores in the workspace,
-        set to ``ws.datastores.values()``.
-
-    environment_definition: azureml.core.Environment (optional)
+    environment: azureml.core.Environment (optional)
         Azure ML Environment - see https://aka.ms/azureml/environments.
 
         Defaults to the "AzureML-Dask-CPU" or "AzureML-Dask-GPU" curated environment.
@@ -150,7 +142,7 @@ class AzureMLCluster(Cluster):
         self,
         workspace,
         compute_target=None,
-        environment_definition=None,
+        environment=None,
         experiment_name=None,
         initial_node_count=None,
         jupyter=None,
@@ -162,7 +154,6 @@ class AzureMLCluster(Cluster):
         additional_ports=None,
         admin_username=None,
         admin_ssh_key=None,
-        datastores=None,
         code_store=None,
         vnet_resource_group=None,
         vnet=None,
@@ -177,7 +168,7 @@ class AzureMLCluster(Cluster):
         self.compute_target = compute_target
 
         ### ENVIRONMENT
-        self.environment_definition = environment_definition
+        self.environment = environment
 
         ### EXPERIMENT DEFINITION
         self.experiment_name = experiment_name
@@ -232,13 +223,13 @@ class AzureMLCluster(Cluster):
         ]["vmSize"].lower()
         self.n_gpus_per_node = self.workspace_vm_sizes[self.compute_target_vm_size]
         self.use_gpu = True if self.n_gpus_per_node > 0 else False
-        if self.environment_definition is None:
+        if self.environment is None:
             if self.use_gpu:
-                self.environment_definition = self.workspace.environments[
+                self.environment = self.workspace.environments[
                     "AzureML-Dask-GPU"
                 ]
             else:
-                self.environment_definition = self.workspace.environments[
+                self.environment = self.workspace.environments[
                     "AzureML-Dask-CPU"
                 ]
 
@@ -294,9 +285,6 @@ class AzureMLCluster(Cluster):
         self.scheduler_ip_port = (
             None  ### INIT FOR HOLDING THE ADDRESS FOR THE SCHEDULER
         )
-
-        ### DATASTORES
-        self.datastores = datastores
 
         ### RUNNING IN MATRIX OR LOCAL
         self.same_vnet = None
@@ -355,9 +343,6 @@ class AzureMLCluster(Cluster):
 
         if self.admin_ssh_key is None:
             self.admin_ssh_key = self.config.get("admin_ssh_key")
-
-        if self.datastores is None:
-            self.datastores = self.config.get("datastores")
 
         if self.telemetry_opt_out is None:
             self.telemetry_opt_out = self.config.get("telemetry_opt_out")
@@ -544,16 +529,14 @@ class AzureMLCluster(Cluster):
     async def __create_cluster(self):
         self.__print_message("Setting up cluster")
         exp = Experiment(self.workspace, self.experiment_name)
-        estimator = Estimator(
-            os.path.join(self.abs_path, "setup"),
+        estimator = ScriptRunConfig(
+            source_directory=os.path.join(self.abs_path, "setup"),
+            script="start_scheduler.py",
             compute_target=self.compute_target,
-            entry_script="start_scheduler.py",
-            environment_definition=self.environment_definition,
-            script_params=self.scheduler_params,
+            environment=self.environment,
+            arguments=[a, b for a, b in self.scheduler_params.items()],
             node_count=1,  ### start only scheduler
-            distributed_training=MpiConfiguration(),
-            use_docker=True,
-            inputs=self.datastores,
+            distributed_job_config=MpiConfiguration(),
         )
 
         run = exp.submit(estimator, tags=self.tags)
@@ -945,7 +928,7 @@ class AzureMLCluster(Cluster):
         """
         run_config = RunConfiguration()
         run_config.target = self.compute_target
-        run_config.environment = self.environment_definition
+        run_config.environment = self.environment
 
         scheduler_ip = self.run.get_metrics()["scheduler"]
         args = [
