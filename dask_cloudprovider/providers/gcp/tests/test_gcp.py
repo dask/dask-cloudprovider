@@ -2,7 +2,7 @@ import pytest
 
 import dask
 import googleapiclient.discovery
-from dask_cloudprovider.providers.gcp.instances import GCPCluster
+from dask_cloudprovider.providers.gcp.instances import GCPCluster, GCPWorker
 from dask.distributed import Client
 import dask.array as da
 from distributed.core import Status
@@ -32,12 +32,8 @@ async def cluster(config):
 
     await skip_without_credentials()
 
-    async with GCPCluster(asynchronous=True) as cluster:
+    async with GCPCluster(asynchronous=True, auto_shutdown=False) as cluster:
         yield cluster
-
-
-def test_config(config):
-    print(config)
 
 
 @pytest.mark.asyncio
@@ -51,12 +47,11 @@ async def test_init():
 @pytest.mark.asyncio
 async def test_get_cloud_init():
     cloud_init = GCPCluster.get_cloud_init()
-    print(cloud_init)
-    # assert "systemctl start docker" in cloud_init
+    assert "dask-scheduler" in cloud_init
 
 
 @pytest.mark.asyncio
-@pytest.mark.timeout(300)
+@pytest.mark.timeout(1200)
 async def test_create_cluster(cluster):
     assert cluster.status == Status.running
 

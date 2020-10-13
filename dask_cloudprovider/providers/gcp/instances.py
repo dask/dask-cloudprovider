@@ -220,7 +220,7 @@ class GCPScheduler(GCPInstance, SchedulerMixin):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.command = "dask-scheduler --host 0.0.0.0"
-        self.name = "aa-dask-scheduler"  # common_name
+        self.name = f"dask-scheduler-{str(uuid.uuid4())[:8]}"
 
     async def start(self):
         await super().start()
@@ -249,8 +249,11 @@ class GCPScheduler(GCPInstance, SchedulerMixin):
 class GCPWorker(GCPInstance, WorkerMixin):
     """Worker running in an GCP instance."""
 
-    def __init__(self, scheduler, *args, worker_command=None, **kwargs):
+    def __init__(self, scheduler, *args, worker_command=None, worker_extra_args=None, **kwargs):
         super().__init__(*args, **kwargs)
+
+        self.worker_extra_args = self.config.get('worker_extra_args', [])
+        worker_command = ' '.join([worker_command] + self.worker_extra_args)
         self.init_worker(scheduler, *args, worker_command=worker_command, **kwargs)
 
     async def start(self):
@@ -265,6 +268,7 @@ class GCPWorker(GCPInstance, WorkerMixin):
         self.command = (
             f"{self.worker_command} {self.cluster.scheduler_internal_ip}:8786"
         )
+
         self.cluster._log(f"Starting worker: {self.name} with command: {self.command}")
 
     async def start_worker(self):
@@ -287,6 +291,7 @@ class GCPCluster(VMCluster):
         ngpus=None,
         gpu_type=None,
         worker_command="dask-cuda-worker",
+        worker_extra_args=None,
         auto_shutdown=True,
         **kwargs,
     ):
@@ -316,4 +321,6 @@ class GCPCluster(VMCluster):
             "gpu_type": gpu_type,
         }
         self.scheduler_options = {**self.options}
-        self.worker_options = {"worker_command": worker_command, **self.options}
+        self.worker_options = {"worker_command": worker_command, "worker_extra_args": worker_extra_args, **self.options}
+
+# Note: if you have trouble connecting make sure firewall rules in GCP are stetup for 8787,8786,22
