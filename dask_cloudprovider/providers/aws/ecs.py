@@ -19,6 +19,7 @@ try:
     )
 
     from distributed.deploy.spec import SpecCluster
+    from distributed.scheduler import Scheduler as LocalScheduler
     from distributed.utils import warn_on_duration
 except ImportError as e:
     msg = (
@@ -584,6 +585,13 @@ class ECSCluster(SpecCluster):
         mounted in worker tasks. This setting controls whether volumes are also mounted in the scheduler task.
 
         Default ``False``.
+    local_scheduler: dict or bool (optional)
+        Local scheduler specification. If provided, the task scheduler will run locally rather than in the ECS.
+        See :class:`SpecCluster` documentation for more info about specification.
+
+        If set to ``True`` then default local specification will be used.
+
+        Defaults to ``None``, don't use local scheduler.
     **kwargs: dict
         Additional keyword arguments to pass to ``SpecCluster``.
 
@@ -629,6 +637,7 @@ class ECSCluster(SpecCluster):
         mount_points=None,
         volumes=None,
         mount_volumes_on_scheduler=False,
+        local_scheduler=None,
         **kwargs
     ):
         self._fargate_scheduler = fargate_scheduler
@@ -638,6 +647,7 @@ class ECSCluster(SpecCluster):
         self._scheduler_mem = scheduler_mem
         self._scheduler_timeout = scheduler_timeout
         self._scheduler_extra_args = scheduler_extra_args
+        self.scheduler_task_definition_arn = None
         self._worker_cpu = worker_cpu
         self._worker_mem = worker_mem
         self._worker_gpu = worker_gpu
@@ -668,6 +678,7 @@ class ECSCluster(SpecCluster):
         self._region_name = region_name
         self._platform_version = platform_version
         self._lock = asyncio.Lock()
+        self._local_scheduler = local_scheduler
         self.session = aiobotocore.get_session()
         super().__init__(**kwargs)
 
@@ -815,13 +826,6 @@ class ECSCluster(SpecCluster):
                 or await self._create_security_groups()
             )
 
-        self.scheduler_task_definition_arn = (
-            await self._create_scheduler_task_definition_arn()
-        )
-        self.worker_task_definition_arn = (
-            await self._create_worker_task_definition_arn()
-        )
-
         options = {
             "client": self._client,
             "cluster_arn": self.cluster_arn,
@@ -835,11 +839,31 @@ class ECSCluster(SpecCluster):
             "platform_version": self._platform_version,
             "fargate_use_private_ip": self._fargate_use_private_ip,
         }
-        scheduler_options = {
-            "task_definition_arn": self.scheduler_task_definition_arn,
-            "fargate": self._fargate_scheduler,
-            **options,
-        }
+
+        if not self._local_scheduler:
+            self.scheduler_task_definition_arn = (
+                await self._create_scheduler_task_definition_arn()
+            )
+
+            scheduler_options = {
+                "task_definition_arn": self.scheduler_task_definition_arn,
+                "fargate": self._fargate_scheduler,
+                **options,
+            }
+
+            self.scheduler_spec = {"cls": Scheduler, "options": scheduler_options}
+        else:
+            if self._local_scheduler is True:
+                self.scheduler_spec = {"cls": LocalScheduler}
+            else:
+                cls = self._local_scheduler.pop("cls", LocalScheduler)
+                opts = self._local_scheduler
+                self.scheduler_spec = {"cls": cls, "options": opts}
+
+        self.worker_task_definition_arn = (
+            await self._create_worker_task_definition_arn()
+        )
+
         worker_options = {
             "task_definition_arn": self.worker_task_definition_arn,
             "fargate": self._fargate_workers,
@@ -850,7 +874,6 @@ class ECSCluster(SpecCluster):
             **options,
         }
 
-        self.scheduler_spec = {"cls": Scheduler, "options": scheduler_options}
         self.new_spec = {"cls": Worker, "options": worker_options}
         self.worker_spec = {i: self.new_spec for i in range(self._n_workers)}
 
@@ -1116,10 +1139,11 @@ class ECSCluster(SpecCluster):
         return response["taskDefinition"]["taskDefinitionArn"]
 
     async def _delete_scheduler_task_definition_arn(self):
-        async with self._client("ecs") as ecs:
-            await ecs.deregister_task_definition(
-                taskDefinition=self.scheduler_task_definition_arn
-            )
+        if self.scheduler_task_definition_arn is not None:
+            async with self._client("ecs") as ecs:
+                await ecs.deregister_task_definition(
+                    taskDefinition=self.scheduler_task_definition_arn
+                )
 
     async def _create_worker_task_definition_arn(self):
         resource_requirements = []
