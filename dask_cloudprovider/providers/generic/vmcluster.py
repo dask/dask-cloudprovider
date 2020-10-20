@@ -90,7 +90,7 @@ class VMCluster(SpecCluster):
         self.command = None
         self.gpu_instance = None
         self.bootstrap = None
-        self.auto_shutdown = True
+        self.auto_shutdown = None
         super().__init__(**kwargs)
 
     async def _start(self,):
