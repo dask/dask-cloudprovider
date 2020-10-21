@@ -92,6 +92,9 @@ class Task:
         Whether to use a private IP (if True) or public IP (if False) with Fargate.
         Defaults to False, i.e. public IP.
 
+    task_kwargs: dict (optional)
+        Additional keyword arguments for the ECS task.
+
     kwargs:
         Any additional kwargs which may need to be stored for later use.
 
@@ -117,6 +120,7 @@ class Task:
         name=None,
         platform_version=None,
         fargate_use_private_ip=False,
+        task_kwargs=None,
         **kwargs
     ):
         self.lock = asyncio.Lock()
@@ -144,6 +148,7 @@ class Task:
         self.platform_version = platform_version
         self._fargate_use_private_ip = fargate_use_private_ip
         self.kwargs = kwargs
+        self.task_kwargs = task_kwargs
         self.status = "created"
 
     def __await__(self):
@@ -210,18 +215,19 @@ class Task:
         timeout = Timeout(60, "Unable to start %s after 60 seconds" % self.task_type)
         while timeout.run():
             try:
-                kwargs = (
-                    {"tags": dict_to_aws(self.tags)}
-                    if await self._is_long_arn_format_enabled()
-                    else {}
-                )  # Tags are only supported if you opt into long arn format so we need to check for that
+                kwargs = self.task_kwargs.copy() if self.task_kwargs is not None else {}
+
+                # Tags are only supported if you opt into long arn format so we need to check for that
+                if await self._is_long_arn_format_enabled():
+                    kwargs["tags"] = dict_to_aws(self.tags)
                 if self.platform_version and self.fargate:
                     kwargs["platformVersion"] = self.platform_version
-                async with self._client("ecs") as ecs:
-                    response = await ecs.run_task(
-                        cluster=self.cluster_arn,
-                        taskDefinition=self.task_definition_arn,
-                        overrides={
+
+                kwargs.update(
+                    {
+                        "cluster": self.cluster_arn,
+                        "taskDefinition": self.task_definition_arn,
+                        "overrides": {
                             "containerOverrides": [
                                 {
                                     "name": "dask-{}".format(self.task_type),
@@ -232,9 +238,9 @@ class Task:
                                 }
                             ]
                         },
-                        count=1,
-                        launchType="FARGATE" if self.fargate else "EC2",
-                        networkConfiguration={
+                        "count": 1,
+                        "launchType": "FARGATE" if self.fargate else "EC2",
+                        "networkConfiguration": {
                             "awsvpcConfiguration": {
                                 "subnets": self._vpc_subnets,
                                 "securityGroups": self._security_groups,
@@ -243,8 +249,11 @@ class Task:
                                 else "DISABLED",
                             }
                         },
-                        **kwargs
-                    )
+                    }
+                )
+
+                async with self._client("ecs") as ecs:
+                    response = await ecs.run_task(**kwargs)
 
                 if not response.get("tasks"):
                     raise RuntimeError(response)  # print entire response
@@ -442,6 +451,8 @@ class ECSCluster(SpecCluster):
         Any extra command line arguments to pass to dask-scheduler, e.g. ``["--tls-cert", "/path/to/cert.pem"]``
 
         Defaults to `None`, no extra command line arguments.
+    scheduler_task_kwargs: dict (optional)
+        Additional keyword arguments for the scheduler ECS task.
     worker_cpu: int (optional)
         The amount of CPU to request for worker tasks in milli-cpu (1/1024).
 
@@ -463,6 +474,8 @@ class ECSCluster(SpecCluster):
         Any extra command line arguments to pass to dask-worker, e.g. ``["--tls-cert", "/path/to/cert.pem"]``
 
         Defaults to `None`, no extra command line arguments.
+    worker_task_kwargs: dict (optional)
+        Additional keyword arguments for the workers ECS task.
     n_workers: int (optional)
         Number of workers to start on cluster creation.
 
@@ -601,10 +614,12 @@ class ECSCluster(SpecCluster):
         scheduler_mem=None,
         scheduler_timeout=None,
         scheduler_extra_args=None,
+        scheduler_task_kwargs=None,
         worker_cpu=None,
         worker_mem=None,
         worker_gpu=None,
         worker_extra_args=None,
+        worker_task_kwargs=None,
         n_workers=None,
         cluster_arn=None,
         cluster_name_template=None,
@@ -638,10 +653,12 @@ class ECSCluster(SpecCluster):
         self._scheduler_mem = scheduler_mem
         self._scheduler_timeout = scheduler_timeout
         self._scheduler_extra_args = scheduler_extra_args
+        self._scheduler_task_kwargs = scheduler_task_kwargs
         self._worker_cpu = worker_cpu
         self._worker_mem = worker_mem
         self._worker_gpu = worker_gpu
         self._worker_extra_args = worker_extra_args
+        self._worker_task_kwargs = worker_task_kwargs
         self._n_workers = n_workers
         self.cluster_arn = cluster_arn
         self.cluster_name = None
@@ -838,6 +855,7 @@ class ECSCluster(SpecCluster):
         scheduler_options = {
             "task_definition_arn": self.scheduler_task_definition_arn,
             "fargate": self._fargate_scheduler,
+            "task_kwargs": self._scheduler_task_kwargs,
             **options,
         }
         worker_options = {
@@ -847,6 +865,7 @@ class ECSCluster(SpecCluster):
             "mem": self._worker_mem,
             "gpu": self._worker_gpu,
             "extra_args": self._worker_extra_args,
+            "task_kwargs": self._worker_task_kwargs,
             **options,
         }
 
