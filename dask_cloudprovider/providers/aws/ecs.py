@@ -856,9 +856,8 @@ class ECSCluster(SpecCluster):
             if self._local_scheduler is True:
                 self.scheduler_spec = {"cls": LocalScheduler}
             else:
-                cls = self._local_scheduler.pop("cls", LocalScheduler)
-                opts = self._local_scheduler
-                self.scheduler_spec = {"cls": cls, "options": opts}
+                self.scheduler_spec = self._local_scheduler.copy()
+                self.scheduler_spec.setdefault("cls", LocalScheduler)
 
         self.worker_task_definition_arn = (
             await self._create_worker_task_definition_arn()
