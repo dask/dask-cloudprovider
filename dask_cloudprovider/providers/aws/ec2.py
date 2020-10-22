@@ -15,7 +15,6 @@ from dask_cloudprovider.providers.aws.helper import (
 )
 
 try:
-    from botocore.exceptions import ClientError
     import aiobotocore
 except ImportError as e:
     msg = (

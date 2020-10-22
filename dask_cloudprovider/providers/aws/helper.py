@@ -61,7 +61,7 @@ async def get_security_group(client, vpc, create_default=True):
             GroupNames=[DEFAULT_SECURITY_GROUP_NAME]
         )
         groups = response["SecurityGroups"]
-    except:
+    except Exception:
         groups = []
     if len(groups) > 0:
         return groups[0]["GroupId"]

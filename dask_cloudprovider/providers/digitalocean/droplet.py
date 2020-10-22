@@ -1,5 +1,4 @@
 import asyncio
-import uuid
 
 import dask
 from dask_cloudprovider.providers.generic.vmcluster import (
@@ -8,7 +7,6 @@ from dask_cloudprovider.providers.generic.vmcluster import (
     SchedulerMixin,
     WorkerMixin,
 )
-from dask_cloudprovider.utils.socket import is_socket_open
 
 try:
     import digitalocean
