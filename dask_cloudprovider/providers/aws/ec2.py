@@ -287,7 +287,6 @@ class EC2Cluster(VMCluster):
         filesystem_size=None,
         **kwargs,
     ):
-        super().__init__(**kwargs)
         self.boto_session = aiobotocore.get_session()
         self.config = dask.config.get("cloudprovider.ec2", {})
         self.scheduler_class = EC2Scheduler
@@ -347,3 +346,4 @@ class EC2Cluster(VMCluster):
             "worker_command": worker_command or self.config.get("worker_command"),
             **self.options,
         }
+        super().__init__(**kwargs)

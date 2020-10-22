@@ -80,17 +80,18 @@ class WorkerMixin(object):
 
 
 class VMCluster(SpecCluster):
+    scheduler_class = None
+    worker_class = None
+    scheduler_options = {}
+    worker_options = {}
+    docker_image = None
+    command = None
+    gpu_instance = None
+    bootstrap = None
+    auto_shutdown = None
+
     def __init__(self, n_workers=0, **kwargs):
         self._n_workers = n_workers
-        self.scheduler_class = None
-        self.worker_class = None
-        self.scheduler_options = {}
-        self.worker_options = {}
-        self.docker_image = None
-        self.command = None
-        self.gpu_instance = None
-        self.bootstrap = None
-        self.auto_shutdown = None
         super().__init__(**kwargs)
 
     async def _start(self,):

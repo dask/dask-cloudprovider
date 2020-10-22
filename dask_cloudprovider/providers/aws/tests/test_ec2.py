@@ -33,6 +33,13 @@ async def cluster():
 
 
 @pytest.fixture
+async def cluster_sync():
+    await skip_without_credentials()
+    cluster = EC2Cluster()
+    yield cluster
+
+
+@pytest.fixture
 async def cluster_rapids():
     await skip_without_credentials()
     async with EC2Cluster(
@@ -94,6 +101,18 @@ async def test_create_cluster(cluster):
     async with Client(cluster, asynchronous=True) as client:
         inc = lambda x: x + 1
         assert await client.submit(inc, 10).result() == 11
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(600)
+async def test_create_cluster_sync(cluster_sync):
+    assert cluster_sync.status == Status.running
+
+    cluster_sync.scale(2)
+
+    with Client(cluster_sync) as client:
+        inc = lambda x: x + 1
+        assert client.submit(inc, 10).result() == 11
 
 
 @pytest.mark.asyncio

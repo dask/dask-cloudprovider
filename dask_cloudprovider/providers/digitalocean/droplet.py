@@ -110,7 +110,6 @@ class DropletCluster(VMCluster):
         worker_command="dask-worker",
         **kwargs,
     ):
-        super().__init__(**kwargs)
         self.config = dask.config.get("cloudprovider.digitalocean", {})
         self.scheduler_class = DropletScheduler
         self.worker_class = DropletWorker
@@ -123,3 +122,4 @@ class DropletCluster(VMCluster):
         }
         self.scheduler_options = {**self.options}
         self.worker_options = {"worker_command": worker_command, **self.options}
+        super().__init__(**kwargs)
