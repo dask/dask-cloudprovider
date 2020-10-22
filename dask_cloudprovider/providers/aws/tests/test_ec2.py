@@ -1,7 +1,7 @@
 import asyncio
 import pytest
 
-import aiobotocore
+aiobotocore = pytest.importorskip("aiobotocore")
 
 from dask_cloudprovider.providers.aws.ec2 import EC2Cluster
 from dask_cloudprovider.providers.aws.helper import get_latest_ami_id

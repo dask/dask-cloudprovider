@@ -30,7 +30,7 @@ jobs:
               conda update -q conda
               conda env create -f ci/environment-${PYTHON}.yml --name=${ENV_NAME}
               source activate ${ENV_NAME}
-              pip install --no-deps --quiet -e .
+              pip install --no-deps --quiet -e .[all]
             fi
             conda env list
             conda list ${ENV_NAME}

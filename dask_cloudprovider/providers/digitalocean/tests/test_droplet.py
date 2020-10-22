@@ -3,6 +3,8 @@ import pytest
 
 import dask
 
+digitalocean = pytest.importorskip("digitalocean")
+
 from dask_cloudprovider.providers.digitalocean.droplet import DropletCluster
 from dask.distributed import Client
 from distributed.core import Status
