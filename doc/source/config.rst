@@ -8,15 +8,16 @@ a cluster with just your authentication credentials configured.
 Authentication
 --------------
 
-All cluster managers assume you have configured your credentials for the cloud you are using.
+All cluster managers assume you have already configured your credentials for the cloud you are using.
 
 For AWS this would mean storing your access key and secret key in ``~/.aws/credentials``. The AWS CLI
-can creater this for you by running the command ``aws configure``.
+can create this for you by running the command ``aws configure``.
 
 See each cluster manager for specific details.
 
-Most cluster managers allow also passing credentials as keyword arguments, although this would result in
-credentials being stored in code and is not advised.
+.. warning::
+    Most cluster managers also allow passing credentials as keyword arguments, although this would result in
+    credentials being stored in code and is not advised.
 
 Cluster config
 --------------

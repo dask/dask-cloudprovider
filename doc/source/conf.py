@@ -20,6 +20,8 @@
 import os
 import sys
 
+from datetime import datetime
+
 sys.path.insert(0, os.path.abspath(".."))
 
 
@@ -57,8 +59,8 @@ master_doc = "index"
 
 # General information about the project.
 project = "Dask Cloud Provider"
-copyright = "2018, Dask Cloud Provider Developers"
-author = "Dask Cloud Provider Developers"
+copyright = f"{datetime.now().year}, Dask Developers"
+author = "Dask Developers"
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the

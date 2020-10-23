@@ -1,5 +1,5 @@
-AWS
-===
+Amazon Web Services (AWS)
+=========================
 
 .. currentmodule:: dask_cloudprovider
 
@@ -8,8 +8,11 @@ AWS
    ECSCluster
    FargateCluster
 
+Overview
+--------
+
 Authentication
---------------
+^^^^^^^^^^^^^^
 
 In order to create clusters on AWS you need to set your access key, secret key
 and region. The simplest way is to use the aws command line tool.
@@ -19,33 +22,16 @@ and region. The simplest way is to use the aws command line tool.
    $ pip install awscli
    $ aws configure
 
-Fargate/ECS
------------
+Elastic Compute Cloud (EC2)
+---------------------------
 
-The ``FargateCluster`` will create a new Fargate ECS cluster by default along
-with all the IAM roles, security groups, and so on that it needs to function.
+TODO
 
-.. code-block:: python
+.. autoclass:: EC2Cluster
+   :members:
 
-   from dask_cloudprovider import FargateCluster
-   cluster = FargateCluster()
-
-..
-
-   ⚠ All AWS resources created by ``FargateCluster`` should be removed on
-   garbage collection. If the process is killed harshly this will not happen.
-
-Note that in many cases you will want to specify a custom Docker image to ``FargateCluster`` so that Dask has the packages it needs to execute your workflow.
-
-.. code-block:: python
-
-   from dask_cloudprovider import FargateCluster
-   cluster = FargateCluster(image="<hub-user>/<repo-name>[:<tag>]")
-
-..
-One strategy to ensure that package versions match between your custom environment and the Docker container is to create your environment from an ``environment.yml`` file, export the exact package list for that environment using ``conda list --export > package-list.txt``, and then use the pinned package versions contained in ``package-list.txt`` in your Dockerfile.  You could use the default `Dask Dockerfile`_ as a template and simply add your pinned additional packages.
-
-.. _`Dask Dockerfile`: https://github.com/dask/dask-docker/blob/master/base/Dockerfile
+Elastic Container Service (ECS)
+-------------------------------
 
 You can also create Dask clusters using EC2 based ECS clusters using ``ECSCluster``.
 
@@ -59,6 +45,56 @@ the ARN of an existing one like this:
 
 All the other required resources such as roles, task definitions, tasks, etc
 will be created automatically like in ``FargateCluster``.
+
+.. autoclass:: ECSCluster
+   :members:
+
+GPU Support
+^^^^^^^^^^^
+
+There is also support in ``ECSCluster`` for GPU aware Dask clusters. To do
+this you need to create an ECS cluster with GPU capable instances (from the
+``g3``, ``p3`` or ``p3dn`` families) and specify the number of GPUs each worker task
+should have.
+
+.. code-block:: python
+
+   from dask_cloudprovider import ECSCluster
+   cluster = ECSCluster(
+       cluster_arn="arn:aws:ecs:<region>:<acctid>:cluster/<gpuclustername>",
+       worker_gpu=1)
+
+By setting the ``worker_gpu`` option to something other than ``None`` will cause the cluster
+to run ``dask-cuda-worker`` as the worker startup command. Setting this option will also change
+the default Docker image to ``rapidsai/rapidsai:latest``, if you're using a custom image
+you must ensure the NVIDIA CUDA toolkit is installed with a version that matches the host machine
+along with ``dask-cuda``.
+
+Fargate
+-------
+
+The ``FargateCluster`` will create a new Fargate ECS cluster by default along
+with all the IAM roles, security groups, and so on that it needs to function.
+
+.. code-block:: python
+
+   from dask_cloudprovider import FargateCluster
+   cluster = FargateCluster()
+
+Note that in many cases you will want to specify a custom Docker image to ``FargateCluster`` so that Dask has the packages it needs to execute your workflow.
+
+.. code-block:: python
+
+   from dask_cloudprovider import FargateCluster
+   cluster = FargateCluster(image="<hub-user>/<repo-name>[:<tag>]")
+
+..
+One strategy to ensure that package versions match between your custom environment and the Docker container is to create your environment from an ``environment.yml`` file, export the exact package list for that environment using ``conda list --export > package-list.txt``, and then use the pinned package versions contained in ``package-list.txt`` in your Dockerfile.  You could use the default `Dask Dockerfile`_ as a template and simply add your pinned additional packages.
+
+.. _`Dask Dockerfile`: https://github.com/dask/dask-docker/blob/master/base/Dockerfile
+
+.. autoclass:: FargateCluster
+   :members:
 
 IAM Permissions
 ^^^^^^^^^^^^^^^
@@ -144,41 +180,3 @@ If you specify all of the resources yourself you will need a minimal policy of:
        ],
        "Version": "2012-10-17"
    }
-
-GPU Support
-^^^^^^^^^^^
-
-There is also support in ``ECSCluster`` for GPU aware Dask clusters. To do
-this you need to create an ECS cluster with GPU capable instances (from the
-``g3``, ``p3`` or ``p3dn`` families) and specify the number of GPUs each worker task
-should have.
-
-.. code-block:: python
-
-   from dask_cloudprovider import ECSCluster
-   cluster = ECSCluster(
-       cluster_arn="arn:aws:ecs:<region>:<acctid>:cluster/<gpuclustername>",
-       worker_gpu=1)
-
-By setting the ``worker_gpu`` option to something other than ``None`` will cause the cluster
-to run ``dask-cuda-worker`` as the worker startup command. Setting this option will also change
-the default Docker image to ``rapidsai/rapidsai:latest``, if you're using a custom image
-you must ensure the NVIDIA CUDA toolkit is installed with a version that matches the host machine
-along with ``dask-cuda``.
-
-EC2
----
-
-TODO
-
-API Reference
--------------
-
-.. autoclass:: EC2Cluster
-   :members:
-
-.. autoclass:: ECSCluster
-   :members:
-
-.. autoclass:: FargateCluster
-   :members:

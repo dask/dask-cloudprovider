@@ -6,11 +6,19 @@ DigitalOcean
 .. autosummary::
    DropletCluster
 
+Overview
+--------
+
+Authentication
+^^^^^^^^^^^^^^
+
 TODO
 
+Droplet
+-------
 
-API Reference
--------------
+VMs in DigitalOcean are referred to as droplets. This cluster manager constructs a Dask cluster
+running on VMs.
 
 .. autoclass:: DropletCluster
    :members:
