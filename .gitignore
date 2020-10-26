@@ -4,6 +4,10 @@ __pycache__/
 *$py.class
 
 # C extensions
+*.a
+*.dll
+*.exe
+*.o
 *.so
 
 # Distribution / packaging
@@ -111,3 +115,8 @@ ENV/
 
 # any untitled Jupyter notebooks
 Untitled*.ipynb
+
+# key material
+*.pem
+*.pub
+*_rsa

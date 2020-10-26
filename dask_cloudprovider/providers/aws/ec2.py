@@ -15,7 +15,6 @@ from dask_cloudprovider.providers.aws.helper import (
 )
 
 try:
-    from botocore.exceptions import ClientError
     import aiobotocore
 except ImportError as e:
     msg = (
@@ -122,7 +121,10 @@ class EC2Instance(VMInterface):
             [self.instance] = response["Instances"]
             await client.create_tags(
                 Resources=[self.instance["InstanceId"]],
-                Tags=[{"Key": "Name", "Value": self.name}],
+                Tags=[
+                    {"Key": "Name", "Value": self.name},
+                    {"Key": "Dask Cluster", "Value": self.cluster.uuid},
+                ],
             )
             self.cluster._log(
                 f"Created instance {self.instance['InstanceId']} as {self.name}"
@@ -152,9 +154,7 @@ class EC2Instance(VMInterface):
 
 
 class EC2Scheduler(EC2Instance, SchedulerMixin):
-    """Scheduler running in an EC2 instance.
-
-    """
+    """Scheduler running in an EC2 instance."""
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -166,9 +166,7 @@ class EC2Scheduler(EC2Instance, SchedulerMixin):
 
 
 class EC2Worker(EC2Instance, WorkerMixin):
-    """Worker running in an EC2 instance.
-
-    """
+    """Worker running in an EC2 instance."""
 
     def __init__(self, scheduler, *args, worker_command=None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -257,14 +255,47 @@ class EC2Cluster(VMCluster):
     **kwargs: dict
         Additional keyword arguments to pass to ``VMCluster``.
 
+    Notes
+    -----
+
+    **Resources created**
+
+    .. csv-table::
+        :header: Resource, Name, Purpose, Cost
+
+        EC2 Instance, dask-scheduler-{cluster uuid}, Dask Scheduler, "`EC2 Pricing
+        <https://aws.amazon.com/ec2/pricing/>`_"
+        EC2 Instance, dask-worker-{cluster uuid}-{worker uuid}, Dask Workers, "`EC2 Pricing
+        <https://aws.amazon.com/ec2/pricing/>`_"
+
+    **Manual cleanup**
+
+    If for some reason the cluster manager is terminated without being able to perform cleanup
+    the default behaviour of ``EC2Cluster`` is for the scheduler and workers to time out. This will
+    result in the host VMs shutting down. This cluster manager also creates instances with the terminate on
+    shutdown setting so all resources should be removed automatically.
+
+    If for some reason you chose to override those settings and disable auto cleanup you can destroy resources with the
+    following CLI command.
+
+    .. code-block:: bash
+
+        export CLUSTER_ID="cluster id printed during creation"
+        aws ec2 describe-instances \\
+            --filters "Name=tag:Dask Cluster,Values=${CLUSTER_ID}" \\
+            --query "Reservations[*].Instances[*].[InstanceId]" \\
+            --output text | xargs aws ec2 terminate-instances --instance-ids
+
     Examples
     --------
 
     Regular cluster.
+
     >>> cluster = EC2Cluster()
     >>> cluster.scale(5)
 
     RAPIDS Cluster.
+
     >>> cluster = EC2Cluster(ami="ami-0c7c7d78f752f8f17",  # Example Deep Learning AMI (Ubuntu 18.04)
                              docker_image="rapidsai/rapidsai:cuda10.1-runtime-ubuntu18.04",
                              instance_type="p3.2xlarge",
@@ -287,7 +318,6 @@ class EC2Cluster(VMCluster):
         filesystem_size=None,
         **kwargs,
     ):
-        super().__init__(**kwargs)
         self.boto_session = aiobotocore.get_session()
         self.config = dask.config.get("cloudprovider.ec2", {})
         self.scheduler_class = EC2Scheduler
@@ -347,3 +377,4 @@ class EC2Cluster(VMCluster):
             "worker_command": worker_command or self.config.get("worker_command"),
             **self.options,
         }
+        super().__init__(**kwargs)

@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 
 class AzureMLCluster(Cluster):
-    """ Deploy a Dask cluster using Azure ML
+    """Deploy a Dask cluster using Azure ML
 
     This creates a dask scheduler and workers on an Azure ML Compute Target.
 
@@ -43,7 +43,7 @@ class AzureMLCluster(Cluster):
     vm_size: str (optional)
         Azure VM size to be used in the Compute Target - see https://aka.ms/azureml/vmsizes.
 
-    datastores: List[str] (optional)
+    datastores: List[Datastore] (optional)
         List of Azure ML Datastores to be mounted on the headnode -
         see https://aka.ms/azureml/data and https://aka.ms/azureml/datastores.
 
@@ -131,7 +131,7 @@ class AzureMLCluster(Cluster):
         Name of the resource group where the virtual network ``vnet``
         is located. If not passed, but names for ``vnet`` and ``subnet`` are
         passed, ``vnet_resource_group`` is assigned with the name of resource
-        group associted with ``workspace``
+        group associated with ``workspace``
 
     telemetry_opt_out: bool (optional)
         A boolean parameter. Defaults to logging a version of AzureMLCluster
@@ -145,6 +145,56 @@ class AzureMLCluster(Cluster):
 
     **kwargs: dict
         Additional keyword arguments.
+
+    Examples
+    --------
+
+    First, import all necessary modules.
+
+    >>> from azureml.core import Workspace
+    >>> from dask_cloudprovider import AzureMLCluster
+
+    Next, create the ``Workspace`` object given your AzureML ``Workspace`` parameters. Check
+    more in the AzureML documentation for
+    `Workspace <https://docs.microsoft.com/python/api/azureml-core/azureml.core.workspace.workspace?view=azure-ml-py>`_.
+
+    You can use ``ws = Workspace.from_config()`` after downloading the config file from the
+    `Azure Portal <https://portal.azure.com>`_ or `ML Studio <https://ml.azure.com>`_.
+
+    >>> subscription_id = "<your-subscription-id-here>"
+    >>> resource_group = "<your-resource-group>"
+    >>> workspace_name = "<your-workspace-name>"
+
+    >>> ws = Workspace(
+    ...     workspace_name=workspace_name,
+    ...     subscription_id=subscription_id,
+    ...     resource_group=resource_group
+    ... )
+
+    Then create the cluster.
+
+    >>> amlcluster = AzureMLCluster(
+    ...     # required
+    ...     ws,
+    ...     # optional
+    ...     vm_size="STANDARD_DS13_V2",                                 # Azure VM size for the Compute Target
+    ...     datastores=ws.datastores.values(),                          # Azure ML Datastores to mount on the headnode
+    ...     environment_definition=ws.environments['AzureML-Dask-CPU'], # Azure ML Environment to run on the cluster
+    ...     jupyter=true,                                               # Start JupyterLab session on the headnode
+    ...     initial_node_count=2,                                       # number of nodes to start
+    ...     scheduler_idle_timeout=7200                                 # scheduler idle timeout in seconds
+    ... )
+
+    Once the cluster has started, the Dask Cluster widget will print out two links:
+
+    1. Jupyter link to a Jupyter Lab instance running on the headnode.
+    2. Dask Dashboard link.
+
+    You can stop the cluster with `amlcluster.close()`. The cluster will automatically spin down if unused for
+    20 minutes by default. Alternatively, you can delete the Azure ML Compute Target or cancel the Run from the
+    Python SDK or UI to stop the cluster.
+
+
     """
 
     def __init__(
@@ -739,8 +789,7 @@ class AzureMLCluster(Cluster):
 
     @property
     def dashboard_link(self):
-        """ Link to Dask dashboard.
-        """
+        """Link to Dask dashboard."""
         try:
             link = self.scheduler_info["dashboard_url"]
         except KeyError:
@@ -750,7 +799,7 @@ class AzureMLCluster(Cluster):
 
     @property
     def jupyter_link(self):
-        """ Link to JupyterLab on running on the headnode of the cluster.
+        """Link to JupyterLab on running on the headnode of the cluster.
         Set ``jupyter=True`` when creating the ``AzureMLCluster``.
         """
         try:
@@ -925,8 +974,7 @@ class AzureMLCluster(Cluster):
             self.close()
 
     def scale(self, workers=1):
-        """ Scale the cluster. Scales to a maximum of the workers available in the cluster.
-        """
+        """Scale the cluster. Scales to a maximum of the workers available in the cluster."""
         if workers <= 0:
             self.close()
             return
@@ -942,8 +990,7 @@ class AzureMLCluster(Cluster):
 
     # scale up
     def scale_up(self, workers=1):
-        """ Scale up the number of workers.
-        """
+        """Scale up the number of workers."""
         run_config = RunConfiguration()
         run_config.target = self.compute_target
         run_config.environment = self.environment_definition
@@ -969,11 +1016,10 @@ class AzureMLCluster(Cluster):
 
     # scale down
     def scale_down(self, workers=1):
-        """ Scale down the number of workers. Scales to minimum of 1.
-        """
+        """Scale down the number of workers. Scales to minimum of 1."""
         for i in range(workers):
             if self.workers_list:
-                child_run = self.workers_list.pop(0)  # deactive oldest workers
+                child_run = self.workers_list.pop(0)  # deactivate oldest workers
                 child_run.complete()  # complete() will mark the run "Complete", but won't kill the process
                 child_run.cancel()
             else:
@@ -1015,7 +1061,7 @@ class AzureMLCluster(Cluster):
         await super()._close()
 
     def close(self):
-        """ Close the cluster. All Azure ML Runs corresponding to the scheduler
+        """Close the cluster. All Azure ML Runs corresponding to the scheduler
         and worker processes will be completed. The Azure ML Compute Target will
         return to its minimum number of nodes after its idle time before scaledown.
         """

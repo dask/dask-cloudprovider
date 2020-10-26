@@ -7,5 +7,5 @@ def is_socket_open(ip, port):
         connection.connect((ip, int(port)))
         connection.shutdown(2)
         return True
-    except:
+    except Exception:
         return False

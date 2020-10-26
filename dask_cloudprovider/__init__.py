@@ -9,8 +9,18 @@ try:
     from .providers.azure.azureml import AzureMLCluster
 except ImportError:
     pass
+try:
+    from .providers.digitalocean.droplet import DropletCluster
+except ImportError:
+    pass
 
-__all__ = ["ECSCluster", "EC2Cluster", "FargateCluster", "AzureMLCluster"]
+__all__ = [
+    "ECSCluster",
+    "EC2Cluster",
+    "FargateCluster",
+    "AzureMLCluster",
+    "DropletCluster",
+]
 
 from ._version import get_versions
 

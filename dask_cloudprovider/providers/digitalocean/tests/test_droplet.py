@@ -1,7 +1,8 @@
-import asyncio
 import pytest
 
 import dask
+
+digitalocean = pytest.importorskip("digitalocean")
 
 from dask_cloudprovider.providers.digitalocean.droplet import DropletCluster
 from dask.distributed import Client

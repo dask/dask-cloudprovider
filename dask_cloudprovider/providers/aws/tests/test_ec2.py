@@ -1,12 +1,10 @@
-import asyncio
 import pytest
 
-import aiobotocore
+aiobotocore = pytest.importorskip("aiobotocore")
 
 from dask_cloudprovider.providers.aws.ec2 import EC2Cluster
 from dask_cloudprovider.providers.aws.helper import get_latest_ami_id
 from dask.distributed import Client
-import dask.array as da
 from distributed.core import Status
 
 
@@ -14,7 +12,7 @@ async def skip_without_credentials():
     try:
         async with aiobotocore.get_session().create_client("sts") as client:
             await client.get_caller_identity()
-    except:
+    except Exception:
         pytest.skip(
             """
         You must configure Your AWS credentials to run this test.
@@ -33,12 +31,21 @@ async def cluster():
 
 
 @pytest.fixture
+async def cluster_sync():
+    await skip_without_credentials()
+    cluster = EC2Cluster()
+    yield cluster
+
+
+@pytest.fixture
 async def cluster_rapids():
     await skip_without_credentials()
     async with EC2Cluster(
         asynchronous=True,
-        ami="ami-0c7c7d78f752f8f17",  # Deep Learning AMI (Ubuntu 18.04)
-        docker_image="rapidsai/rapidsai:cuda10.1-runtime-ubuntu18.04-py3.8",  # Python version must match local version and CUDA version must match AMI CUDA version
+        # Deep Learning AMI (Ubuntu 18.04)
+        ami="ami-0c7c7d78f752f8f17",
+        # Python version must match local version and CUDA version must match AMI CUDA version
+        docker_image="rapidsai/rapidsai:cuda10.1-runtime-ubuntu18.04-py3.8",
         instance_type="p3.2xlarge",
         bootstrap=False,
         filesystem_size=120,
@@ -51,8 +58,10 @@ async def cluster_rapids_packer():
     await skip_without_credentials()
     async with EC2Cluster(
         asynchronous=True,
-        ami="ami-04e5539cb82859e69",  # Packer AMI
-        docker_image="rapidsai/rapidsai:cuda10.1-runtime-ubuntu18.04-py3.8",  # Python version must match local version and CUDA version must match AMI CUDA version
+        # Packer AMI
+        ami="ami-04e5539cb82859e69",
+        # Python version must match local version and CUDA version must match AMI CUDA version
+        docker_image="rapidsai/rapidsai:cuda10.1-runtime-ubuntu18.04-py3.8",
         instance_type="p3.2xlarge",
         bootstrap=False,
         filesystem_size=120,
@@ -94,6 +103,18 @@ async def test_create_cluster(cluster):
     async with Client(cluster, asynchronous=True) as client:
         inc = lambda x: x + 1
         assert await client.submit(inc, 10).result() == 11
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(600)
+async def test_create_cluster_sync(cluster_sync):
+    assert cluster_sync.status == Status.running
+
+    cluster_sync.scale(2)
+
+    with Client(cluster_sync) as client:
+        inc = lambda x: x + 1
+        assert client.submit(inc, 10).result() == 11
 
 
 @pytest.mark.asyncio
@@ -167,8 +188,10 @@ async def test_get_cloud_init():
 @pytest.mark.asyncio
 async def test_get_cloud_init_rapids():
     cloud_init = EC2Cluster.get_cloud_init(
-        ami="ami-0c7c7d78f752f8f17",  # Deep Learning AMI (Ubuntu 18.04)
-        docker_image="rapidsai/rapidsai:cuda10.1-runtime-ubuntu18.04-py3.8",  # Python version must match local version and CUDA version must match AMI CUDA version
+        # Deep Learning AMI (Ubuntu 18.04)
+        ami="ami-0c7c7d78f752f8f17",
+        # Python version must match local version and CUDA version must match AMI CUDA version
+        docker_image="rapidsai/rapidsai:cuda10.1-runtime-ubuntu18.04-py3.8",
         instance_type="p3.2xlarge",
         bootstrap=False,
         filesystem_size=120,
