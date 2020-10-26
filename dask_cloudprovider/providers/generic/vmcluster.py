@@ -52,7 +52,7 @@ class SchedulerMixin(object):
     """
 
     def init_scheduler(self,):
-        self.name = "dask-scheduler"
+        self.name = f"dask-{self.cluster.uuid}-scheduler"
         self.command = "dask-scheduler --idle-timeout 300"
 
     async def start_scheduler(self):
@@ -71,7 +71,7 @@ class WorkerMixin(object):
         self.scheduler = scheduler
         self.worker_command = worker_command
 
-        self.name = f"dask-worker-{str(uuid.uuid4())[:8]}"
+        self.name = f"dask-{self.cluster.uuid}-worker-{str(uuid.uuid4())[:8]}"
         self.command = f"{self.worker_command} {self.scheduler}"
 
     async def start_worker(self):
@@ -92,6 +92,7 @@ class VMCluster(SpecCluster):
 
     def __init__(self, n_workers=0, **kwargs):
         self._n_workers = n_workers
+        self.uuid = str(uuid.uuid4())[:8]
         super().__init__(**kwargs)
 
     async def _start(self,):
