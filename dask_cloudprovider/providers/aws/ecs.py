@@ -42,7 +42,7 @@ DEFAULT_TAGS = {
 
 
 class Task:
-    """ A superclass for managing ECS Tasks
+    """A superclass for managing ECS Tasks
     Parameters
     ----------
 
@@ -357,7 +357,7 @@ class Task:
 
 
 class Scheduler(Task):
-    """ A Remote Dask Scheduler controlled by ECS
+    """A Remote Dask Scheduler controlled by ECS
 
     See :class:`Task` for parameter info.
     """
@@ -368,7 +368,7 @@ class Scheduler(Task):
 
 
 class Worker(Task):
-    """ A Remote Dask Worker controlled by ECS
+    """A Remote Dask Worker controlled by ECS
     Parameters
     ----------
     scheduler: str
@@ -411,7 +411,7 @@ class Worker(Task):
 
 
 class ECSCluster(SpecCluster):
-    """ Deploy a Dask cluster using ECS
+    """Deploy a Dask cluster using ECS
 
     This creates a dask scheduler and workers on an existing ECS cluster.
 
@@ -704,7 +704,9 @@ class ECSCluster(SpecCluster):
             region_name=self._region_name,
         )
 
-    async def _start(self,):
+    async def _start(
+        self,
+    ):
         while self.status == "starting":
             await asyncio.sleep(0.01)
         if self.status == "running":
@@ -1222,7 +1224,9 @@ class FargateCluster(ECSCluster):
 
     **IAM Permissions**
 
-    To create a ``FargateCluster`` the cluster manager will need to various AWS resources ranging from IAM roles to VPCs to ECS tasks. Depending on your use case you may want the cluster to create all of these for you, or you may wish to specify them youself ahead of time.
+    To create a ``FargateCluster`` the cluster manager will need to various AWS resources ranging from IAM roles to
+    VPCs to ECS tasks. Depending on your use case you may want the cluster to create all of these for you, or you
+    may wish to specify them youself ahead of time.
 
     Here is the full minimal IAM policy that you need to create the whole cluster:
 
@@ -1312,7 +1316,7 @@ class FargateCluster(ECSCluster):
 
 
 async def _cleanup_stale_resources():
-    """ Clean up any stale resources which are tagged with 'createdBy': 'dask-cloudprovider'.
+    """Clean up any stale resources which are tagged with 'createdBy': 'dask-cloudprovider'.
 
     This function will scan through AWS looking for resources that were created
     by the ``ECSCluster`` class. Any ECS clusters which do not have any running

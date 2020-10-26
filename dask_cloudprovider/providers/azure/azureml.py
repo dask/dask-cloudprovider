@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 
 class AzureMLCluster(Cluster):
-    """ Deploy a Dask cluster using Azure ML
+    """Deploy a Dask cluster using Azure ML
 
     This creates a dask scheduler and workers on an Azure ML Compute Target.
 
@@ -180,7 +180,7 @@ class AzureMLCluster(Cluster):
     ...     vm_size="STANDARD_DS13_V2",                                 # Azure VM size for the Compute Target
     ...     datastores=ws.datastores.values(),                          # Azure ML Datastores to mount on the headnode
     ...     environment_definition=ws.environments['AzureML-Dask-CPU'], # Azure ML Environment to run on the cluster
-    ...     jupyter=true,                                               # Flag to start JupyterLab session on the headnode
+    ...     jupyter=true,                                               # Start JupyterLab session on the headnode
     ...     initial_node_count=2,                                       # number of nodes to start
     ...     scheduler_idle_timeout=7200                                 # scheduler idle timeout in seconds
     ... )
@@ -190,8 +190,9 @@ class AzureMLCluster(Cluster):
     1. Jupyter link to a Jupyter Lab instance running on the headnode.
     2. Dask Dashboard link.
 
-    You can stop the cluster with `amlcluster.close()`. The cluster will automatically spin down if unused for 20 minutes by default.
-    Alternatively, you can delete the Azure ML Compute Target or cancel the Run from the Python SDK or UI to stop the cluster.
+    You can stop the cluster with `amlcluster.close()`. The cluster will automatically spin down if unused for
+    20 minutes by default. Alternatively, you can delete the Azure ML Compute Target or cancel the Run from the
+    Python SDK or UI to stop the cluster.
 
 
     """
@@ -788,8 +789,7 @@ class AzureMLCluster(Cluster):
 
     @property
     def dashboard_link(self):
-        """ Link to Dask dashboard.
-        """
+        """Link to Dask dashboard."""
         try:
             link = self.scheduler_info["dashboard_url"]
         except KeyError:
@@ -799,7 +799,7 @@ class AzureMLCluster(Cluster):
 
     @property
     def jupyter_link(self):
-        """ Link to JupyterLab on running on the headnode of the cluster.
+        """Link to JupyterLab on running on the headnode of the cluster.
         Set ``jupyter=True`` when creating the ``AzureMLCluster``.
         """
         try:
@@ -974,8 +974,7 @@ class AzureMLCluster(Cluster):
             self.close()
 
     def scale(self, workers=1):
-        """ Scale the cluster. Scales to a maximum of the workers available in the cluster.
-        """
+        """Scale the cluster. Scales to a maximum of the workers available in the cluster."""
         if workers <= 0:
             self.close()
             return
@@ -991,8 +990,7 @@ class AzureMLCluster(Cluster):
 
     # scale up
     def scale_up(self, workers=1):
-        """ Scale up the number of workers.
-        """
+        """Scale up the number of workers."""
         run_config = RunConfiguration()
         run_config.target = self.compute_target
         run_config.environment = self.environment_definition
@@ -1018,8 +1016,7 @@ class AzureMLCluster(Cluster):
 
     # scale down
     def scale_down(self, workers=1):
-        """ Scale down the number of workers. Scales to minimum of 1.
-        """
+        """Scale down the number of workers. Scales to minimum of 1."""
         for i in range(workers):
             if self.workers_list:
                 child_run = self.workers_list.pop(0)  # deactivate oldest workers
@@ -1064,7 +1061,7 @@ class AzureMLCluster(Cluster):
         await super()._close()
 
     def close(self):
-        """ Close the cluster. All Azure ML Runs corresponding to the scheduler
+        """Close the cluster. All Azure ML Runs corresponding to the scheduler
         and worker processes will be completed. The Azure ML Compute Target will
         return to its minimum number of nodes after its idle time before scaledown.
         """

@@ -154,9 +154,7 @@ class EC2Instance(VMInterface):
 
 
 class EC2Scheduler(EC2Instance, SchedulerMixin):
-    """Scheduler running in an EC2 instance.
-
-    """
+    """Scheduler running in an EC2 instance."""
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -168,9 +166,7 @@ class EC2Scheduler(EC2Instance, SchedulerMixin):
 
 
 class EC2Worker(EC2Instance, WorkerMixin):
-    """Worker running in an EC2 instance.
-
-    """
+    """Worker running in an EC2 instance."""
 
     def __init__(self, scheduler, *args, worker_command=None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -267,22 +263,28 @@ class EC2Cluster(VMCluster):
     .. csv-table::
         :header: Resource, Name, Purpose, Cost
 
-        EC2 Instance, dask-scheduler-{cluster uuid}, Dask Scheduler, `EC2 Pricing <https://aws.amazon.com/ec2/pricing/>`_
-        EC2 Instance, dask-worker-{cluster uuid}-{worker uuid}, Dask Workers, `EC2 Pricing <https://aws.amazon.com/ec2/pricing/>`_
+        EC2 Instance, dask-scheduler-{cluster uuid}, Dask Scheduler, "`EC2 Pricing
+        <https://aws.amazon.com/ec2/pricing/>`_"
+        EC2 Instance, dask-worker-{cluster uuid}-{worker uuid}, Dask Workers, "`EC2 Pricing
+        <https://aws.amazon.com/ec2/pricing/>`_"
 
     **Manual cleanup**
 
-    If for some reason the cluster manager is terminated without being able to perform cleanup the default behaviour of ``EC2Cluster``
-    is for the scheduler and workers to time out. This will result in the host VMs shutting down. This cluster manager also creates
-    instances with the terminate on shutdown setting so all resources should be removed automatically.
+    If for some reason the cluster manager is terminated without being able to perform cleanup
+    the default behaviour of ``EC2Cluster`` is for the scheduler and workers to time out. This will
+    result in the host VMs shutting down. This cluster manager also creates instances with the terminate on
+    shutdown setting so all resources should be removed automatically.
 
-    If for some reason you chose to override those settings and disable auto cleanup you can destroy resources with the following CLI
-    command.
+    If for some reason you chose to override those settings and disable auto cleanup you can destroy resources with the
+    following CLI command.
 
     .. code-block:: bash
 
         export CLUSTER_ID="cluster id printed during creation"
-        aws ec2 describe-instances --filters "Name=tag:Dask Cluster,Values=${CLUSTER_ID}" --query "Reservations[*].Instances[*].[InstanceId]" --output text | xargs aws ec2 terminate-instances --instance-ids
+        aws ec2 describe-instances \\
+            --filters "Name=tag:Dask Cluster,Values=${CLUSTER_ID}" \\
+            --query "Reservations[*].Instances[*].[InstanceId]" \\
+            --output text | xargs aws ec2 terminate-instances --instance-ids
 
     Examples
     --------
