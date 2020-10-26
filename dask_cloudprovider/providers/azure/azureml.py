@@ -43,7 +43,7 @@ class AzureMLCluster(Cluster):
     vm_size: str (optional)
         Azure VM size to be used in the Compute Target - see https://aka.ms/azureml/vmsizes.
 
-    datastores: List[str] (optional)
+    datastores: List[Datastore] (optional)
         List of Azure ML Datastores to be mounted on the headnode -
         see https://aka.ms/azureml/data and https://aka.ms/azureml/datastores.
 
@@ -131,7 +131,7 @@ class AzureMLCluster(Cluster):
         Name of the resource group where the virtual network ``vnet``
         is located. If not passed, but names for ``vnet`` and ``subnet`` are
         passed, ``vnet_resource_group`` is assigned with the name of resource
-        group associted with ``workspace``
+        group associated with ``workspace``
 
     telemetry_opt_out: bool (optional)
         A boolean parameter. Defaults to logging a version of AzureMLCluster
@@ -1022,7 +1022,7 @@ class AzureMLCluster(Cluster):
         """
         for i in range(workers):
             if self.workers_list:
-                child_run = self.workers_list.pop(0)  # deactive oldest workers
+                child_run = self.workers_list.pop(0)  # deactivate oldest workers
                 child_run.complete()  # complete() will mark the run "Complete", but won't kill the process
                 child_run.cancel()
             else:

@@ -357,7 +357,7 @@ class Task:
 
 
 class Scheduler(Task):
-    """ A Remote Dask Scheduler controled by ECS
+    """ A Remote Dask Scheduler controlled by ECS
 
     See :class:`Task` for parameter info.
     """
@@ -368,7 +368,7 @@ class Scheduler(Task):
 
 
 class Worker(Task):
-    """ A Remote Dask Worker controled by ECS
+    """ A Remote Dask Worker controlled by ECS
     Parameters
     ----------
     scheduler: str
@@ -550,7 +550,7 @@ class ECSCluster(SpecCluster):
         Extra environment variables to pass to the scheduler and worker tasks.
 
         Useful for setting ``EXTRA_APT_PACKAGES``, ``EXTRA_CONDA_PACKAGES`` and
-        ```EXTRA_PIP_PACKAGES`` if you'ree using the default image.
+        ```EXTRA_PIP_PACKAGES`` if you're using the default image.
 
         Defaults to ``None``.
     tags: dict (optional)
