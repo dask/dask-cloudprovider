@@ -76,7 +76,7 @@ class GCPInstance(VMInterface):
                     "initializeParams": {
                         "sourceImage": self.source_image,
                         "diskType": f"projects/{self.projectid}/zones/{self.zone}/diskTypes/pd-standard",
-                        "diskSizeGb": "50",  # nvidia-gpu-cloud cannot be smaller than 32 GB
+                        "diskSizeGb": f"{self.filesystem_size}",  # nvidia-gpu-cloud cannot be smaller than 32 GB
                         "labels": {},
                         # "source": "projects/nv-ai-infra/zones/us-east1-c/disks/ngc-gpu-dask-rapids-docker-experiment",
                     },
@@ -175,7 +175,9 @@ class GCPInstance(VMInterface):
 
         self.internal_ip = self.get_internal_ip()
         self.external_ip = self.get_external_ip()
-        self.cluster._log(f"{self.name}\n\tInternal IP: {self.internal_ip}\n\tExternal IP: {self.external_ip}")
+        self.cluster._log(
+            f"{self.name}\n\tInternal IP: {self.internal_ip}\n\tExternal IP: {self.external_ip}"
+        )
         return self.internal_ip, self.external_ip
 
     def get_internal_ip(self):
@@ -227,14 +229,15 @@ class GCPScheduler(GCPInstance, SchedulerMixin):
         await self.start_scheduler()
 
     async def start_scheduler(self):
-        self.cluster._log(f"Launching cluster with the following configuration: " \
-                           f"\n  Source Image: {self.source_image} " \
-                           f"\n  Docker Image: {self.docker_image} " \
-                           f"\n  Machine Type: {self.machine_type} " \
-                           f"\n  Filesytsem Size: {self.filesystem_size} " \
-                           f"\n  N-GPU Type: {self.ngpus} {self.gpu_type}" \
-                           f"\n  Zone: {self.zone} " \
-                           )
+        self.cluster._log(
+            f"Launching cluster with the following configuration: "
+            f"\n  Source Image: {self.source_image} "
+            f"\n  Docker Image: {self.docker_image} "
+            f"\n  Machine Type: {self.machine_type} "
+            f"\n  Filesytsem Size: {self.filesystem_size} "
+            f"\n  N-GPU Type: {self.ngpus} {self.gpu_type}"
+            f"\n  Zone: {self.zone} "
+        )
         self.cluster._log("Creating scheduler instance")
         self.internal_ip, self.external_ip = await self.create_vm()
         self.address = f"tcp://{self.external_ip}:8786"
@@ -249,11 +252,13 @@ class GCPScheduler(GCPInstance, SchedulerMixin):
 class GCPWorker(GCPInstance, WorkerMixin):
     """Worker running in an GCP instance."""
 
-    def __init__(self, scheduler, *args, worker_command=None, worker_extra_args=None, **kwargs):
+    def __init__(
+        self, scheduler, *args, worker_command=None, worker_extra_args=None, **kwargs
+    ):
         super().__init__(*args, **kwargs)
 
-        self.worker_extra_args = self.config.get('worker_extra_args', [])
-        worker_command = ' '.join([worker_command] + self.worker_extra_args)
+        self.worker_extra_args = self.config.get("worker_extra_args", [])
+        worker_command = " ".join([worker_command] + self.worker_extra_args)
         self.init_worker(scheduler, *args, worker_command=worker_command, **kwargs)
 
     async def start(self):
@@ -283,14 +288,14 @@ class GCPCluster(VMCluster):
     def __init__(
         self,
         name="dask-gcp-example",
-        zone=None,
-        machine_type=None,
+        zone="us-east1-c",
+        machine_type="n1-standard-1",
         projectid=None,
-        source_image=None,
+        source_image="projects/ubuntu-os-cloud/global/images/ubuntu-minimal-1804-bionic-v20201014",
         docker_image=None,
         ngpus=None,
         gpu_type=None,
-        filesystem_size=None,
+        filesystem_size=50,
         worker_command="dask-cuda-worker",
         worker_extra_args=None,
         auto_shutdown=True,
@@ -323,6 +328,11 @@ class GCPCluster(VMCluster):
             "gpu_type": gpu_type,
         }
         self.scheduler_options = {**self.options}
-        self.worker_options = {"worker_command": worker_command, "worker_extra_args": worker_extra_args, **self.options}
+        self.worker_options = {
+            "worker_command": worker_command,
+            "worker_extra_args": worker_extra_args,
+            **self.options,
+        }
+
 
 # Note: if you have trouble connecting make sure firewall rules in GCP are stetup for 8787,8786,22
