@@ -31,6 +31,7 @@ Conda
 
    $ conda install -c conda-forge dask-cloudprovider
 
+
 -----
 
 Below are the different modules for creating clusters on various cloud
@@ -260,8 +261,41 @@ Once the cluster has started, the Dask Cluster widget will print out two links:
 1. Jupyter link to a Jupyter Lab instance running on the headnode.
 2. Dask Dashboard link.
 
-You can stop the cluster with `amlcluster.close()`. The cluster will automatically spin down if unused for 20 minutes by default.
+Note that ``AzureMLCluster`` uses IPython Widgets to present this information, so if you are working in Jupyter Lab and see text that starts with ``VBox(children=``..., make sure you have enabled the IPython Widget `extension <https://jupyterlab.readthedocs.io/en/stable/user/extensions.html>`_. 
+
+
+Using Your Cluster
+^^^^^^^^^^^^^^^^^^
+
+Once the cluster is running, one can use the cluster in one of two ways:
+
+1. Simply create a Dask Client with the Cluster in your current Python session,
+2. Open the JupyterLab session running on the Cluster (if the cluster was created with the ``jupyter=True`` option) and connect to Dask Client locally. 
+
+To create a Dask Client in your current session, simply pass your cluster object to the ``Client`` function:
+
+.. code-block:: python
+
+   from dask.distributed import Client
+ 
+    c = Client(amlcluster)
+    # dask operations will now execute on the cluster via this client 
+ 
+When you're finished, you can then stop the cluster with ``amlcluster.close()``. The cluster will automatically spin down if unused for 20 minutes by default.
 Alternatively, you can delete the Azure ML Compute Target or cancel the Run from the Python SDK or UI to stop the cluster.  
+
+To connect to the Jupyter Lab session running on the cluster from your own computer, simply click the link provided in the widget printed above, or if you need the link directly it is stored in ``amlcluster.jupyter_link``.
+
+Once connected, you'll be in an AzureML `Run` session. To connect Dask from within the session, just run to following code to connect dask to the cluster:
+ 
+.. code-block:: python
+
+    from azureml.core import Run
+    from dask.distributed import Client 
+ 
+    run = Run.get_context()
+    c = Client(run.get_metrics()["scheduler"])
+
 
 .. toctree::
    :maxdepth: 3
