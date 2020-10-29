@@ -288,22 +288,22 @@ class GCPCluster(VMCluster):
     def __init__(
         self,
         name="dask-gcp-example",
-        zone="us-east1-c",
-        machine_type="n1-standard-1",
+        zone=None,
+        machine_type=None,
         projectid=None,
-        source_image="projects/ubuntu-os-cloud/global/images/ubuntu-minimal-1804-bionic-v20201014",
+        source_image=None,
         docker_image=None,
         ngpus=None,
         gpu_type=None,
-        filesystem_size=50,
-        worker_command="dask-cuda-worker",
+        filesystem_size=None,
+        worker_command=None,
         worker_extra_args=None,
         auto_shutdown=True,
         **kwargs,
     ):
         super().__init__(**kwargs)
         try:
-            self.compute = googleapiclient.discovery.build("compute", "v1")
+            self.compute = googleapiclient.discovery.build("compute", "v1", credenti)
         except DefaultCredentialsError as e:
             raise Exception(
                 "GCP Credentials have not been provided.  Please set the following environment variable:\n export GOOGLE_APPLICATION_CREDENTIALS=<Path-To-GCP-JSON-Credentials> "
