@@ -29,6 +29,7 @@ class Droplet(VMInterface):
         region: str = None,
         size: str = None,
         image: str = None,
+        docker_image=None,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
@@ -40,6 +41,7 @@ class Droplet(VMInterface):
         self.image = image
         self.gpu_instance = False
         self.bootstrap = True
+        self.docker_image = docker_image
 
     async def create_vm(self):
         self.droplet = digitalocean.Droplet(
@@ -115,6 +117,16 @@ class DropletCluster(VMCluster):
     scheduler_options: dict
         Params to be passed to the scheduler class.
         See :class:`distributed.scheduler.Scheduler`.
+    docker_image: string (optional)
+        The Docker image to run on all instances.
+
+        This image must have a valid Python environment and have ``dask`` installed in order for the
+        ``dask-scheduler`` and ``dask-worker`` commands to be available. It is recommended the Python
+        environment matches your local environment where ``EC2Cluster`` is being created from.
+
+        For GPU instance types the Docker image much have NVIDIA drivers and ``dask-cuda`` installed.
+
+        By default the ``daskdev/dask:latest`` image will be used.
     silence_logs: bool
         Whether or not we should silence logging when setting up the cluster.
     asynchronous: bool

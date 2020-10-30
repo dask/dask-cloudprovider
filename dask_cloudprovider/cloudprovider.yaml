@@ -35,12 +35,11 @@ cloudprovider:
     skip_cleanup: False # Skip cleaning up of stale resources
 
   ec2:
-    # region: "" # AWS region to create cluster. Defaults to environment or account default region.
+    region: null # AWS region to create cluster. Defaults to environment or account default region.
     bootstrap: true # It is assumed that the AMI does not have Docker and needs bootstrapping. Set this to false if using a custom AMI with Docker already installed.
     auto_shutdown: true # Shutdown instances automatically if the scheduler or worker services time out.
     # worker_command: "dask-worker" # The command for workers to run. If the instance_type is a GPU instance dask-cuda-worker will be used.
     # ami: "" # AMI ID to use for all instances. Defaults to latest Ubuntu 20.04 image.
-    docker_image: "daskdev/dask:latest" # The Docker image which will be executed on all instances.
     instance_type: "t2.micro" # Instance type for all workers
     # vpc: "" # VPC id for instances to join. Defaults to default VPC.
     # subnet_id: "" # Subnet ID for instances to. Defaults to all subnets in default VPC.

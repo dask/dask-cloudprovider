@@ -150,6 +150,16 @@ class VMCluster(SpecCluster):
     scheduler_options: dict
         Params to be passed to the scheduler class.
         See :class:`distributed.scheduler.Scheduler`.
+    docker_image: string (optional)
+        The Docker image to run on all instances.
+
+        This image must have a valid Python environment and have ``dask`` installed in order for the
+        ``dask-scheduler`` and ``dask-worker`` commands to be available. It is recommended the Python
+        environment matches your local environment where ``EC2Cluster`` is being created from.
+
+        For GPU instance types the Docker image much have NVIDIA drivers and ``dask-cuda`` installed.
+
+        By default the ``daskdev/dask:latest`` image will be used.
     silence_logs: bool
         Whether or not we should silence logging when setting up the cluster.
     asynchronous: bool
@@ -178,6 +188,7 @@ class VMCluster(SpecCluster):
         worker_module: str = "distributed.cli.dask_worker",
         worker_options: dict = {},
         scheduler_options: dict = {},
+        docker_image="daskdev/dask:latest",
         **kwargs,
     ):
         if self.scheduler_class is None or self.worker_class is None:
@@ -185,6 +196,8 @@ class VMCluster(SpecCluster):
                 "VMCluster is not intended to be used directly. See docstring for more info."
             )
         self._n_workers = n_workers
+        self.scheduler_options["docker_image"] = docker_image
+        self.worker_options["docker_image"] = docker_image
         self.worker_options["worker_module"] = worker_module
         self.worker_options["worker_options"] = worker_options
         self.scheduler_options["scheduler_options"] = scheduler_options

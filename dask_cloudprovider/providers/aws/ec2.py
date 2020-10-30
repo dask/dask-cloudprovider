@@ -142,7 +142,7 @@ class EC2Instance(VMInterface):
                 [self.instance] = reservation["Instances"]
             return self.instance["PublicIpAddress"]
 
-    async def close(self):
+    async def destroy_vm(self):
         async with self.cluster.boto_session.create_client(
             "ec2", region_name=self.region
         ) as client:
@@ -150,36 +150,14 @@ class EC2Instance(VMInterface):
                 InstanceIds=[self.instance["InstanceId"]], DryRun=False
             )
             self.cluster._log(f"Terminated {self.name} ({self.instance['InstanceId']})")
-            await super().close()
 
 
-class EC2Scheduler(EC2Instance, SchedulerMixin):
-    """Scheduler running in an EC2 instance."""
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.init_scheduler()
-
-    async def start(self):
-        await super().start()
-        await self.start_scheduler()
+class EC2Scheduler(SchedulerMixin, EC2Instance):
+    """Scheduler running on an EC2 instance."""
 
 
-class EC2Worker(EC2Instance, WorkerMixin):
-    """Worker running in an EC2 instance."""
-
-    def __init__(self, scheduler, *args, worker_command=None, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.worker_command = worker_command
-        if not self.worker_command:
-            self.worker_command = (
-                "dask-cuda-worker" if self.gpu_instance else "dask-worker"
-            )
-        self.init_worker(scheduler, *args, worker_command=self.worker_command, **kwargs)
-
-    async def start(self):
-        await super().start()
-        await self.start_worker()
+class EC2Worker(WorkerMixin, EC2Instance):
+    """Worker running on an EC2 instance."""
 
 
 class EC2Cluster(VMCluster):
@@ -217,16 +195,6 @@ class EC2Cluster(VMCluster):
         If the AMI does not include Docker it will be installed at runtime.
         If the instance_type is a GPU instance the NVIDIA drivers and Docker GPU runtime will be installed
         at runtime.
-    docker_image: string (optional)
-        The Docker image to run on all instances.
-
-        This image must have a valid Python environment and have ``dask`` installed in order for the
-        ``dask-scheduler`` and ``dask-worker`` commands to be available. It is recommended the Python
-        environment matches your local environment where ``EC2Cluster`` is being created from.
-
-        For GPU instance types the Docker image much have NVIDIA drivers and ``dask-cuda`` installed.
-
-        By default the ``daskdev/dask:latest`` image will be used.
     instance_type: string (optional)
         A valid EC2 instance type. This will determine the resources available to your workers.
 
@@ -252,8 +220,36 @@ class EC2Cluster(VMCluster):
         The instance filesystem size in GB.
 
         Defaults to ``40``.
-    **kwargs: dict
-        Additional keyword arguments to pass to ``VMCluster``.
+    n_workers: int
+        Number of workers to initialise the cluster with. Defaults to ``0``.
+    worker_module: str
+        The Python module to run for the worker. Defaults to ``distributed.cli.dask_worker``
+    worker_options: dict
+        Params to be passed to the worker class.
+        See :class:`distributed.worker.Worker` for default worker class.
+        If you set ``worker_module`` then refer to the docstring for the custom worker class.
+    scheduler_options: dict
+        Params to be passed to the scheduler class.
+        See :class:`distributed.scheduler.Scheduler`.
+    docker_image: string (optional)
+        The Docker image to run on all instances.
+
+        This image must have a valid Python environment and have ``dask`` installed in order for the
+        ``dask-scheduler`` and ``dask-worker`` commands to be available. It is recommended the Python
+        environment matches your local environment where ``EC2Cluster`` is being created from.
+
+        For GPU instance types the Docker image much have NVIDIA drivers and ``dask-cuda`` installed.
+
+        By default the ``daskdev/dask:latest`` image will be used.
+    silence_logs: bool
+        Whether or not we should silence logging when setting up the cluster.
+    asynchronous: bool
+        If this is intended to be used directly within an event loop with
+        async/await
+    security : Security or bool, optional
+        Configures communication security in this cluster. Can be a security
+        object, or True. If True, temporary self-signed credentials will
+        be created automatically.
 
     Notes
     -----
@@ -299,18 +295,17 @@ class EC2Cluster(VMCluster):
     >>> cluster = EC2Cluster(ami="ami-0c7c7d78f752f8f17",  # Example Deep Learning AMI (Ubuntu 18.04)
                              docker_image="rapidsai/rapidsai:cuda10.1-runtime-ubuntu18.04",
                              instance_type="p3.2xlarge",
+                             worker_module="dask_cuda.cli.dask_cuda_worker",
                              bootstrap=False,
                              filesystem_size=120)
     """
 
     def __init__(
         self,
-        region="eu-west-2",
+        region=None,
         bootstrap=None,
         auto_shutdown=None,
-        worker_command=None,
         ami=None,
-        docker_image=None,
         instance_type=None,
         vpc=None,
         subnet_id=None,
@@ -332,11 +327,6 @@ class EC2Cluster(VMCluster):
             else self.config.get("auto_shutdown")
         )
         self.ami = ami if ami is not None else self.config.get("ami")
-        self.docker_image = (
-            docker_image
-            if docker_image is not None
-            else self.config.get("docker_image")
-        )
         self.instance_type = (
             instance_type
             if instance_type is not None
@@ -373,8 +363,5 @@ class EC2Cluster(VMCluster):
             "filesystem_size": self.filesystem_size,
         }
         self.scheduler_options = {**self.options}
-        self.worker_options = {
-            "worker_command": worker_command or self.config.get("worker_command"),
-            **self.options,
-        }
+        self.worker_options = {**self.options}
         super().__init__(**kwargs)
