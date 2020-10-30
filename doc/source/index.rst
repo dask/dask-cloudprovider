@@ -73,4 +73,5 @@ this code.
     :caption: Advanced
 
     troubleshooting.rst
+    gpus.rst
     packer.rst
