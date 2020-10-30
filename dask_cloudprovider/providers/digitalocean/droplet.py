@@ -22,7 +22,14 @@ except ImportError as e:
 
 class Droplet(VMInterface):
     def __init__(
-        self, cluster, config, *args, region=None, size=None, image=None, **kwargs
+        self,
+        cluster: str,
+        config,
+        *args,
+        region: str = None,
+        size: str = None,
+        image: str = None,
+        **kwargs,
     ):
         super().__init__(*args, **kwargs)
         self.droplet = None
@@ -68,13 +75,11 @@ class Droplet(VMInterface):
 
 
 class DropletScheduler(Droplet, SchedulerMixin):
-    """Scheduler running in an EC2 instance.
-
-    """
+    """Scheduler running on a DigitalOcean droplet."""
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.init_scheduler()
+        self.init_scheduler(*args, **kwargs)
 
     async def start(self):
         await super().start()
@@ -82,13 +87,20 @@ class DropletScheduler(Droplet, SchedulerMixin):
 
 
 class DropletWorker(Droplet, WorkerMixin):
-    """Worker running in an EC2 instance.
+    """Worker running on a DigitalOcean droplet."""
 
-    """
-
-    def __init__(self, scheduler, *args, worker_command=None, **kwargs):
+    def __init__(
+        self,
+        scheduler: str,
+        *args,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
-        self.init_worker(scheduler, *args, worker_command=worker_command, **kwargs)
+        self.init_worker(
+            scheduler,
+            *args,
+            **kwargs,
+        )
 
     async def start(self):
         await super().start()
@@ -112,14 +124,32 @@ class DropletCluster(VMCluster):
         The DO region to launch you cluster in. A full list can be obtained with ``doctl compute region list``.
     size: str
         The VM size slug. You can get a full list with ``doctl compute size list``.
-
         The default is ``s-1vcpu-1gb`` which is 1GB RAM and 1 vCPU
     image: str
         The image ID to use for the host OS. This should be a Ubuntu variant.
-
         You can list available images with ``doctl compute image list --public | grep ubuntu.*x64``.
-    worker_command: str
-        The Dask worker command to start on worker VMs.
+    worker_module: str
+        The Dask worker module to start on worker VMs.
+    n_workers: int
+        Number of workers to initialise the cluster with. Defaults to ``0``.
+    worker_module: str
+        The Python module to run for the worker. Defaults to ``distributed.cli.dask_worker``
+    worker_options: dict
+        Params to be passed to the worker class.
+        See :class:`distributed.worker.Worker` for default worker class.
+        If you set ``worker_module`` then refer to the docstring for the custom worker class.
+    scheduler_options: dict
+        Params to be passed to the scheduler class.
+        See :class:`distributed.scheduler.Scheduler`.
+    silence_logs: bool
+        Whether or not we should silence logging when setting up the cluster.
+    asynchronous: bool
+        If this is intended to be used directly within an event loop with
+        async/await
+    security : Security or bool, optional
+        Configures communication security in this cluster. Can be a security
+        object, or True. If True, temporary self-signed credentials will
+        be created automatically.
 
     Examples
     --------
@@ -173,10 +203,9 @@ class DropletCluster(VMCluster):
 
     def __init__(
         self,
-        region="nyc3",
-        size="s-1vcpu-1gb",  # 1GB RAM, 1 vCPU
-        image="ubuntu-20-04-x64",
-        worker_command="dask-worker",
+        region: str = "nyc3",
+        size: str = "s-1vcpu-1gb",  # 1GB RAM, 1 vCPU
+        image: str = "ubuntu-20-04-x64",
         **kwargs,
     ):
         self.config = dask.config.get("cloudprovider.digitalocean", {})
@@ -190,5 +219,5 @@ class DropletCluster(VMCluster):
             "image": image,
         }
         self.scheduler_options = {**self.options}
-        self.worker_options = {"worker_command": worker_command, **self.options}
+        self.worker_options = {**self.options}
         super().__init__(**kwargs)
