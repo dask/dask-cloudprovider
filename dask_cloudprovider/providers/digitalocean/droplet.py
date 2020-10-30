@@ -68,43 +68,17 @@ class Droplet(VMInterface):
 
         return self.droplet.ip_address
 
-    async def close(self):
+    async def destroy_vm(self):
         self.droplet.destroy()
         self.cluster._log(f"Terminated droplet {self.name}")
-        await super().close()
 
 
-class DropletScheduler(Droplet, SchedulerMixin):
-    """Scheduler running on a DigitalOcean droplet."""
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.init_scheduler(*args, **kwargs)
-
-    async def start(self):
-        await super().start()
-        await self.start_scheduler()
+class DropletScheduler(SchedulerMixin, Droplet):
+    """Scheduler running on a DigitalOcean Droplet."""
 
 
-class DropletWorker(Droplet, WorkerMixin):
-    """Worker running on a DigitalOcean droplet."""
-
-    def __init__(
-        self,
-        scheduler: str,
-        *args,
-        **kwargs,
-    ):
-        super().__init__(*args, **kwargs)
-        self.init_worker(
-            scheduler,
-            *args,
-            **kwargs,
-        )
-
-    async def start(self):
-        await super().start()
-        await self.start_worker()
+class DropletWorker(WorkerMixin, Droplet):
+    """Worker running on a DigitalOcean Droplet."""
 
 
 class DropletCluster(VMCluster):
@@ -203,20 +177,20 @@ class DropletCluster(VMCluster):
 
     def __init__(
         self,
-        region: str = "nyc3",
-        size: str = "s-1vcpu-1gb",  # 1GB RAM, 1 vCPU
-        image: str = "ubuntu-20-04-x64",
+        region: str = None,
+        size: str = None,
+        image: str = None,
         **kwargs,
     ):
         self.config = dask.config.get("cloudprovider.digitalocean", {})
         self.scheduler_class = DropletScheduler
         self.worker_class = DropletWorker
-        self.options = {  # TODO get defaults from config
+        self.options = {
             "cluster": self,
             "config": self.config,
-            "region": region,
-            "size": size,
-            "image": image,
+            "region": region if region is not None else self.config.get("region"),
+            "size": size if size is not None else self.config.get("size"),
+            "image": image if image is not None else self.config.get("image"),
         }
         self.scheduler_options = {**self.options}
         self.worker_options = {**self.options}

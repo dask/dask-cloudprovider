@@ -64,3 +64,6 @@ cloudprovider:
 
   digitalocean:
     token: null # API token for interacting with the Digital Ocean API
+    region: "nyc3" # Region to launch Droplets in
+    size: "s-1vcpu-1gb" # Droplet size to launch, default is 1GB RAM, 1 vCPU
+    image: "ubuntu-20-04-x64" # Operating System image to use

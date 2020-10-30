@@ -5,6 +5,7 @@ import uuid
 from jinja2 import Environment, FileSystemLoader
 
 import dask.config
+from distributed.core import Status
 from distributed.worker import Worker as _Worker
 from distributed.scheduler import Scheduler as _Scheduler
 from distributed.deploy.spec import SpecCluster, ProcessInterface
@@ -30,8 +31,11 @@ class VMInterface(ProcessInterface):
         )
         self.kwargs = kwargs
 
-    def create_vm(self):
+    async def create_vm(self):
         raise NotImplementedError("create_vm is a required method of the VMInterface")
+
+    async def destroy_vm(self):
+        raise NotImplementedError("destroy_vm is a required method of the VMInterface")
 
     async def wait_for_scheduler(self):
         _, address = self.address.split("://")
@@ -48,18 +52,20 @@ class VMInterface(ProcessInterface):
 
     async def close(self):
         """Destroy a VM."""
+        await self.destroy_vm()
         await super().close()
 
 
 class SchedulerMixin(object):
     """A mixin for Schedulers."""
 
-    def init_scheduler(
+    def __init__(
         self,
         *args,
         scheduler_options: dict = {},
         **kwargs,
     ):
+        super().__init__(*args, **kwargs)
         self.name = f"dask-{self.cluster.uuid}-scheduler"
         self.command = " ".join(
             [
@@ -71,17 +77,18 @@ class SchedulerMixin(object):
             + cli_keywords(scheduler_options, cls=_Scheduler)
         )
 
-    async def start_scheduler(self):
+    async def start(self):
         self.cluster._log("Creating scheduler instance")
         ip = await self.create_vm()
         self.address = f"tcp://{ip}:8786"
         await self.wait_for_scheduler()
+        await super().start()
 
 
 class WorkerMixin(object):
     """A Remote Dask Worker running on a VM."""
 
-    def init_worker(
+    def __init__(
         self,
         scheduler: str,
         *args,
@@ -89,6 +96,7 @@ class WorkerMixin(object):
         worker_options: dict = {},
         **kwargs,
     ):
+        super().__init__(*args, **kwargs)
         self.scheduler = scheduler
         self.worker_module = worker_module
 
@@ -106,9 +114,10 @@ class WorkerMixin(object):
             + cli_keywords(worker_options, cls=_Worker, cmd=self.worker_module)
         )
 
-    async def start_worker(self):
+    async def start(self):
         self.cluster._log("Creating worker instance")
         self.address = await self.create_vm()
+        await super().start()
 
 
 class VMCluster(SpecCluster):
@@ -185,11 +194,11 @@ class VMCluster(SpecCluster):
     async def _start(
         self,
     ):
-        while self.status == "starting":
+        while self.status == Status.starting:
             await asyncio.sleep(0.01)
-        if self.status == "running":
+        if self.status == Status.running:
             return
-        if self.status == "closed":
+        if self.status == Status.closed:
             raise ValueError("Cluster is closed")
 
         self.scheduler_spec = {
