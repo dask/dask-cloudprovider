@@ -67,6 +67,19 @@ this code.
     digitalocean.rst
     azure.rst
 
+To connect to the Jupyter Lab session running on the cluster from your own computer, simply click the link provided in the widget printed above, or if you need the link directly it is stored in ``amlcluster.jupyter_link``.
+
+Once connected, you'll be in an AzureML `Run` session. To connect Dask from within the session, just run to following code to connect dask to the cluster:
+
+.. code-block:: python
+
+    from azureml.core import Run
+    from dask.distributed import Client
+
+    run = Run.get_context()
+    c = Client(run.get_metrics()["scheduler"])
+
+
 .. toctree::
     :maxdepth: 2
     :hidden:
