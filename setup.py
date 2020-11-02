@@ -8,6 +8,8 @@ import versioneer
 extras_require = {
     "aws": ["aiobotocore>=0.10.2"],
     "azure": ["azureml-sdk>=1.0.83"],
+    "digitalocean": ["python-digitalocean"],
+    "googlecloud": ["google-api-python-client"],
 }
 extras_require["all"] = set(pkg for pkgs in extras_require.values() for pkg in pkgs)
 

@@ -1,0 +1,51 @@
+#cloud-config
+
+{% if bootstrap %}
+packages:
+  - apt-transport-https
+  - ca-certificates
+  - curl
+  - gnupg-agent
+  - software-properties-common
+
+# Enable ipv4 forwarding, required on CIS hardened machines
+write_files:
+  - path: /etc/sysctl.d/enabled_ipv4_forwarding.conf
+    content: |
+      net.ipv4.conf.all.forwarding=1
+
+# create the docker group
+groups:
+  - docker
+
+# Add default auto created user to docker group
+system_info:
+  default_user:
+    groups: [docker]
+{% endif %}
+
+{% if bootstrap and gpu_instance %}
+# Install NVIDIA driver if GPU instance
+drivers:
+  nvidia:
+    license-accepted: true
+{% endif %}
+
+runcmd:
+  {% if bootstrap %}
+  # Install Docker
+  - curl -fsSL https://download.docker.com/linux/ubuntu/gpg | apt-key add -
+  - add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
+  - apt-get update -y
+  - apt-get install -y docker-ce docker-ce-cli containerd.io
+  - systemctl start docker
+  - systemctl enable docker
+  {% endif %}
+
+  # Run container
+  - docker run --net=host {%+ if gpu_instance %}--gpus=all{% endif %} {{image}} {{ command }}
+
+  {% if auto_shutdown %}
+  # Shutdown when command is done
+  - shutdown -h now
+  {% endif %}
