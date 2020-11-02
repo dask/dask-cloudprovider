@@ -1,7 +1,11 @@
 import asyncio
+import os
 import uuid
 
+import sqlite3
+
 import dask
+from dask.utils import tmpfile
 from dask_cloudprovider.providers.generic.vmcluster import (
     VMCluster,
     VMInterface,
@@ -257,15 +261,13 @@ class GCPWorker(GCPInstance, WorkerMixin):
     ):
         super().__init__(*args, **kwargs)
 
-        self.worker_extra_args = self.config.get("worker_extra_args", [])
-        worker_command = " ".join([worker_command] + self.worker_extra_args)
-        self.init_worker(scheduler, *args, worker_command=worker_command, **kwargs)
+        self.init_worker(scheduler, *args, worker_command=worker_command, worker_extra_args=worker_extra_args, **kwargs)
 
     async def start(self):
         await super().start()
         await self.start_worker()
 
-    def init_worker(self, scheduler: str, *args, worker_command=None, **kwargs):
+    def init_worker(self, scheduler: str, *args, worker_command=None, worker_extra_args=None, **kwargs):
         self.scheduler = scheduler
         self.worker_command = worker_command
 
@@ -274,6 +276,7 @@ class GCPWorker(GCPInstance, WorkerMixin):
             f"{self.worker_command} {self.cluster.scheduler_internal_ip}:8786"
         )
 
+        self.command = " ".join([self.command] + worker_extra_args)
         self.cluster._log(f"Starting worker: {self.name} with command: {self.command}")
 
     async def start_worker(self):
@@ -298,16 +301,11 @@ class GCPCluster(VMCluster):
         filesystem_size=None,
         worker_command=None,
         worker_extra_args=None,
-        auto_shutdown=True,
+        auto_shutdown=False,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-        try:
-            self.compute = googleapiclient.discovery.build("compute", "v1", credenti)
-        except DefaultCredentialsError as e:
-            raise Exception(
-                "GCP Credentials have not been provided.  Please set the following environment variable:\n export GOOGLE_APPLICATION_CREDENTIALS=<Path-To-GCP-JSON-Credentials> "
-            )
+
+        self.compute = authenticate()
 
         self.name = name
         self.config = dask.config.get("cloudprovider.gcp", {})
@@ -318,21 +316,42 @@ class GCPCluster(VMCluster):
             "name": self.name,
             "cluster": self,
             "config": self.config,
-            "projectid": projectid,
-            "source_image": source_image,
-            "docker_image": docker_image,
+            "projectid": projectid or self.config.get("projectid"),
+            "source_image": source_image or self.config.get("source_image"),
+            "docker_image": docker_image or self.config.get("docker_image"),
             "filesystem_size": filesystem_size or self.config.get("filesystem_size"),
-            "zone": zone,
-            "machine_type": machine_type,
-            "ngpus": ngpus,
-            "gpu_type": gpu_type,
+            "zone": zone or self.config.get("zone"),
+            "machine_type": machine_type or self.config.get("machine_type"),
+            "ngpus": ngpus or self.config.get("ngpus"),
+            "gpu_type": gpu_type or self.config.get("gpu_type"),
         }
         self.scheduler_options = {**self.options}
         self.worker_options = {
-            "worker_command": worker_command,
-            "worker_extra_args": worker_extra_args,
+            "worker_command": worker_command or self.config.get("worker_command"),
+            "worker_extra_args": worker_extra_args or self.config.get("worker_extra_args"),
             **self.options,
         }
+        breakpoint()
+        super().__init__(**kwargs)
 
+
+def authenticate():
+    if os.environ.get('GOOGLE_APPLICATION_CREDENTIALS', False):
+        compute = googleapiclient.discovery.build("compute", "v1")
+    else:
+        import google.auth.credentials # google-auth
+        path = os.path.join(os.path.expanduser("~"), ".config/gcloud/credentials.db")
+        if not os.path.exists(path):
+            msg = "GCP Credentials have not been provided.  Either set the following environment variable:\n export GOOGLE_APPLICATION_CREDENTIALS=<Path-To-GCP-JSON-Credentials> \nor authenticate with\n gcloud auth login"
+            raise Exception(msg)
+        conn = sqlite3.connect(path)
+        creds_rows = conn.execute("select * from credentials").fetchall()
+        with tmpfile() as f:
+            with open(f, 'w') as f_:
+                # take first row
+                f_.write(creds_rows[0][1])
+            creds, _ = google.auth.load_credentials_from_file(filename=f)
+        compute = googleapiclient.discovery.build("compute", "v1", credentials=creds)
+    return compute
 
 # Note: if you have trouble connecting make sure firewall rules in GCP are stetup for 8787,8786,22

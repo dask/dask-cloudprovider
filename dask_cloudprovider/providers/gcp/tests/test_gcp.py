@@ -1,8 +1,9 @@
+import os
 import pytest
 
 import dask
 import googleapiclient.discovery
-from dask_cloudprovider.providers.gcp.instances import GCPCluster, GCPWorker
+from dask_cloudprovider.providers.gcp.instances import GCPCluster, GCPWorker, authenticate
 from dask.distributed import Client
 import dask.array as da
 from distributed.core import Status
@@ -34,6 +35,23 @@ async def cluster(config):
 
     async with GCPCluster(asynchronous=True, auto_shutdown=False) as cluster:
         yield cluster
+
+@pytest.mark.asyncio
+async def test_creds_file():
+    await skip_without_credentials()
+
+    # test GOOGLE_APPLICATION_CREDENTIALS env var
+    compute = authenticate()
+    assert isinstance(compute, googleapiclient.discovery.Resource)
+
+    # test google auth login creds file
+    tmp = os.environ['GOOGLE_APPLICATION_CREDENTIALS']
+    del os.environ['GOOGLE_APPLICATION_CREDENTIALS']
+
+    compute = authenticate()
+    isinstance(compute, googleapiclient.discovery.Resource)
+
+    os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = tmp
 
 
 @pytest.mark.asyncio

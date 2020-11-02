@@ -233,6 +233,7 @@ class VMCluster(SpecCluster):
         loader = FileSystemLoader([os.path.dirname(os.path.abspath(__file__))])
         environment = Environment(loader=loader)
         template = environment.get_template("cloud-init.yaml.j2")
+        print(template.render(**kwargs))
         return template.render(**kwargs)
 
     @classmethod
