@@ -190,6 +190,25 @@ class AzureMLCluster(Cluster):
     1. Jupyter link to a Jupyter Lab instance running on the headnode.
     2. Dask Dashboard link.
 
+    Note that ``AzureMLCluster`` uses IPython Widgets to present this information, so if you are working in Jupyter Lab
+    and see text that starts with ``VBox(children=``..., make sure you have enabled the IPython Widget
+    `extension <https://jupyterlab.readthedocs.io/en/stable/user/extensions.html>`_.
+
+    To connect to the Jupyter Lab session running on the cluster from your own computer, click the link provided in the
+    widget printed above, or if you need the link directly it is stored in ``amlcluster.jupyter_link``.
+
+    Once connected, you'll be in an AzureML `Run` session. To connect Dask from within the session, just run to
+    following code to connect dask to the cluster:
+
+    .. code-block:: python
+
+        from azureml.core import Run
+        from dask.distributed import Client
+
+        run = Run.get_context()
+        c = Client(run.get_metrics()["scheduler"])
+
+
     You can stop the cluster with `amlcluster.close()`. The cluster will automatically spin down if unused for
     20 minutes by default. Alternatively, you can delete the Azure ML Compute Target or cancel the Run from the
     Python SDK or UI to stop the cluster.

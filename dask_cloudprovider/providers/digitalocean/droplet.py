@@ -22,7 +22,15 @@ except ImportError as e:
 
 class Droplet(VMInterface):
     def __init__(
-        self, cluster, config, *args, region=None, size=None, image=None, **kwargs
+        self,
+        cluster: str,
+        config,
+        *args,
+        region: str = None,
+        size: str = None,
+        image: str = None,
+        docker_image=None,
+        **kwargs,
     ):
         super().__init__(*args, **kwargs)
         self.droplet = None
@@ -33,6 +41,7 @@ class Droplet(VMInterface):
         self.image = image
         self.gpu_instance = False
         self.bootstrap = True
+        self.docker_image = docker_image
 
     async def create_vm(self):
         self.droplet = digitalocean.Droplet(
@@ -61,38 +70,17 @@ class Droplet(VMInterface):
 
         return self.droplet.ip_address
 
-    async def close(self):
+    async def destroy_vm(self):
         self.droplet.destroy()
         self.cluster._log(f"Terminated droplet {self.name}")
-        await super().close()
 
 
-class DropletScheduler(Droplet, SchedulerMixin):
-    """Scheduler running in an EC2 instance.
-
-    """
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.init_scheduler()
-
-    async def start(self):
-        await super().start()
-        await self.start_scheduler()
+class DropletScheduler(SchedulerMixin, Droplet):
+    """Scheduler running on a DigitalOcean Droplet."""
 
 
-class DropletWorker(Droplet, WorkerMixin):
-    """Worker running in an EC2 instance.
-
-    """
-
-    def __init__(self, scheduler, *args, worker_command=None, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.init_worker(scheduler, *args, worker_command=worker_command, **kwargs)
-
-    async def start(self):
-        await super().start()
-        await self.start_worker()
+class DropletWorker(WorkerMixin, Droplet):
+    """Worker running on a DigitalOcean Droplet."""
 
 
 class DropletCluster(VMCluster):
@@ -112,14 +100,42 @@ class DropletCluster(VMCluster):
         The DO region to launch you cluster in. A full list can be obtained with ``doctl compute region list``.
     size: str
         The VM size slug. You can get a full list with ``doctl compute size list``.
-
         The default is ``s-1vcpu-1gb`` which is 1GB RAM and 1 vCPU
     image: str
         The image ID to use for the host OS. This should be a Ubuntu variant.
-
         You can list available images with ``doctl compute image list --public | grep ubuntu.*x64``.
-    worker_command: str
-        The Dask worker command to start on worker VMs.
+    worker_module: str
+        The Dask worker module to start on worker VMs.
+    n_workers: int
+        Number of workers to initialise the cluster with. Defaults to ``0``.
+    worker_module: str
+        The Python module to run for the worker. Defaults to ``distributed.cli.dask_worker``
+    worker_options: dict
+        Params to be passed to the worker class.
+        See :class:`distributed.worker.Worker` for default worker class.
+        If you set ``worker_module`` then refer to the docstring for the custom worker class.
+    scheduler_options: dict
+        Params to be passed to the scheduler class.
+        See :class:`distributed.scheduler.Scheduler`.
+    docker_image: string (optional)
+        The Docker image to run on all instances.
+
+        This image must have a valid Python environment and have ``dask`` installed in order for the
+        ``dask-scheduler`` and ``dask-worker`` commands to be available. It is recommended the Python
+        environment matches your local environment where ``EC2Cluster`` is being created from.
+
+        For GPU instance types the Docker image much have NVIDIA drivers and ``dask-cuda`` installed.
+
+        By default the ``daskdev/dask:latest`` image will be used.
+    silence_logs: bool
+        Whether or not we should silence logging when setting up the cluster.
+    asynchronous: bool
+        If this is intended to be used directly within an event loop with
+        async/await
+    security : Security or bool, optional
+        Configures communication security in this cluster. Can be a security
+        object, or True. If True, temporary self-signed credentials will
+        be created automatically.
 
     Examples
     --------
@@ -173,22 +189,21 @@ class DropletCluster(VMCluster):
 
     def __init__(
         self,
-        region="nyc3",
-        size="s-1vcpu-1gb",  # 1GB RAM, 1 vCPU
-        image="ubuntu-20-04-x64",
-        worker_command="dask-worker",
+        region: str = None,
+        size: str = None,
+        image: str = None,
         **kwargs,
     ):
         self.config = dask.config.get("cloudprovider.digitalocean", {})
         self.scheduler_class = DropletScheduler
         self.worker_class = DropletWorker
-        self.options = {  # TODO get defaults from config
+        self.options = {
             "cluster": self,
             "config": self.config,
-            "region": region,
-            "size": size,
-            "image": image,
+            "region": region if region is not None else self.config.get("region"),
+            "size": size if size is not None else self.config.get("size"),
+            "image": image if image is not None else self.config.get("image"),
         }
         self.scheduler_options = {**self.options}
-        self.worker_options = {"worker_command": worker_command, **self.options}
+        self.worker_options = {**self.options}
         super().__init__(**kwargs)

@@ -7,7 +7,7 @@ class TimeoutException(RuntimeError):
 
 
 class Timeout:
-    """ A timeout object for use in ``while True`` loops instead of ``True``.
+    """A timeout object for use in ``while True`` loops instead of ``True``.
 
     Create an instance of this class before beginning an infinite loop and
     call ``run()`` instead of ``True``.
@@ -57,7 +57,7 @@ class Timeout:
         self.exception = TimeoutException(self.error_message)
 
     def run(self):
-        """ Run the timeout.
+        """Run the timeout.
 
         This method when called repeatedly will return ``True`` until the
         timeout has elapsed. It will then raise or return ``False``.
@@ -75,7 +75,7 @@ class Timeout:
         return True
 
     def set_exception(self, e):
-        """ Modify the default timeout exception.
+        """Modify the default timeout exception.
 
         This would be useful if you are trying something repeatedly but if it
         never succeeds before the timeout you want to raise the exception from
