@@ -9,7 +9,7 @@ import dask
 
 from dask_cloudprovider.utils.logs import Log, Logs
 from dask_cloudprovider.utils.timeout import Timeout
-from dask_cloudprovider.providers.aws.helper import (
+from dask_cloudprovider.aws.helper import (
     dict_to_aws,
     aws_to_dict,
     get_sleep_duration,

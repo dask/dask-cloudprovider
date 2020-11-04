@@ -1,7 +1,7 @@
 import asyncio
 
 import dask
-from dask_cloudprovider.providers.generic.vmcluster import (
+from dask_cloudprovider.generic.vmcluster import (
     VMCluster,
     VMInterface,
     SchedulerMixin,

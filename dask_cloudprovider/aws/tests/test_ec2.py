@@ -2,8 +2,8 @@ import pytest
 
 aiobotocore = pytest.importorskip("aiobotocore")
 
-from dask_cloudprovider.providers.aws.ec2 import EC2Cluster
-from dask_cloudprovider.providers.aws.helper import get_latest_ami_id
+from dask_cloudprovider.aws.ec2 import EC2Cluster
+from dask_cloudprovider.aws.helper import get_latest_ami_id
 from dask.distributed import Client
 from distributed.core import Status
 

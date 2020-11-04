@@ -1,29 +1,27 @@
 from . import config
 
-try:
-    from .providers.aws.ecs import ECSCluster, FargateCluster
-    from .providers.aws.ec2 import EC2Cluster
-except ImportError:
-    pass
-try:
-    from .providers.azure.azureml import AzureMLCluster
-except ImportError:
-    pass
-try:
-    from .providers.digitalocean.droplet import DropletCluster
-except ImportError:
-    pass
-
-__all__ = [
-    "ECSCluster",
-    "EC2Cluster",
-    "FargateCluster",
-    "AzureMLCluster",
-    "DropletCluster",
-]
-
 from ._version import get_versions
 
 __version__ = get_versions()["version"]
 
 del get_versions
+
+
+def __getattr__(name):
+    if name in ["EC2Cluster", "ECSCluster", "FargateCluster"]:
+        raise ImportError(
+            "AWS cluster managers have been moved into the aws subpackage. "
+            f"Please import dask_cloudprovider.aws.{name}"
+        )
+
+    if name in ["AzureMLCluster"]:
+        raise ImportError(
+            "Azure cluster managers have been moved into the azure subpackage. "
+            f"Please import dask_cloudprovider.azure.{name}"
+        )
+
+    if name in ["DropletCluster"]:
+        raise ImportError(
+            "DigitalOcean cluster managers have been moved into the digitalocean subpackage. "
+            f"Please import dask_cloudprovider.digitalocean.{name}"
+        )

@@ -1,13 +1,13 @@
 import asyncio
 
 import dask
-from dask_cloudprovider.providers.generic.vmcluster import (
+from dask_cloudprovider.generic.vmcluster import (
     VMCluster,
     VMInterface,
     SchedulerMixin,
     WorkerMixin,
 )
-from dask_cloudprovider.providers.aws.helper import (
+from dask_cloudprovider.aws.helper import (
     get_latest_ami_id,
     get_default_vpc,
     get_vpc_subnets,
