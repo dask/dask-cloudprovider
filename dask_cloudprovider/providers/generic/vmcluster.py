@@ -185,7 +185,7 @@ class VMCluster(SpecCluster):
     def __init__(
         self,
         n_workers: int = 0,
-        worker_module: str = "distributed.cli.dask_worker",
+        worker_class: str = "dask.distributed.Nanny",
         worker_options: dict = {},
         scheduler_options: dict = {},
         docker_image="daskdev/dask:latest",
@@ -196,12 +196,14 @@ class VMCluster(SpecCluster):
                 "VMCluster is not intended to be used directly. See docstring for more info."
             )
         self._n_workers = n_workers
-        self.scheduler_options["docker_image"] = docker_image
-        self.worker_options["docker_image"] = docker_image
-        self.worker_options["worker_module"] = worker_module
+        image = self.scheduler_options.get('docker_image', False) or docker_image
+        self.scheduler_options["docker_image"] = image
+        self.worker_options["docker_image"] = image
+        self.worker_options["worker_class"] = worker_class
         self.worker_options["worker_options"] = worker_options
         self.scheduler_options["scheduler_options"] = scheduler_options
         self.uuid = str(uuid.uuid4())[:8]
+
         super().__init__(**kwargs)
 
     async def _start(
@@ -233,7 +235,6 @@ class VMCluster(SpecCluster):
         loader = FileSystemLoader([os.path.dirname(os.path.abspath(__file__))])
         environment = Environment(loader=loader)
         template = environment.get_template("cloud-init.yaml.j2")
-        print(template.render(**kwargs))
         return template.render(**kwargs)
 
     @classmethod

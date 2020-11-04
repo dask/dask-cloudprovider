@@ -1,6 +1,7 @@
 import asyncio
 import os
 import uuid
+import json
 
 import sqlite3
 
@@ -14,6 +15,9 @@ from dask_cloudprovider.providers.generic.vmcluster import (
 )
 
 from dask_cloudprovider.utils.socket import is_socket_open
+
+
+from distributed.core import Status
 
 try:
     import googleapiclient.discovery
@@ -33,7 +37,6 @@ class GCPInstance(VMInterface):
     def __init__(
         self,
         cluster,
-        name,
         config=None,
         zone=None,
         projectid=None,
@@ -47,7 +50,6 @@ class GCPInstance(VMInterface):
     ):
         super().__init__(**kwargs)
         self.cluster = cluster
-        self.name = name
         self.config = config
         self.projectid = projectid or self.config.get("projectid")
         self.zone = zone or self.config.get("zone")
@@ -153,6 +155,7 @@ class GCPInstance(VMInterface):
         return config
 
     async def create_vm(self):
+
         self.cloud_init = self.cluster.render_cloud_init(
             image=self.docker_image,
             command=self.command,
@@ -162,6 +165,7 @@ class GCPInstance(VMInterface):
         )
 
         self.gcp_config = self.create_gcp_config()
+
         try:
             inst = (
                 self.cluster.compute.instances()
@@ -220,17 +224,15 @@ class GCPInstance(VMInterface):
         ).execute()
 
 
-class GCPScheduler(GCPInstance, SchedulerMixin):
+class GCPScheduler(SchedulerMixin, GCPInstance):
     """Scheduler running in a GCP instance."""
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.command = "dask-scheduler --host 0.0.0.0"
-        self.name = f"dask-scheduler-{str(uuid.uuid4())[:8]}"
 
     async def start(self):
-        await super().start()
         await self.start_scheduler()
+        self.status = Status.running
 
     async def start_scheduler(self):
         self.cluster._log(
@@ -253,31 +255,46 @@ class GCPScheduler(GCPInstance, SchedulerMixin):
         self.cluster.scheduler_external_ip = self.external_ip
 
 
-class GCPWorker(GCPInstance, WorkerMixin):
+class GCPWorker(GCPInstance):
     """Worker running in an GCP instance."""
 
     def __init__(
-        self, scheduler, *args, worker_command=None, worker_extra_args=None, **kwargs
+        self,
+        scheduler: str,
+        *args,
+        worker_class: str = "distributed.cli.dask_worker",
+        worker_options: dict = {},
+        **kwargs,
     ):
-        super().__init__(*args, **kwargs)
-
-        self.init_worker(scheduler, *args, worker_command=worker_command, worker_extra_args=worker_extra_args, **kwargs)
+        super().__init__(**kwargs)
+        self.scheduler = scheduler
+        self.worker_class = worker_class
+        self.name = f"dask-{self.cluster.uuid}-worker-{str(uuid.uuid4())[:8]}"
+        internal_scheduler = f"{self.cluster.scheduler_internal_ip}:8786"
+        self.command = " ".join(
+            [
+                self.set_env,
+                "python",
+                "-m",
+                "distributed.cli.dask_spec",
+                internal_scheduler,
+                "--spec",
+                "''%s''"  # in yaml double single quotes escape the single quote
+                % json.dumps(
+                    {
+                        "cls": self.worker_class,
+                        "opts": {
+                            **worker_options,
+                            "name": self.name,
+                        },
+                    }
+                ),
+            ]
+        )
 
     async def start(self):
         await super().start()
         await self.start_worker()
-
-    def init_worker(self, scheduler: str, *args, worker_command=None, worker_extra_args=None, **kwargs):
-        self.scheduler = scheduler
-        self.worker_command = worker_command
-
-        self.name = f"dask-worker-{str(uuid.uuid4())[:8]}"
-        self.command = (
-            f"{self.worker_command} {self.cluster.scheduler_internal_ip}:8786"
-        )
-
-        self.command = " ".join([self.command] + worker_extra_args)
-        self.cluster._log(f"Starting worker: {self.name} with command: {self.command}")
 
     async def start_worker(self):
         self.cluster._log("Creating worker instance")
@@ -290,7 +307,6 @@ class GCPCluster(VMCluster):
 
     def __init__(
         self,
-        name="dask-gcp-example",
         zone=None,
         machine_type=None,
         projectid=None,
@@ -299,21 +315,21 @@ class GCPCluster(VMCluster):
         ngpus=None,
         gpu_type=None,
         filesystem_size=None,
-        worker_command=None,
-        worker_extra_args=None,
-        auto_shutdown=False,
+        auto_shutdown=None,
         **kwargs,
     ):
 
         self.compute = authenticate()
 
-        self.name = name
         self.config = dask.config.get("cloudprovider.gcp", {})
-        self.auto_shutdown = auto_shutdown
+        self.auto_shutdown = (
+            auto_shutdown
+            if auto_shutdown is not None
+            else self.config.get("auto_shutdown")
+        )
         self.scheduler_class = GCPScheduler
         self.worker_class = GCPWorker
         self.options = {
-            "name": self.name,
             "cluster": self,
             "config": self.config,
             "projectid": projectid or self.config.get("projectid"),
@@ -326,20 +342,17 @@ class GCPCluster(VMCluster):
             "gpu_type": gpu_type or self.config.get("gpu_type"),
         }
         self.scheduler_options = {**self.options}
-        self.worker_options = {
-            "worker_command": worker_command or self.config.get("worker_command"),
-            "worker_extra_args": worker_extra_args or self.config.get("worker_extra_args"),
-            **self.options,
-        }
-        breakpoint()
+        self.worker_options = {**self.options}
+
         super().__init__(**kwargs)
 
 
 def authenticate():
-    if os.environ.get('GOOGLE_APPLICATION_CREDENTIALS', False):
+    if os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", False):
         compute = googleapiclient.discovery.build("compute", "v1")
     else:
-        import google.auth.credentials # google-auth
+        import google.auth.credentials  # google-auth
+
         path = os.path.join(os.path.expanduser("~"), ".config/gcloud/credentials.db")
         if not os.path.exists(path):
             msg = "GCP Credentials have not been provided.  Either set the following environment variable:\n export GOOGLE_APPLICATION_CREDENTIALS=<Path-To-GCP-JSON-Credentials> \nor authenticate with\n gcloud auth login"
@@ -347,11 +360,12 @@ def authenticate():
         conn = sqlite3.connect(path)
         creds_rows = conn.execute("select * from credentials").fetchall()
         with tmpfile() as f:
-            with open(f, 'w') as f_:
+            with open(f, "w") as f_:
                 # take first row
                 f_.write(creds_rows[0][1])
             creds, _ = google.auth.load_credentials_from_file(filename=f)
         compute = googleapiclient.discovery.build("compute", "v1", credentials=creds)
     return compute
+
 
 # Note: if you have trouble connecting make sure firewall rules in GCP are stetup for 8787,8786,22

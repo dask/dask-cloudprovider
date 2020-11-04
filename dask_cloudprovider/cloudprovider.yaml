@@ -76,5 +76,4 @@ cloudprovider:
     ngpus: "" # number of GPUs to use
     gpu_type: "" # type of gpus to use: nvidia-tesla-k80, nvidia-tesla-p100, nvidia-tesla-t4
     docker_image: "daskdev/dask:latest" # docker image to use
-    worker_command: "dask-worker" # dask-worker or dask-cuda-worker
-    worker_extra_args: [] # extra arguments for the worker
+    auto_shutdown: true # Shutdown instances automatically if the scheduler or worker services time out.
