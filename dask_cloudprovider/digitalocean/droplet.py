@@ -142,7 +142,7 @@ class DropletCluster(VMCluster):
 
     Create the cluster.
 
-    >>> from dask_cloudprovider import DropletCluster
+    >>> from dask_cloudprovider.digitalocean import DropletCluster
     >>> cluster = DropletCluster(n_workers=1)
     Creating scheduler instance
     Created droplet dask-38b817c1-scheduler

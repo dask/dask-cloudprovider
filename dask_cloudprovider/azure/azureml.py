@@ -152,7 +152,7 @@ class AzureMLCluster(Cluster):
     First, import all necessary modules.
 
     >>> from azureml.core import Workspace
-    >>> from dask_cloudprovider import AzureMLCluster
+    >>> from dask_cloudprovider.azure import AzureMLCluster
 
     Next, create the ``Workspace`` object given your AzureML ``Workspace`` parameters. Check
     more in the AzureML documentation for

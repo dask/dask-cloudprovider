@@ -29,7 +29,7 @@ to give the scheduler in megabytes. This can be configured in the following ways
 
 .. code-block:: python
 
-   from dask_cloudprovider import FargateCluster
+   from dask_cloudprovider.aws import FargateCluster
 
    cluster = FargateCluster(
        scheduler_mem=8192

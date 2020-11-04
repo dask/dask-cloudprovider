@@ -1,7 +1,7 @@
 Microsoft Azure
 ===============
 
-.. currentmodule:: dask_cloudprovider
+.. currentmodule:: dask_cloudprovider.azure
 
 .. autosummary::
    AzureMLCluster
