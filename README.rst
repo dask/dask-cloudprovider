@@ -3,9 +3,9 @@ Dask Cloud Provider
 ===================
 
 
-.. image:: https://img.shields.io/circleci/build/github/dask/dask-cloudprovider?logo=circleci
-   :target: https://circleci.com/gh/dask/dask-cloudprovider
-   :alt: CircleCI
+.. image:: https://github.com/dask/dask-cloudprovider/workflows/CI/badge.svg
+   :target: https://github.com/dask/dask-cloudprovider/actions?query=workflow%3ACI
+   :alt: Build Status
 
 .. image:: https://img.shields.io/readthedocs/dask-cloudprovider
    :target: https://cloudprovider.dask.org/
