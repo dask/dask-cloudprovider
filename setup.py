@@ -9,7 +9,7 @@ extras_require = {
     "aws": ["aiobotocore>=0.10.2"],
     "azure": ["azureml-sdk>=1.0.83"],
     "digitalocean": ["python-digitalocean"],
-    "gcp": ["google-api-python-client"],
+    "gcp": ["google-api-python-client", "google-auth"],
 }
 extras_require["all"] = set(pkg for pkgs in extras_require.values() for pkg in pkgs)
 

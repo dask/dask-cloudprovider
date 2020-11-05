@@ -3,7 +3,7 @@ import pytest
 
 import dask
 import googleapiclient.discovery
-from dask_cloudprovider.providers.gcp.instances import (
+from dask_cloudprovider.gcp.instances import (
     GCPCluster,
     GCPWorker,
     authenticate,

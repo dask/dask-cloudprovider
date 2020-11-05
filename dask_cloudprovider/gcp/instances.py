@@ -7,7 +7,7 @@ import sqlite3
 
 import dask
 from dask.utils import tmpfile
-from dask_cloudprovider.providers.generic.vmcluster import (
+from dask_cloudprovider.generic.vmcluster import (
     VMCluster,
     VMInterface,
     SchedulerMixin,
@@ -27,7 +27,7 @@ except ImportError as e:
     msg = (
         "Dask Cloud Provider GCP requirements are not installed.\n\n"
         "Please either conda or pip install as follows:\n\n"
-        "  conda install -c conda-forge google-api-python-client  # either conda install\n"
+        "  conda install -c conda-forge google-api-python-client google-auth # either conda install\n"
         '  python -m pip install "dask-cloudprovider[gcp]" --upgrade  # or python -m pip install'
     )
     raise ImportError(msg) from e
