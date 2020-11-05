@@ -20,7 +20,7 @@ jobs:
         with:
           miniconda-version: "latest"
           python-version: ${{ matrix.python-version }}
-          environment-file: ci/environment-${{ matrix.python-version }}.yaml
+          environment-file: ci/environment-${{ matrix.python-version }}.yml
           activate-environment: dask-cloudprovider-test
           auto-activate-base: false
 
