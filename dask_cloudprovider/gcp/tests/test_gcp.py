@@ -3,20 +3,19 @@ import pytest
 
 import dask
 import googleapiclient.discovery
+from google.auth.exceptions import DefaultCredentialsError
 from dask_cloudprovider.gcp.instances import (
     GCPCluster,
-    GCPWorker,
     authenticate,
 )
 from dask.distributed import Client
-import dask.array as da
 from distributed.core import Status
 
 
 def skip_without_credentials():
     try:
-        googleapiclient.discovery.build("compute", "v1")
-    except:
+        authenticate()
+    except DefaultCredentialsError:
         pytest.skip(
             """
         You must configure your GCP credentials to run this test.
