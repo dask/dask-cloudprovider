@@ -40,6 +40,9 @@ jobs:
             - "/home/circleci/miniconda"
       - run:
           command: |
+            /home/circleci/miniconda/envs/dask-cloudprovider-test/bin/pip install -e .[all]
+      - run:
+          command: |
             /home/circleci/miniconda/envs/dask-cloudprovider-test/bin/py.test dask_cloudprovider
       - run:
           command: |

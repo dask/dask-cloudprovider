@@ -12,7 +12,7 @@ Each cluster manager handles this differently but generally you will need to con
 - Ensure the OS/Docker image has the NVIDIA drivers. For Docker images it is recommended to use the [RAPIDS images](https://hub.docker.com/r/rapidsai/rapidsai/).
 - Set the ``worker_module`` config option to ``dask_cuda.cli.dask_cuda_worker`` or ``worker_command`` option to ``dask-cuda-worker``.
 
-In the following AWS :class:`EC2Cluster` example we set the ``ami`` to be a Deep Learning AMI with NVIDIA drivers, the ``docker_image`` to RAPIDS, the ``instance_type``
+In the following AWS :class:`dask_cloudprovider.aws.EC2Cluster` example we set the ``ami`` to be a Deep Learning AMI with NVIDIA drivers, the ``docker_image`` to RAPIDS, the ``instance_type``
 to ``p3.2xlarge`` which has one NVIDIA Tesla V100 and the ``worker_module`` to ``dask_cuda.cli.dask_cuda_worker``.
 
 .. code-block:: python

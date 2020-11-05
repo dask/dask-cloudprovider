@@ -1,7 +1,7 @@
 Amazon Web Services (AWS)
 =========================
 
-.. currentmodule:: dask_cloudprovider
+.. currentmodule:: dask_cloudprovider.aws
 
 .. autosummary::
    EC2Cluster

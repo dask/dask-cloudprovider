@@ -58,7 +58,7 @@ returns the cloud-init file that would be generated.
 
 .. code-block:: python
 
-    from dask_cloudprovider import EC2Cluster
+    from dask_cloudprovider.aws import EC2Cluster
 
     cloud_init_config = EC2Cluster.get_cloud_init(
         # Pass any kwargs here you would normally pass to ``EC2Cluster``
@@ -196,7 +196,7 @@ Then to use our new image we can create an ``EC2Cluster`` specifying the AMI and
 .. code-block:: python
 
     from dask.distributed import Client
-    from dask_cloudprovider import EC2Cluster
+    from dask_cloudprovider.aws import EC2Cluster
 
     cluster = EC2Cluster(
         ami="ami-064f8db7634d19647",  # AMI ID provided by Packer
@@ -214,7 +214,7 @@ To launch `RAPIDS <https://rapids.ai/>`_ on AWS EC2 we can select a GPU instance
 
 .. code-block:: python
 
-    from dask_cloudprovider import EC2Cluster
+    from dask_cloudprovider.aws import EC2Cluster
 
     cluster = EC2Cluster(
         ami="ami-0c7c7d78f752f8f17",  # Deep Learning AMI (this ID varies by region so find yours in the AWS Console)
@@ -311,7 +311,7 @@ We can then run our code snippet again but this time it will take less than 5 mi
 .. code-block:: python
 
     from dask.distributed import Client
-    from dask_cloudprovider import EC2Cluster
+    from dask_cloudprovider.aws import EC2Cluster
 
     cluster = EC2Cluster(
         ami="ami-04e5539cb82859e69",  # AMI ID provided by Packer

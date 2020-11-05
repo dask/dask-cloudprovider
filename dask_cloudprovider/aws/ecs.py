@@ -9,7 +9,7 @@ import dask
 
 from dask_cloudprovider.utils.logs import Log, Logs
 from dask_cloudprovider.utils.timeout import Timeout
-from dask_cloudprovider.providers.aws.helper import (
+from dask_cloudprovider.aws.helper import (
     dict_to_aws,
     aws_to_dict,
     get_sleep_duration,
@@ -617,7 +617,7 @@ class ECSCluster(SpecCluster):
     Examples
     --------
 
-    >>> from dask_cloudprovider import ECSCluster
+    >>> from dask_cloudprovider.aws import ECSCluster
     >>> cluster = ECSCluster(cluster_arn="arn:aws:ecs:<region>:<acctid>:cluster/<clustername>")
 
     There is also support in ``ECSCluster`` for GPU aware Dask clusters. To do
@@ -625,7 +625,7 @@ class ECSCluster(SpecCluster):
     ``g3``, ``p3`` or ``p3dn`` families) and specify the number of GPUs each worker task
     should have.
 
-    >>> from dask_cloudprovider import ECSCluster
+    >>> from dask_cloudprovider.aws import ECSCluster
     >>> cluster = ECSCluster(
     ...     cluster_arn="arn:aws:ecs:<region>:<acctid>:cluster/<gpuclustername>",
     ...     worker_gpu=1)
@@ -1230,13 +1230,13 @@ class FargateCluster(ECSCluster):
     The ``FargateCluster`` will create a new Fargate ECS cluster by default along
     with all the IAM roles, security groups, and so on that it needs to function.
 
-    >>> from dask_cloudprovider import FargateCluster
+    >>> from dask_cloudprovider.aws import FargateCluster
     >>> cluster = FargateCluster()
 
     Note that in many cases you will want to specify a custom Docker image to ``FargateCluster`` so that Dask has the
     packages it needs to execute your workflow.
 
-    >>> from dask_cloudprovider import FargateCluster
+    >>> from dask_cloudprovider.aws import FargateCluster
     >>> cluster = FargateCluster(image="<hub-user>/<repo-name>[:<tag>]")
 
     One strategy to ensure that package versions match between your custom environment and the Docker container is to

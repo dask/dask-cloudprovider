@@ -1,5 +1,5 @@
 def test_aws_to_dict_and_back():
-    from dask_cloudprovider.providers.aws.helper import aws_to_dict, dict_to_aws
+    from dask_cloudprovider.aws.helper import aws_to_dict, dict_to_aws
 
     aws_dict = [{"key": "hello", "value": "world"}]
     aws_upper_dict = [{"Key": "hello", "Value": "world"}]
@@ -16,7 +16,7 @@ def test_aws_to_dict_and_back():
 
 
 def test_get_sleep_duration_first_try():
-    from dask_cloudprovider.providers.aws.helper import get_sleep_duration
+    from dask_cloudprovider.aws.helper import get_sleep_duration
 
     duration = get_sleep_duration(
         current_try=0, min_sleep_millis=10, max_sleep_millis=5000
@@ -25,7 +25,7 @@ def test_get_sleep_duration_first_try():
 
 
 def test_get_sleep_duration_max():
-    from dask_cloudprovider.providers.aws.helper import get_sleep_duration
+    from dask_cloudprovider.aws.helper import get_sleep_duration
 
     duration = get_sleep_duration(
         current_try=23, min_sleep_millis=10, max_sleep_millis=5000
@@ -34,7 +34,7 @@ def test_get_sleep_duration_max():
 
 
 def test_get_sleep_duration_negative_try():
-    from dask_cloudprovider.providers.aws.helper import get_sleep_duration
+    from dask_cloudprovider.aws.helper import get_sleep_duration
 
     duration = get_sleep_duration(
         current_try=-1, min_sleep_millis=10, max_sleep_millis=5000

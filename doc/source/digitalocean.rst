@@ -1,7 +1,7 @@
 DigitalOcean
 ============
 
-.. currentmodule:: dask_cloudprovider
+.. currentmodule:: dask_cloudprovider.digitalocean
 
 .. autosummary::
    DropletCluster

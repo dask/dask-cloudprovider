@@ -1,6 +1,6 @@
 import pytest
 
-from dask_cloudprovider.providers.generic.vmcluster import VMCluster
+from dask_cloudprovider.generic.vmcluster import VMCluster
 from distributed.core import Status
 
 

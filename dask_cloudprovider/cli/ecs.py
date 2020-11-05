@@ -6,7 +6,7 @@ import click
 from distributed.cli.utils import check_python_3, install_signal_handlers
 from tornado.ioloop import IOLoop, TimeoutError
 
-from dask_cloudprovider import ECSCluster
+from dask_cloudprovider.aws import ECSCluster
 
 
 logger = logging.getLogger(__name__)
