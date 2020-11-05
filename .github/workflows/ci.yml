@@ -1,0 +1,57 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: true
+      matrix:
+        os: ["ubuntu-latest"]
+        python-version: ["3.7", "3.8"]
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v2
+
+      - name: Setup Conda Environment
+        uses: goanpeca/setup-miniconda@v1.7.0
+        with:
+          miniconda-version: "latest"
+          python-version: ${{ matrix.python-version }}
+          environment-file: ci/environment-${{ matrix.python-version }}.yaml
+          activate-environment: dask-cloudprovider-test
+          auto-activate-base: false
+
+      - name: Install
+        shell: bash -l {0}
+        run: pip install -e .[all]
+
+      - name: Run tests
+        shell: bash -l {0}
+        run: py.test dask_cloudprovider
+
+  lint:
+    name: "pre-commit hooks"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-python@v2
+      - uses: pre-commit/action@v2.0.0
+
+  imports:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v2
+
+      - name: Setup Conda Environment
+        uses: goanpeca/setup-miniconda@v1.7.0
+        with:
+          miniconda-version: "latest"
+          python-version: "3.7"
+
+      - name: Run import tests
+        shell: bash -l {0}
+        run: source ci/scripts/test_imports.sh
