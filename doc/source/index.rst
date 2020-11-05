@@ -11,7 +11,7 @@ will result in cloud resources being created for you.
 
 .. code-block:: python
 
-    from dask_cloudprovider import FargateCluster
+    from dask_cloudprovider.aws import FargateCluster
     cluster = FargateCluster(
         # Cluster manager specific config kwargs
     )
@@ -43,7 +43,7 @@ this code.
 
 .. code-block:: python
 
-    from dask_cloudprovider import FargateCluster
+    from dask_cloudprovider.aws import FargateCluster
     from dask.distributed import Client
 
     with FargateCluster(...) as cluster:
