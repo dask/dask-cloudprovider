@@ -7,7 +7,7 @@ import versioneer
 
 extras_require = {
     "aws": ["aiobotocore>=0.10.2"],
-    "azure": ["azureml-sdk>=1.0.83"],
+    "azure": ["azureml-sdk>=1.0.83", "azure-mgmt-compute"],
     "digitalocean": ["python-digitalocean"],
     "googlecloud": ["google-api-python-client"],
 }
