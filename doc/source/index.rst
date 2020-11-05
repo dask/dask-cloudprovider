@@ -65,6 +65,7 @@ this code.
 
     aws.rst
     digitalocean.rst
+    gcp.rst
     azure.rst
 
 .. toctree::

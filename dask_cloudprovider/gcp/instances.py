@@ -11,10 +11,7 @@ from dask_cloudprovider.generic.vmcluster import (
     VMCluster,
     VMInterface,
     SchedulerMixin,
-    WorkerMixin,
 )
-
-from dask_cloudprovider.utils.socket import is_socket_open
 
 
 from distributed.core import Status
@@ -22,7 +19,6 @@ from distributed.core import Status
 try:
     import googleapiclient.discovery
     from googleapiclient.errors import HttpError
-    from google.auth.exceptions import DefaultCredentialsError
 except ImportError as e:
     msg = (
         "Dask Cloud Provider GCP requirements are not installed.\n\n"
@@ -46,6 +42,7 @@ class GCPInstance(VMInterface):
         docker_image=None,
         ngpus=None,
         gpu_type=None,
+        bootstrap=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -61,6 +58,7 @@ class GCPInstance(VMInterface):
         self.filesystem_size = filesystem_size or self.config.get("filesystem_size")
         self.ngpus = ngpus or self.config.get("ngpus")
         self.gpu_type = gpu_type or self.config.get("gpu_type")
+        self.bootstrap = bootstrap
 
         self.general_zone = "-".join(self.zone.split("-")[:2])  # us-east1-c -> us-east1
 
@@ -160,7 +158,7 @@ class GCPInstance(VMInterface):
             image=self.docker_image,
             command=self.command,
             gpu_instance=bool(self.ngpus),
-            bootstrap=False,
+            bootstrap=self.bootstrap,
             auto_shutdown=self.cluster.auto_shutdown,
         )
 
@@ -316,6 +314,7 @@ class GCPCluster(VMCluster):
         gpu_type=None,
         filesystem_size=None,
         auto_shutdown=None,
+        boostrap=True,
         **kwargs,
     ):
 
@@ -340,6 +339,7 @@ class GCPCluster(VMCluster):
             "machine_type": machine_type or self.config.get("machine_type"),
             "ngpus": ngpus or self.config.get("ngpus"),
             "gpu_type": gpu_type or self.config.get("gpu_type"),
+            "bootstrap": boostrap,
         }
         self.scheduler_options = {**self.options}
         self.worker_options = {**self.options}
@@ -355,8 +355,12 @@ def authenticate():
 
         path = os.path.join(os.path.expanduser("~"), ".config/gcloud/credentials.db")
         if not os.path.exists(path):
-            msg = "GCP Credentials have not been provided.  Either set the following environment variable:\n export GOOGLE_APPLICATION_CREDENTIALS=<Path-To-GCP-JSON-Credentials> \nor authenticate with\n gcloud auth login"
-            raise Exception(msg)
+            raise Exception(
+                "GCP Credentials have not been provided. Either set the following environment variable: "
+                "export GOOGLE_APPLICATION_CREDENTIALS=<Path-To-GCP-JSON-Credentials> "
+                "or authenticate with "
+                "gcloud auth login"
+            )
         conn = sqlite3.connect(path)
         creds_rows = conn.execute("select * from credentials").fetchall()
         with tmpfile() as f:
