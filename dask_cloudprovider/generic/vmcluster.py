@@ -196,7 +196,7 @@ class VMCluster(SpecCluster):
                 "VMCluster is not intended to be used directly. See docstring for more info."
             )
         self._n_workers = n_workers
-        image = self.scheduler_options.get('docker_image', False) or docker_image
+        image = self.scheduler_options.get("docker_image", False) or docker_image
         self.scheduler_options["docker_image"] = image
         self.worker_options["docker_image"] = image
         self.worker_options["worker_class"] = worker_class
