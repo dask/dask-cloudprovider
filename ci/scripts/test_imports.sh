@@ -5,7 +5,7 @@ set -o errexit
 test_import () {
     echo "Create environment: python=3.7 $1"
     # Create an empty environment
-    conda create -y -n test-imports -c conda-forge python=3.7
+    conda create -q -y -n test-imports -c conda-forge python=3.7
     conda activate test-imports
     pip install -e .[$1]
     echo "python -c '$2'"
