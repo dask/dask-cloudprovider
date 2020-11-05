@@ -10,6 +10,7 @@ test_import () {
     pip install -e .[$1]
     echo "python -c '$2'"
     python -c "$2"
+    echo "Success [$1] 🚀"
     conda deactivate
     conda env remove -n test-imports
 }
