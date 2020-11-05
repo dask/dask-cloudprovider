@@ -13,7 +13,7 @@ import dask.array as da
 from distributed.core import Status
 
 
-async def skip_without_credentials():
+def skip_without_credentials():
     try:
         googleapiclient.discovery.build("compute", "v1")
     except:
@@ -35,7 +35,7 @@ async def config():
 @pytest.fixture
 async def cluster(config):
 
-    await skip_without_credentials()
+    skip_without_credentials()
 
     async with GCPCluster(asynchronous=True, auto_shutdown=True) as cluster:
         yield cluster
@@ -43,7 +43,7 @@ async def cluster(config):
 
 @pytest.mark.asyncio
 async def test_creds_file():
-    await skip_without_credentials()
+    skip_without_credentials()
 
     # test GOOGLE_APPLICATION_CREDENTIALS env var
     compute = authenticate()
@@ -61,7 +61,7 @@ async def test_creds_file():
 
 @pytest.mark.asyncio
 async def test_init():
-    await skip_without_credentials()
+    skip_without_credentials()
 
     cluster = GCPCluster(asynchronous=True)
     assert cluster.status == Status.created
@@ -76,7 +76,7 @@ async def test_get_cloud_init():
 @pytest.mark.asyncio
 @pytest.mark.timeout(1200)
 async def test_create_cluster(cluster):
-    await skip_without_credentials()
+    skip_without_credentials()
 
     assert cluster.status == Status.running
 
@@ -103,6 +103,7 @@ async def test_create_cluster(cluster):
 
 @pytest.mark.timeout(1200)
 def test_create_cluster_sync():
+    skip_without_credentials()
     cluster = GCPCluster(
         zone="us-east1-c",
         machine_type="n1-standard-1",
