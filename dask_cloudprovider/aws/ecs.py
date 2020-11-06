@@ -452,11 +452,13 @@ class ECSCluster(SpecCluster):
     scheduler_cpu: int (optional)
         The amount of CPU to request for the scheduler in milli-cpu (1/1024).
 
-        Defaults to ``1024`` (one vCPU).
+        Defaults to ``1024`` (one vCPU). See
+        `the troubleshooting guide <./troubleshooting.html#invalid-cpu-or-memory>`_ for information on the valid values for this argument.
     scheduler_mem: int (optional)
         The amount of memory to request for the scheduler in MB.
 
-        Defaults to ``4096`` (4GB).
+        Defaults to ``4096`` (4GB). See
+        `the troubleshooting guide <./troubleshooting.html#invalid-cpu-or-memory>`_ for information on the valid values for this argument.
     scheduler_timeout: str (optional)
         The scheduler task will exit after this amount of time if there are no clients connected.
 
@@ -470,11 +472,13 @@ class ECSCluster(SpecCluster):
     worker_cpu: int (optional)
         The amount of CPU to request for worker tasks in milli-cpu (1/1024).
 
-        Defaults to ``4096`` (four vCPUs).
+        Defaults to ``4096`` (four vCPUs). See
+        `the troubleshooting guide <./troubleshooting.html#invalid-cpu-or-memory>`_ for information on the valid values for this argument.
     worker_mem: int (optional)
         The amount of memory to request for worker tasks in MB.
 
-        Defaults to ``16384`` (16GB).
+        Defaults to ``16384`` (16GB). See
+        `the troubleshooting guide <./troubleshooting.html#invalid-cpu-or-memory>`_ for information on the valid values for this argument.
     worker_gpu: int (optional)
         The number of GPUs to expose to the worker.
 
