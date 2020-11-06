@@ -242,7 +242,7 @@ class VMCluster(SpecCluster):
         cluster = cls(*args, asynchronous=True, **kwargs)
         cluster.auto_shutdown = False
         return cluster.render_cloud_init(
-            image=cluster.docker_image,
+            image=cluster.options["docker_image"],
             command="dask-scheduler --version",
             gpu_instance=cluster.gpu_instance,
             bootstrap=cluster.bootstrap,
