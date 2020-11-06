@@ -315,13 +315,154 @@ class GCPWorker(GCPInstance):
 
 
 class GCPCluster(VMCluster):
-    """Cluster running on GCP Instances."""
+    """Cluster running on GCP VM Instances.
+
+    This cluster manager constructs a Dask cluster running on Google Cloud Platform 67VMs.
+
+    When configuring your cluster you may find it useful to install the ``gcloud`` tool for querying the
+    GCP API for available options.
+
+    https://cloud.google.com/sdk/gcloud
+
+    Parameters
+    ----------
+    projectid: str
+        Your GCP project ID. This must be set either here or in your Dask config.
+
+        https://cloud.google.com/resource-manager/docs/creating-managing-projects
+
+        See the GCP docs page for more info.
+
+        https://cloudprovider.dask.org/en/latest/gcp.html#project-id
+    zone: str
+        The GCP zone to launch you cluster in. A full list can be obtained with ``gcloud compute zones list``.
+    machine_type: str
+        The VM machine_type. You can get a full list with ``gcloud compute machine-types list``.
+        The default is ``n1-standard-1`` which is 3.75GB RAM and 1 vCPU
+    source_image: str
+        The OS image to use for the VM. Dask Cloudprovider will boostrap Ubuntu based images automatically.
+        Other images require Docker and for GPUs the NVIDIA Drivers and NVIDIA Docker.
+        A list of available images can be found with ``gcloud compute images list``
+        The default is ``projects/ubuntu-os-cloud/global/images/ubuntu-minimal-1804-bionic-v20201014``.
+    docker_image: string (optional)
+        The Docker image to run on all instances.
+
+        This image must have a valid Python environment and have ``dask`` installed in order for the
+        ``dask-scheduler`` and ``dask-worker`` commands to be available. It is recommended the Python
+        environment matches your local environment where ``EC2Cluster`` is being created from.
+
+        For GPU instance types the Docker image much have NVIDIA drivers and ``dask-cuda`` installed.
+
+        By default the ``daskdev/dask:latest`` image will be used.
+    ngpus: int (optional)
+        The number of GPUs to atatch to the instance.
+        Default is ``0``.
+    gpu_type: str (optional)
+        The name of the GPU to use. This must be set if ``ngpus>0``.
+        You can see a list of GPUs available in each zone with ``gcloud compute accelerator-types list``.
+    filesystem_size: int (optional)
+        The VM filesystem size in GB. Defaults to ``50``.
+    n_workers: int (optional)
+        Number of workers to initialise the cluster with. Defaults to ``0``.
+    bootstrap: bool (optional)
+        Install Docker and NVIDIA drivers if ``ngpus>0``. Set to ``False`` if you are using a custom ``source_image``
+        which already has these requirements. Defaults to ``True``.
+    worker_class: str
+        The Python class to run for the worker. Defaults to ``dask.distributed.Nanny``
+    worker_options: dict (optional)
+        Params to be passed to the worker class.
+        See :class:`distributed.worker.Worker` for default worker class.
+        If you set ``worker_class`` then refer to the docstring for the custom worker class.
+    scheduler_options: dict (optional)
+        Params to be passed to the scheduler class.
+        See :class:`distributed.scheduler.Scheduler`.
+    silence_logs: bool (optional)
+        Whether or not we should silence logging when setting up the cluster.
+    asynchronous: bool (optional)
+        If this is intended to be used directly within an event loop with
+        async/await
+    security : Security or bool (optional)
+        Configures communication security in this cluster. Can be a security
+        object, or True. If True, temporary self-signed credentials will
+        be created automatically.
+
+    Examples
+    --------
+
+    Create the cluster.
+
+    >>> from dask_cloudprovider.gcp import GCPCluster
+    >>> cluster = GCPCluster(n_workers=1)
+    Launching cluster with the following configuration:
+    Source Image: projects/ubuntu-os-cloud/global/images/ubuntu-minimal-1804-bionic-v20201014
+    Docker Image: daskdev/dask:latest
+    Machine Type: n1-standard-1
+    Filesytsem Size: 50
+    N-GPU Type:
+    Zone: us-east1-c
+    Creating scheduler instance
+    dask-acc897b9-scheduler
+            Internal IP: 10.142.0.37
+            External IP: 34.75.60.62
+    Waiting for scheduler to run
+    Scheduler is running
+    Creating worker instance
+    dask-acc897b9-worker-bfbc94bc
+            Internal IP: 10.142.0.39
+            External IP: 34.73.245.220
+
+    Connect a client.
+
+    >>> from dask.distributed import Client
+    >>> client = Client(cluster)
+
+    Do some work.
+
+    >>> import dask.array as da
+    >>> arr = da.random.random((1000, 1000), chunks=(100, 100))
+    >>> arr.mean().compute()
+    0.5001550986751964
+
+    Close the cluster
+
+    >>> cluster.close()
+    Closing Instance: dask-acc897b9-worker-bfbc94bc
+    Closing Instance: dask-acc897b9-scheduler
+
+    You can also do this all in one go with context managers to ensure the cluster is
+    created and cleaned up.
+
+    >>> with GCPCluster(n_workers=1) as cluster:
+    ...     with Client(cluster) as client:
+    ...         print(da.random.random((1000, 1000), chunks=(100, 100)).mean().compute())
+    Launching cluster with the following configuration:
+    Source Image: projects/ubuntu-os-cloud/global/images/ubuntu-minimal-1804-bionic-v20201014
+    Docker Image: daskdev/dask:latest
+    Machine Type: n1-standard-1
+    Filesytsem Size: 50
+    N-GPU Type:
+    Zone: us-east1-c
+    Creating scheduler instance
+    dask-19352f29-scheduler
+            Internal IP: 10.142.0.41
+            External IP: 34.73.217.251
+    Waiting for scheduler to run
+    Scheduler is running
+    Creating worker instance
+    dask-19352f29-worker-91a6bfe0
+            Internal IP: 10.142.0.48
+            External IP: 34.73.245.220
+    0.5000812282861661
+    Closing Instance: dask-19352f29-worker-91a6bfe0
+    Closing Instance: dask-19352f29-scheduler
+
+    """
 
     def __init__(
         self,
+        projectid=None,
         zone=None,
         machine_type=None,
-        projectid=None,
         source_image=None,
         docker_image=None,
         ngpus=None,
