@@ -51,7 +51,7 @@ class EC2Instance(VMInterface):
         self.region = region
         self.bootstrap = bootstrap
         self.ami = ami
-        self.docker_image = docker_image
+        self.docker_image = docker_image or self.config.get("docker_image")
         self.instance_type = instance_type
         self.gpu_instance = gpu_instance
         self.vpc = vpc
@@ -311,6 +311,7 @@ class EC2Cluster(VMCluster):
         subnet_id=None,
         security_groups=None,
         filesystem_size=None,
+        docker_image=None,
         **kwargs,
     ):
         self.boto_session = aiobotocore.get_session()
@@ -354,7 +355,7 @@ class EC2Cluster(VMCluster):
             "region": self.region,
             "bootstrap": self.bootstrap,
             "ami": self.ami,
-            "docker_image": self.docker_image,
+            "docker_image": docker_image or self.config.get("docker_image"),
             "instance_type": self.instance_type,
             "gpu_instance": self.gpu_instance,
             "vpc": self.vpc,
