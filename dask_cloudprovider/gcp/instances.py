@@ -54,6 +54,7 @@ class GCPInstance(VMInterface):
         filesystem_size=None,
         source_image=None,
         docker_image=None,
+        env_vars=None,
         ngpus=None,
         gpu_type=None,
         bootstrap=None,
@@ -69,6 +70,7 @@ class GCPInstance(VMInterface):
 
         self.source_image = source_image or self.config.get("source_image")
         self.docker_image = docker_image or self.config.get("docker_image")
+        self.env_vars = env_vars
         self.filesystem_size = filesystem_size or self.config.get("filesystem_size")
         self.ngpus = ngpus or self.config.get("ngpus")
         self.gpu_type = gpu_type or self.config.get("gpu_type")
@@ -174,6 +176,7 @@ class GCPInstance(VMInterface):
             gpu_instance=bool(self.ngpus),
             bootstrap=self.bootstrap,
             auto_shutdown=self.cluster.auto_shutdown,
+            env_vars=self.env_vars,
         )
 
         self.gcp_config = self.create_gcp_config()
@@ -373,6 +376,8 @@ class GCPCluster(VMCluster):
         Params to be passed to the worker class.
         See :class:`distributed.worker.Worker` for default worker class.
         If you set ``worker_class`` then refer to the docstring for the custom worker class.
+    env_vars: dict (optional)
+        Environment variables to be passed to the worker.
     scheduler_options: dict (optional)
         Params to be passed to the scheduler class.
         See :class:`distributed.scheduler.Scheduler`.

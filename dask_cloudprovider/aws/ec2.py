@@ -36,6 +36,7 @@ class EC2Instance(VMInterface):
         bootstrap=None,
         ami=None,
         docker_image=None,
+        env_vars=None,
         instance_type=None,
         gpu_instance=None,
         vpc=None,
@@ -52,6 +53,7 @@ class EC2Instance(VMInterface):
         self.bootstrap = bootstrap
         self.ami = ami
         self.docker_image = docker_image or self.config.get("docker_image")
+        self.env_vars = env_vars
         self.instance_type = instance_type
         self.gpu_instance = gpu_instance
         self.vpc = vpc
@@ -105,6 +107,7 @@ class EC2Instance(VMInterface):
                     command=self.command,
                     gpu_instance=self.gpu_instance,
                     bootstrap=self.bootstrap,
+                    env_vars=self.env_vars,
                 ),
                 InstanceInitiatedShutdownBehavior="terminate",
                 NetworkInterfaces=[
@@ -241,6 +244,8 @@ class EC2Cluster(VMCluster):
         For GPU instance types the Docker image much have NVIDIA drivers and ``dask-cuda`` installed.
 
         By default the ``daskdev/dask:latest`` image will be used.
+    env_vars: dict (optional)
+        Environment variables to be passed to the worker.
     silence_logs: bool
         Whether or not we should silence logging when setting up the cluster.
     asynchronous: bool

@@ -189,6 +189,7 @@ class VMCluster(SpecCluster):
         worker_options: dict = {},
         scheduler_options: dict = {},
         docker_image="daskdev/dask:latest",
+        env_vars: dict = {},
         **kwargs,
     ):
         if self.scheduler_class is None or self.worker_class is None:
@@ -198,6 +199,7 @@ class VMCluster(SpecCluster):
         self._n_workers = n_workers
         image = self.scheduler_options.get("docker_image", False) or docker_image
         self.scheduler_options["docker_image"] = image
+        self.worker_options["env_vars"] = env_vars
         self.worker_options["docker_image"] = image
         self.worker_options["worker_class"] = worker_class
         self.worker_options["worker_options"] = worker_options
@@ -247,4 +249,5 @@ class VMCluster(SpecCluster):
             gpu_instance=cluster.gpu_instance,
             bootstrap=cluster.bootstrap,
             auto_shutdown=cluster.auto_shutdown,
+            env_vars=cluster.worker_options["env_vars"],
         )
