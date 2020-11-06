@@ -1,5 +1,6 @@
 recursive-include dask_cloudprovider *.py
 recursive-include dask_cloudprovider *.yaml
+recursive-include dask_cloudprovider *.j2
 
 include setup.py
 include setup.cfg
