@@ -29,6 +29,20 @@ except ImportError as e:
     raise ImportError(msg) from e
 
 
+class GCPCredentialsError(Exception):
+    """Raised when GCP credentials are missing"""
+
+    def __init__(self, message=None):
+        if message is None:
+            message = (
+                "GCP Credentials have not been provided. Either set the following environment variable: "
+                "export GOOGLE_APPLICATION_CREDENTIALS=<Path-To-GCP-JSON-Credentials> "
+                "or authenticate with "
+                "gcloud auth login"
+            )
+        super().__init__(message)
+
+
 class GCPInstance(VMInterface):
     def __init__(
         self,
@@ -355,12 +369,7 @@ def authenticate():
 
         path = os.path.join(os.path.expanduser("~"), ".config/gcloud/credentials.db")
         if not os.path.exists(path):
-            raise Exception(
-                "GCP Credentials have not been provided. Either set the following environment variable: "
-                "export GOOGLE_APPLICATION_CREDENTIALS=<Path-To-GCP-JSON-Credentials> "
-                "or authenticate with "
-                "gcloud auth login"
-            )
+            raise GCPCredentialsError()
         conn = sqlite3.connect(path)
         creds_rows = conn.execute("select * from credentials").fetchall()
         with tmpfile() as f:

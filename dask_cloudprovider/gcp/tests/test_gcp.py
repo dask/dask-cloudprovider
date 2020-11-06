@@ -1,10 +1,10 @@
 import pytest
 
 import dask
-from google.auth.exceptions import DefaultCredentialsError
 from dask_cloudprovider.gcp.instances import (
     GCPCluster,
     authenticate,
+    GCPCredentialsError,
 )
 from dask.distributed import Client
 from distributed.core import Status
@@ -13,7 +13,7 @@ from distributed.core import Status
 def skip_without_credentials():
     try:
         authenticate()
-    except DefaultCredentialsError:
+    except GCPCredentialsError:
         pytest.skip(
             """
         You must configure your GCP credentials to run this test.
