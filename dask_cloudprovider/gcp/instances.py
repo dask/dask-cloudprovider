@@ -74,6 +74,7 @@ class GCPInstance(VMInterface):
         self.filesystem_size = filesystem_size or self.config.get("filesystem_size")
         self.ngpus = ngpus or self.config.get("ngpus")
         self.gpu_type = gpu_type or self.config.get("gpu_type")
+        self.gpu_instance = "gpu" in self.machine_type or bool(self.ngpus)
         self.bootstrap = bootstrap
 
         self.general_zone = "-".join(self.zone.split("-")[:2])  # us-east1-c -> us-east1
@@ -167,10 +168,6 @@ class GCPInstance(VMInterface):
             ]
 
         return config
-
-    @property
-    def gpu_instance(self):
-        return "gpu" in self.machine_type or bool(self.ngpus)
 
     async def create_vm(self):
 
