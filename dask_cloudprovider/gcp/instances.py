@@ -169,10 +169,6 @@ class GCPInstance(VMInterface):
 
         return config
 
-    @property
-    def gpu_instance(self):
-        return "gpu" in self.machine_type or bool(self.ngpus)
-
     async def create_vm(self):
 
         self.cloud_init = self.cluster.render_cloud_init(
