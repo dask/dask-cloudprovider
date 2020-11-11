@@ -66,7 +66,7 @@ async def test_get_cloud_init():
 async def test_create_cluster():
     skip_without_credentials()
 
-    async with GCPCluster(asynchronous=True) as cluster:
+    async with GCPCluster(asynchronous=True, env_vars={"FOO": "bar"}) as cluster:
 
         assert cluster.status == Status.running
 
@@ -79,7 +79,13 @@ async def test_create_cluster():
             def inc(x):
                 return x + 1
 
+            def check_env():
+                import os
+
+                return os.environ["FOO"]
+
             assert await client.submit(inc, 10).result() == 11
+            assert await client.submit(check_env).result() == "bar"
 
 
 @pytest.mark.asyncio
