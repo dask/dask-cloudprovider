@@ -7,6 +7,7 @@ from dask_cloudprovider.generic.vmcluster import (
     SchedulerMixin,
     WorkerMixin,
 )
+from dask_cloudprovider.exceptions import ConfigError
 
 try:
     from azure.common.credentials import ServicePrincipalCredentials
@@ -33,25 +34,21 @@ class AzureVM(VMInterface):
         cluster: str,
         config,
         *args,
-        region: str = None,
-        size: str = None,
-        image: str = None,
-        docker_image=None,
+        location: str = None,
+        vnet: str = None,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
         self.vm = None
         self.cluster = cluster
         self.config = config
-        self.region = region
-        self.size = size
-        self.image = image
+        self.location = location
         self.gpu_instance = False
         self.bootstrap = True
-        self.docker_image = docker_image
 
     async def create_vm(self):
         raise NotImplementedError()
+        self.nic = None  # TODO Create NIC (in Azure a NIC is not created for you and must be done manually first)
         self.vm = None  # TODO Create VM
         ip = None  # TODO Get IP
         self.cluster._log(f"Created VM {self.name}")
@@ -78,8 +75,8 @@ class AzureVMCluster(VMCluster):
     Parameters
     ----------
     TODO Update parameters
-    region: str
-        The DO region to launch you cluster in. A full list can be obtained with ``doctl compute region list``.
+    location: str
+        The DO location to launch you cluster in. A full list can be obtained with ``doctl compute location list``.
     size: str
         The VM size slug. You can get a full list with ``doctl compute size list``.
         The default is ``s-1vcpu-1gb`` which is 1GB RAM and 1 vCPU
@@ -128,20 +125,31 @@ class AzureVMCluster(VMCluster):
 
     def __init__(
         self,
-        region: str = None,
-        size: str = None,
-        image: str = None,
+        location: str = None,
+        resource_group: str = None,
+        vnet: str = None,
         **kwargs,
     ):
         self.config = dask.config.get("cloudprovider.azure", {})
         self.scheduler_class = AzureVMScheduler
         self.worker_class = AzureVMWorker
+        self.resource_group = (
+            resource_group
+            if resource_group is not None
+            else self.config.get("azurevm.resource_group")
+        )
+        if self.resource_group is None:
+            raise ConfigError("You must configure a resource_group")
+        self.vnet = vnet if vnet is not None else self.config.get("azurevm.vnet")
+        if self.vnet is None:
+            raise ConfigError("You must configure a vnet")
+
         self.options = {
             "cluster": self,
             "config": self.config,
-            "region": region if region is not None else self.config.get("region"),
-            "size": size if size is not None else self.config.get("size"),
-            "image": image if image is not None else self.config.get("image"),
+            "location": location
+            if location is not None
+            else self.config.get("location"),
         }
         self.scheduler_options = {**self.options}
         self.worker_options = {**self.options}

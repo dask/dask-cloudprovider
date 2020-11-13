@@ -48,19 +48,24 @@ cloudprovider:
     filesystem_size: 40 # Default root filesystem size for scheduler and worker VMs in GB
 
   azure:
-    experiment_name: "dask-cloudprovider" # default name of the Experiment to submit
-    initial_node_count: 1 # Initial node count
-    jupyter: False # by default start the Jupyter lab instance on the headnode
-    jupyter_port: 9000 # default Jupyter lab port on the headnode
-    dashboard_port: 9001 # default Dask dashboard port on the headnode
-    scheduler_port: 9002 # default for the scheduler port if using from outside of cluster VNET
-    scheduler_idle_timeout: 1200 # default timeout for dask-scheduler process to shutdown if idle (in seconds)
-    worker_death_timeout: 30 # default timeout for dask-worker process upon losing scheduler
-    additional_ports: [] # list of tuples of additional ports to map/forward
-    admin_username: "" # username to log in to the AzureML Training Cluster for 'local' runs
-    admin_ssh_key: "" # password to log in to the AzureML Training Cluster for 'local' runs
-    telemetry_opt_out: False # by default we log the version of the AzureMLCluster being used, set to True to opt-out
-    datastores: [] # default list of datastores to mount
+    location: "westus" # The Azure location to launch your cluster
+    resource_group: null # The Azure resource group for the cluster
+    azureml:
+      experiment_name: "dask-cloudprovider" # default name of the Experiment to submit
+      initial_node_count: 1 # Initial node count
+      jupyter: False # by default start the Jupyter lab instance on the headnode
+      jupyter_port: 9000 # default Jupyter lab port on the headnode
+      dashboard_port: 9001 # default Dask dashboard port on the headnode
+      scheduler_port: 9002 # default for the scheduler port if using from outside of cluster VNET
+      scheduler_idle_timeout: 1200 # default timeout for dask-scheduler process to shutdown if idle (in seconds)
+      worker_death_timeout: 30 # default timeout for dask-worker process upon losing scheduler
+      additional_ports: [] # list of tuples of additional ports to map/forward
+      admin_username: "" # username to log in to the AzureML Training Cluster for 'local' runs
+      admin_ssh_key: "" # password to log in to the AzureML Training Cluster for 'local' runs
+      telemetry_opt_out: False # by default we log the version of the AzureMLCluster being used, set to True to opt-out
+      datastores: [] # default list of datastores to mount
+    azurevm:
+      vnet: null # Azure Virtual Network to launch VMs in
 
   digitalocean:
     token: null # API token for interacting with the Digital Ocean API
