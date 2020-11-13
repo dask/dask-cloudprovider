@@ -263,7 +263,7 @@ class GCPScheduler(SchedulerMixin, GCPInstance):
         self.cluster._log("Creating scheduler instance")
         self.internal_ip, self.external_ip = await self.create_vm()
 
-        if self.config.get('public_ingress', True):
+        if self.config.get("public_ingress", True):
             # scheduler is publicly available
             self.address = f"tcp://{self.external_ip}:8786"
         else:
@@ -321,7 +321,7 @@ class GCPWorker(GCPInstance):
     async def start_worker(self):
         self.cluster._log("Creating worker instance")
         self.internal_ip, self.external_ip = await self.create_vm()
-        if self.config.get('public_ingress', True):
+        if self.config.get("public_ingress", True):
             # scheduler is publicly available
             self.address = self.external_ip
         else:
