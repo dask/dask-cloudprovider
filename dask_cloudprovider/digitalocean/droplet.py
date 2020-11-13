@@ -30,6 +30,7 @@ class Droplet(VMInterface):
         size: str = None,
         image: str = None,
         docker_image=None,
+        env_vars=None,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
@@ -42,6 +43,7 @@ class Droplet(VMInterface):
         self.gpu_instance = False
         self.bootstrap = True
         self.docker_image = docker_image
+        self.env_vars = env_vars
 
     async def create_vm(self):
         self.droplet = digitalocean.Droplet(
@@ -56,6 +58,7 @@ class Droplet(VMInterface):
                 command=self.command,
                 gpu_instance=self.gpu_instance,
                 bootstrap=self.bootstrap,
+                env_vars=self.env_vars,
             ),
         )
         self.droplet.create()
@@ -127,6 +130,8 @@ class DropletCluster(VMCluster):
         For GPU instance types the Docker image much have NVIDIA drivers and ``dask-cuda`` installed.
 
         By default the ``daskdev/dask:latest`` image will be used.
+    env_vars: dict (optional)
+        Environment variables to be passed to the worker.
     silence_logs: bool
         Whether or not we should silence logging when setting up the cluster.
     asynchronous: bool

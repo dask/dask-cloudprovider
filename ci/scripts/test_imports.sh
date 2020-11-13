@@ -18,3 +18,4 @@ test_import () {
 test_import "aws"               "import dask_cloudprovider.aws"
 test_import "azure"             "import dask_cloudprovider.azure"
 test_import "digitalocean"      "import dask_cloudprovider.digitalocean"
+test_import "gcp"               "import dask_cloudprovider.gcp"

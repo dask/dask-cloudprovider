@@ -453,10 +453,12 @@ class ECSCluster(SpecCluster):
         The amount of CPU to request for the scheduler in milli-cpu (1/1024).
 
         Defaults to ``1024`` (one vCPU).
+        See the `troubleshooting guide`_ for information on the valid values for this argument.
     scheduler_mem: int (optional)
         The amount of memory to request for the scheduler in MB.
 
         Defaults to ``4096`` (4GB).
+        See the `troubleshooting guide`_ for information on the valid values for this argument.
     scheduler_timeout: str (optional)
         The scheduler task will exit after this amount of time if there are no clients connected.
 
@@ -471,10 +473,12 @@ class ECSCluster(SpecCluster):
         The amount of CPU to request for worker tasks in milli-cpu (1/1024).
 
         Defaults to ``4096`` (four vCPUs).
+        See the `troubleshooting guide`_ for information on the valid values for this argument.
     worker_mem: int (optional)
         The amount of memory to request for worker tasks in MB.
 
         Defaults to ``16384`` (16GB).
+        See the `troubleshooting guide`_ for information on the valid values for this argument.
     worker_gpu: int (optional)
         The number of GPUs to expose to the worker.
 
@@ -636,6 +640,7 @@ class ECSCluster(SpecCluster):
     you must ensure the NVIDIA CUDA toolkit is installed with a version that matches the host machine
     along with ``dask-cuda``.
 
+    .. _troubleshooting guide: ./troubleshooting.html#invalid-cpu-or-memory
     """
 
     def __init__(

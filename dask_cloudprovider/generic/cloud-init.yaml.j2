@@ -43,7 +43,7 @@ runcmd:
   {% endif %}
 
   # Run container
-  - docker run --net=host {%+ if gpu_instance %}--gpus=all{% endif %} {{image}} {{ command }}
+  - 'docker run --net=host {%+ if gpu_instance %}--gpus=all{% endif %} {% for key in env_vars %} -e {{key}}={{env_vars[key]}} {% endfor %}{{image}} {{ command }}'
 
   {% if auto_shutdown %}
   # Shutdown when command is done
