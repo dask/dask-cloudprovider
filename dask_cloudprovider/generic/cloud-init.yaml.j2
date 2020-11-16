@@ -1,12 +1,14 @@
 #cloud-config
 
 {% if bootstrap %}
+# Bootstrap
 packages:
   - apt-transport-https
   - ca-certificates
   - curl
   - gnupg-agent
   - software-properties-common
+  - ubuntu-drivers-common
 
 # Enable ipv4 forwarding, required on CIS hardened machines
 write_files:
@@ -24,13 +26,6 @@ system_info:
     groups: [docker]
 {% endif %}
 
-{% if bootstrap and gpu_instance %}
-# Install NVIDIA driver if GPU instance
-drivers:
-  nvidia:
-    license-accepted: true
-{% endif %}
-
 runcmd:
   {% if bootstrap %}
   # Install Docker
@@ -40,6 +35,18 @@ runcmd:
   - apt-get install -y docker-ce docker-ce-cli containerd.io
   - systemctl start docker
   - systemctl enable docker
+  {% endif %}
+
+  {% if bootstrap and gpu_instance %}
+  # Install NVIDIA driver
+  - DEBIAN_FRONTEND=noninteractive ubuntu-drivers install
+
+  # Install NVIDIA docker
+  - curl -fsSL https://nvidia.github.io/nvidia-docker/gpgkey | sudo apt-key add -
+  - curl -s -L https://nvidia.github.io/nvidia-docker/$(. /etc/os-release;echo $ID$VERSION_ID)/nvidia-docker.list | sudo tee /etc/apt/sources.list.d/nvidia-docker.list
+  - apt-get update -y
+  - apt-get install -y nvidia-docker2
+  - systemctl restart docker
   {% endif %}
 
   # Run container

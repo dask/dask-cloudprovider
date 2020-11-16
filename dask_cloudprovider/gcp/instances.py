@@ -58,6 +58,7 @@ class GCPInstance(VMInterface):
         ngpus=None,
         gpu_type=None,
         bootstrap=None,
+        gpu_instance=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -68,13 +69,15 @@ class GCPInstance(VMInterface):
 
         self.machine_type = machine_type or self.config.get("machine_type")
 
-        self.source_image = source_image or self.config.get("source_image")
+        self.source_image = self.expand_source_image(
+            source_image or self.config.get("source_image")
+        )
         self.docker_image = docker_image or self.config.get("docker_image")
         self.env_vars = env_vars
         self.filesystem_size = filesystem_size or self.config.get("filesystem_size")
         self.ngpus = ngpus or self.config.get("ngpus")
         self.gpu_type = gpu_type or self.config.get("gpu_type")
-        self.gpu_instance = "gpu" in self.machine_type or bool(self.ngpus)
+        self.gpu_instance = gpu_instance
         self.bootstrap = bootstrap
 
         self.general_zone = "-".join(self.zone.split("-")[:2])  # us-east1-c -> us-east1
@@ -233,6 +236,13 @@ class GCPInstance(VMInterface):
 
         return d["items"][0]["status"]
 
+    def expand_source_image(self, source_image):
+        if "/" not in source_image:
+            return f"projects/{self.projectid}/global/images/{source_image}"
+        if source_image.startswith("https://www.googleapis.com/compute/v1/"):
+            return source_image.replace("https://www.googleapis.com/compute/v1/", "")
+        return source_image
+
     async def close(self):
         self.cluster._log(f"Closing Instance: {self.name}")
         self.cluster.compute.instances().delete(
@@ -356,7 +366,14 @@ class GCPCluster(VMCluster):
     source_image: str
         The OS image to use for the VM. Dask Cloudprovider will boostrap Ubuntu based images automatically.
         Other images require Docker and for GPUs the NVIDIA Drivers and NVIDIA Docker.
+
         A list of available images can be found with ``gcloud compute images list``
+
+        Valid values are:
+            - The short image name provided it is in ``projectid``.
+            - The full image name ``projects/<projectid>/global/images/<source_image>``.
+            - The full image URI such as those listed in ``gcloud compute images list --uri``.
+
         The default is ``projects/ubuntu-os-cloud/global/images/ubuntu-minimal-1804-bionic-v20201014``.
     docker_image: string (optional)
         The Docker image to run on all instances.
@@ -485,7 +502,7 @@ class GCPCluster(VMCluster):
         gpu_type=None,
         filesystem_size=None,
         auto_shutdown=None,
-        boostrap=True,
+        bootstrap=True,
         **kwargs,
     ):
 
@@ -499,6 +516,11 @@ class GCPCluster(VMCluster):
         )
         self.scheduler_class = GCPScheduler
         self.worker_class = GCPWorker
+        self.bootstrap = (
+            bootstrap if bootstrap is not None else self.config.get("bootstrap")
+        )
+        self.machine_type = machine_type or self.config.get("machine_type")
+        self.gpu_instance = "gpu" in self.machine_type or bool(ngpus)
         self.options = {
             "cluster": self,
             "config": self.config,
@@ -507,10 +529,11 @@ class GCPCluster(VMCluster):
             "docker_image": docker_image or self.config.get("docker_image"),
             "filesystem_size": filesystem_size or self.config.get("filesystem_size"),
             "zone": zone or self.config.get("zone"),
-            "machine_type": machine_type or self.config.get("machine_type"),
+            "machine_type": self.machine_type,
             "ngpus": ngpus or self.config.get("ngpus"),
             "gpu_type": gpu_type or self.config.get("gpu_type"),
-            "bootstrap": boostrap,
+            "gpu_instance": self.gpu_instance,
+            "bootstrap": self.bootstrap,
         }
         self.scheduler_options = {**self.options}
         self.worker_options = {**self.options}
