@@ -8,6 +8,7 @@ packages:
   - curl
   - gnupg-agent
   - software-properties-common
+  - ubuntu-drivers-common
 
 # Enable ipv4 forwarding, required on CIS hardened machines
 write_files:
@@ -38,7 +39,7 @@ runcmd:
 
   {% if bootstrap and gpu_instance %}
   # Install NVIDIA driver
-  - ubuntu-drivers install --gpgpu
+  - ubuntu-drivers install
 
   # Install NVIDIA docker
   - curl -fsSL https://nvidia.github.io/nvidia-docker/gpgkey | sudo apt-key add -
