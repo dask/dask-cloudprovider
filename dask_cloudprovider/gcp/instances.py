@@ -475,7 +475,7 @@ class GCPCluster(VMCluster):
         gpu_type=None,
         filesystem_size=None,
         auto_shutdown=None,
-        boostrap=True,
+        bootstrap=True,
         **kwargs,
     ):
 
@@ -489,6 +489,9 @@ class GCPCluster(VMCluster):
         )
         self.scheduler_class = GCPScheduler
         self.worker_class = GCPWorker
+        self.bootstrap = (
+            bootstrap if bootstrap is not None else self.config.get("bootstrap")
+        )
         self.options = {
             "cluster": self,
             "config": self.config,
@@ -500,7 +503,7 @@ class GCPCluster(VMCluster):
             "machine_type": machine_type or self.config.get("machine_type"),
             "ngpus": ngpus or self.config.get("ngpus"),
             "gpu_type": gpu_type or self.config.get("gpu_type"),
-            "bootstrap": boostrap,
+            "bootstrap": self.bootstrap,
         }
         self.scheduler_options = {**self.options}
         self.worker_options = {**self.options}
