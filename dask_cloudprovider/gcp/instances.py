@@ -68,7 +68,9 @@ class GCPInstance(VMInterface):
 
         self.machine_type = machine_type or self.config.get("machine_type")
 
-        self.source_image = source_image or self.config.get("source_image")
+        self.source_image = self.expand_source_image(
+            source_image or self.config.get("source_image")
+        )
         self.docker_image = docker_image or self.config.get("docker_image")
         self.env_vars = env_vars
         self.filesystem_size = filesystem_size or self.config.get("filesystem_size")
@@ -233,6 +235,13 @@ class GCPInstance(VMInterface):
 
         return d["items"][0]["status"]
 
+    def expand_source_image(self, source_image):
+        if "/" not in source_image:
+            return f"projects/{self.projectid}/global/images/{source_image}"
+        if source_image.startswith("https://www.googleapis.com/compute/v1/"):
+            return source_image.replace("https://www.googleapis.com/compute/v1/", "")
+        return source_image
+
     async def close(self):
         self.cluster._log(f"Closing Instance: {self.name}")
         self.cluster.compute.instances().delete(
@@ -346,7 +355,14 @@ class GCPCluster(VMCluster):
     source_image: str
         The OS image to use for the VM. Dask Cloudprovider will boostrap Ubuntu based images automatically.
         Other images require Docker and for GPUs the NVIDIA Drivers and NVIDIA Docker.
+
         A list of available images can be found with ``gcloud compute images list``
+
+        Valid values are:
+            - The short image name provided it is in ``projectid``.
+            - The full image name ``projects/<projectid>/global/images/<source_image>``.
+            - The full image URI such as those listed in ``gcloud compute images list --uri``.
+
         The default is ``projects/ubuntu-os-cloud/global/images/ubuntu-minimal-1804-bionic-v20201014``.
     docker_image: string (optional)
         The Docker image to run on all instances.
