@@ -58,6 +58,7 @@ class GCPInstance(VMInterface):
         ngpus=None,
         gpu_type=None,
         bootstrap=None,
+        gpu_instance=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -76,7 +77,7 @@ class GCPInstance(VMInterface):
         self.filesystem_size = filesystem_size or self.config.get("filesystem_size")
         self.ngpus = ngpus or self.config.get("ngpus")
         self.gpu_type = gpu_type or self.config.get("gpu_type")
-        self.gpu_instance = "gpu" in self.machine_type or bool(self.ngpus)
+        self.gpu_instance = gpu_instance
         self.bootstrap = bootstrap
 
         self.general_zone = "-".join(self.zone.split("-")[:2])  # us-east1-c -> us-east1
@@ -491,7 +492,7 @@ class GCPCluster(VMCluster):
         gpu_type=None,
         filesystem_size=None,
         auto_shutdown=None,
-        boostrap=True,
+        bootstrap=True,
         **kwargs,
     ):
 
@@ -505,6 +506,11 @@ class GCPCluster(VMCluster):
         )
         self.scheduler_class = GCPScheduler
         self.worker_class = GCPWorker
+        self.bootstrap = (
+            bootstrap if bootstrap is not None else self.config.get("bootstrap")
+        )
+        self.machine_type = machine_type or self.config.get("machine_type")
+        self.gpu_instance = "gpu" in self.machine_type or bool(ngpus)
         self.options = {
             "cluster": self,
             "config": self.config,
@@ -513,10 +519,11 @@ class GCPCluster(VMCluster):
             "docker_image": docker_image or self.config.get("docker_image"),
             "filesystem_size": filesystem_size or self.config.get("filesystem_size"),
             "zone": zone or self.config.get("zone"),
-            "machine_type": machine_type or self.config.get("machine_type"),
+            "machine_type": self.machine_type,
             "ngpus": ngpus or self.config.get("ngpus"),
             "gpu_type": gpu_type or self.config.get("gpu_type"),
-            "bootstrap": boostrap,
+            "gpu_instance": self.gpu_instance,
+            "bootstrap": self.bootstrap,
         }
         self.scheduler_options = {**self.options}
         self.worker_options = {**self.options}

@@ -59,6 +59,7 @@ async def test_get_cloud_init():
 
     cloud_init = GCPCluster.get_cloud_init()
     assert "dask-scheduler" in cloud_init
+    assert "# Bootstrap" in cloud_init
 
 
 @pytest.mark.asyncio
