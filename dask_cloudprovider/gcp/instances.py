@@ -112,14 +112,6 @@ class GCPInstance(VMInterface):
                 {
                     "kind": "compute#networkInterface",
                     "subnetwork": f"projects/{self.projectid}/regions/{self.general_zone}/subnetworks/default",
-                    "accessConfigs": [
-                        {
-                            "kind": "compute#accessConfig",
-                            "name": "External NAT",
-                            "type": "ONE_TO_ONE_NAT",
-                            "networkTier": "PREMIUM",
-                        }
-                    ],
                     "aliasIpRanges": [],
                 }
             ],
@@ -162,6 +154,16 @@ class GCPInstance(VMInterface):
             "reservationAffinity": {"consumeReservationType": "ANY_RESERVATION"},
         }
 
+        if self.config.get("public_ingress", True):
+            config["networkInterfaces"][0]["accessConfigs"] = [
+                {
+                    "kind": "compute#accessConfig",
+                    "name": "External NAT",
+                    "type": "ONE_TO_ONE_NAT",
+                    "networkTier": "PREMIUM",
+                }
+            ]
+
         if self.ngpus:
             config["guestAccelerators"] = [
                 {
@@ -201,7 +203,10 @@ class GCPInstance(VMInterface):
             await asyncio.sleep(0.5)
 
         self.internal_ip = self.get_internal_ip()
-        self.external_ip = self.get_external_ip()
+        if self.config.get("public_ingress", True):
+            self.external_ip = self.get_external_ip()
+        else:
+            self.external_ip = None
         self.cluster._log(
             f"{self.name}\n\tInternal IP: {self.internal_ip}\n\tExternal IP: {self.external_ip}"
         )
@@ -272,7 +277,13 @@ class GCPScheduler(SchedulerMixin, GCPInstance):
         )
         self.cluster._log("Creating scheduler instance")
         self.internal_ip, self.external_ip = await self.create_vm()
-        self.address = f"tcp://{self.external_ip}:8786"
+
+        if self.config.get("public_ingress", True):
+            # scheduler is publicly available
+            self.address = f"tcp://{self.external_ip}:8786"
+        else:
+            # scheduler is only accessible within VPC
+            self.address = f"tcp://{self.internal_ip}:8786"
         await self.wait_for_scheduler()
 
         # need to reserve internal IP for workers
@@ -325,7 +336,11 @@ class GCPWorker(GCPInstance):
     async def start_worker(self):
         self.cluster._log("Creating worker instance")
         self.internal_ip, self.external_ip = await self.create_vm()
-        self.address = self.external_ip
+        if self.config.get("public_ingress", True):
+            # scheduler is publicly available
+            self.address = self.external_ip
+        else:
+            self.address = self.internal_ip
 
 
 class GCPCluster(VMCluster):
