@@ -1,4 +1,6 @@
 import asyncio
+import base64
+import uuid
 
 import dask
 from dask_cloudprovider.generic.vmcluster import (
@@ -10,14 +12,9 @@ from dask_cloudprovider.generic.vmcluster import (
 from dask_cloudprovider.exceptions import ConfigError
 
 try:
-    from azure.common.credentials import ServicePrincipalCredentials
-    from azure.mgmt.resource import ResourceManagementClient
-
-    # from azure.mgmt.network import NetworkManagementClient
-    # from azure.mgmt.compute import ComputeManagementClient
-    # from azure.mgmt.compute.models import DiskCreateOption
-
-    # from msrestazure.azure_exceptions import CloudError
+    from azure.common.credentials import get_azure_cli_credentials
+    from azure.mgmt.network import NetworkManagementClient
+    from azure.mgmt.compute import ComputeManagementClient
 except ImportError as e:
     msg = (
         "Dask Cloud Provider Azure requirements are not installed.\n\n"
@@ -36,6 +33,9 @@ class AzureVM(VMInterface):
         *args,
         location: str = None,
         vnet: str = None,
+        public_ingress: bool = None,
+        security_group: str = None,
+        env_vars: dict = {},
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
@@ -43,20 +43,150 @@ class AzureVM(VMInterface):
         self.cluster = cluster
         self.config = config
         self.location = location
-        self.gpu_instance = False
-        self.bootstrap = True
+        self.gpu_instance = False  # TODO do not hardcode
+        self.bootstrap = True  # TODO do not hardcode
+        self.admin_username = "dask"
+        self.admin_password = str(uuid.uuid4())[:32]
+        self.security_group = security_group
+        self.nic_name = f"dask-cloudprovider-nic-{str(uuid.uuid4())[:8]}"
+        self.public_ingress = public_ingress
+        self.public_ip = None
+        self.env_vars = env_vars
 
     async def create_vm(self):
-        raise NotImplementedError()
-        self.nic = None  # TODO Create NIC (in Azure a NIC is not created for you and must be done manually first)
-        self.vm = None  # TODO Create VM
-        ip = None  # TODO Get IP
+        [subnet_info, *_] = self.cluster.network_client.subnets.list(
+            self.cluster.resource_group, self.cluster.vnet
+        )
+
+        nic_parameters = {
+            "location": self.location,
+            "ip_configurations": [
+                {
+                    "name": self.nic_name,
+                    "subnet": {"id": subnet_info.id},
+                }
+            ],
+            "networkSecurityGroup": {
+                "id": self.cluster.network_client.network_security_groups.get(
+                    self.cluster.resource_group, self.security_group
+                ).id,
+                "location": self.location,
+            },
+            "tags": self.cluster.get_tags(),
+        }
+        if self.public_ingress:
+            self.public_ip = (
+                self.cluster.network_client.public_ip_addresses.begin_create_or_update(
+                    self.cluster.resource_group,
+                    self.nic_name,
+                    {
+                        "location": self.location,
+                        "sku": {"name": "Standard"},
+                        "public_ip_allocation_method": "Static",
+                        "public_ip_address_version": "IPV4",
+                        "tags": self.cluster.get_tags(),
+                    },
+                ).result()
+            )
+            nic_parameters["ip_configurations"][0]["public_ip_address"] = {
+                "id": self.public_ip.id
+            }
+            self.cluster._log(f"Assigned public IP")
+        self.nic = (
+            self.cluster.network_client.network_interfaces.begin_create_or_update(
+                self.cluster.resource_group,
+                self.nic_name,
+                nic_parameters,
+            ).result()
+        )
+        self.cluster._log(f"Network interface ready")
+
+        cloud_init = (
+            base64.b64encode(
+                self.cluster.render_cloud_init(
+                    image=self.docker_image,
+                    command=self.command,
+                    gpu_instance=self.gpu_instance,
+                    bootstrap=self.bootstrap,
+                    auto_shutdown=self.cluster.auto_shutdown,
+                    env_vars=self.env_vars,
+                ).encode("ascii")
+            )
+            .decode("utf-8")
+            .replace("\n", "")
+        )
+
+        if len(cloud_init) > 87380:
+            raise RuntimeError("Cloud init is too long")
+
+        vm_parameters = {
+            "location": self.location,
+            "os_profile": {
+                "computer_name": self.name,
+                "admin_username": self.admin_username,
+                "admin_password": self.admin_password,
+                "custom_data": cloud_init,
+            },
+            "hardware_profile": {
+                "vm_size": "Standard_DS1_v2"  # TODO Make configurable
+            },
+            "storage_profile": {
+                "image_reference": {  # TODO Make configurable
+                    "publisher": "Canonical",
+                    "offer": "UbuntuServer",
+                    "sku": "16.04.0-LTS",
+                    "version": "latest",
+                },
+            },
+            "network_profile": {
+                "network_interfaces": [
+                    {
+                        "id": self.nic.id,
+                    }
+                ]
+            },
+            "tags": self.cluster.get_tags(),
+        }
+        self.cluster._log(f"Creating VM")
+        async_vm_creation = (
+            self.cluster.compute_client.virtual_machines.begin_create_or_update(
+                self.cluster.resource_group, self.name, vm_parameters
+            )
+        )
+        async_vm_creation.wait()
+        self.vm = self.cluster.compute_client.virtual_machines.get(
+            self.cluster.resource_group, self.name
+        )
+        self.nic = self.cluster.network_client.network_interfaces.get(
+            self.cluster.resource_group, self.nic.name
+        )
         self.cluster._log(f"Created VM {self.name}")
-        return ip
+        if self.public_ingress:
+            return self.public_ip.ip_address
+        return self.nic.ip_configurations[0].private_ip_address
 
     async def destroy_vm(self):
-        self.vm.destroy()  # TODO Destroy VM
-        self.cluster._log(f"Terminated droplet {self.name}")
+        self.cluster.compute_client.virtual_machines.begin_delete(
+            self.cluster.resource_group, self.name
+        ).wait()
+        self.cluster._log(f"Terminated VM {self.name}")
+        for disk in self.cluster.compute_client.disks.list_by_resource_group(
+            self.cluster.resource_group
+        ):
+            if self.name in disk.name:
+                self.cluster.compute_client.disks.begin_delete(
+                    self.cluster.resource_group, disk.name
+                )
+        self.cluster._log(f"Removed disks for VM {self.name}")
+        self.cluster.network_client.network_interfaces.begin_delete(
+            self.cluster.resource_group, self.nic.name
+        ).wait()
+        self.cluster._log(f"Deleted network interface")
+        if self.public_ingress:
+            self.cluster.network_client.public_ip_addresses.begin_delete(
+                self.cluster.resource_group, self.public_ip.name
+            ).wait()
+            self.cluster._log(f"Unassigned public IP")
 
 
 class AzureVMScheduler(SchedulerMixin, AzureVM):
@@ -70,19 +200,26 @@ class AzureVMWorker(WorkerMixin, AzureVM):
 class AzureVMCluster(VMCluster):
     """Cluster running on Azure Virtual machines.
 
-    TODO Document config
+    This cluster manager constructs a Dask cluster running on Azure Virtual Machines.
+
+    When configuring your cluster you may find it useful to install the ``az`` tool for querying the
+    Azure API for available options.
+
+    https://docs.microsoft.com/en-us/cli/azure/install-azure-cli
 
     Parameters
     ----------
-    TODO Update parameters
     location: str
-        The DO location to launch you cluster in. A full list can be obtained with ``doctl compute location list``.
-    size: str
-        The VM size slug. You can get a full list with ``doctl compute size list``.
-        The default is ``s-1vcpu-1gb`` which is 1GB RAM and 1 vCPU
-    image: str
-        The image ID to use for the host OS. This should be a Ubuntu variant.
-        You can list available images with ``doctl compute image list --public | grep ubuntu.*x64``.
+        The Azure location to launch you cluster in. List available locations with ``az account list-locations``.
+    resource_group: str
+        The resource group to create components in. List your resource groups with ``az group list``.
+    vnet: str
+        The vnet to attach VM network interfaces to. List your vnets with ``az network vnet list``.
+    security_group: str
+        The security group to apply to your VMs. This must allow ports 8786-8787 from wherever you are running this from.
+        List your security greoups with ``az network nsg list``.
+    public_ingress: bool
+        Assign a public IP address to the scheduler. Default ``True``.
     worker_module: str
         The Dask worker module to start on worker VMs.
     n_workers: int
@@ -101,7 +238,7 @@ class AzureVMCluster(VMCluster):
 
         This image must have a valid Python environment and have ``dask`` installed in order for the
         ``dask-scheduler`` and ``dask-worker`` commands to be available. It is recommended the Python
-        environment matches your local environment where ``EC2Cluster`` is being created from.
+        environment matches your local environment where ``AzureVMCluster`` is being created from.
 
         For GPU instance types the Docker image much have NVIDIA drivers and ``dask-cuda`` installed.
 
@@ -128,6 +265,8 @@ class AzureVMCluster(VMCluster):
         location: str = None,
         resource_group: str = None,
         vnet: str = None,
+        security_group: str = None,
+        public_ingress: bool = None,
         **kwargs,
     ):
         self.config = dask.config.get("cloudprovider.azure", {})
@@ -136,21 +275,43 @@ class AzureVMCluster(VMCluster):
         self.resource_group = (
             resource_group
             if resource_group is not None
-            else self.config.get("azurevm.resource_group")
+            else self.config.get("azurevm").get("resource_group")
         )
         if self.resource_group is None:
             raise ConfigError("You must configure a resource_group")
-        self.vnet = vnet if vnet is not None else self.config.get("azurevm.vnet")
+        self.public_ingress = (
+            public_ingress
+            if public_ingress is not None
+            else self.config.get("azurevm").get("public_ingress")
+        )
+        self.credentials, self.subscription_id = get_azure_cli_credentials()
+        self.compute_client = ComputeManagementClient(
+            self.credentials, self.subscription_id
+        )
+        self.network_client = NetworkManagementClient(
+            self.credentials, self.subscription_id
+        )
+        self.vnet = vnet if vnet is not None else self.config.get("azurevm").get("vnet")
         if self.vnet is None:
             raise ConfigError("You must configure a vnet")
+        self.security_group = (
+            security_group
+            if security_group is not None
+            else self.config.get("azurevm").get("security_group")
+        )
+        if self.security_group is None:
+            raise ConfigError(
+                "You must configure a security group which allows traffic on 8786 and 8787"
+            )
 
         self.options = {
             "cluster": self,
             "config": self.config,
+            "security_group": self.security_group,
             "location": location
             if location is not None
             else self.config.get("location"),
         }
-        self.scheduler_options = {**self.options}
+        self.scheduler_options = {"public_ingress": self.public_ingress, **self.options}
         self.worker_options = {**self.options}
         super().__init__(**kwargs)

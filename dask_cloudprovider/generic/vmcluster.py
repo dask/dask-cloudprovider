@@ -252,3 +252,7 @@ class VMCluster(SpecCluster):
             auto_shutdown=cluster.auto_shutdown,
             env_vars=cluster.worker_options["env_vars"],
         )
+
+    def get_tags(self):
+        """Generate tags to be applied to all resources."""
+        return {"creator": "dask-cloudprovider", "cluster-id": self.uuid}

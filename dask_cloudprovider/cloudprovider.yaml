@@ -48,7 +48,7 @@ cloudprovider:
     filesystem_size: 40 # Default root filesystem size for scheduler and worker VMs in GB
 
   azure:
-    location: "westus" # The Azure location to launch your cluster
+    location: "eastus2" # The Azure location to launch your cluster
     resource_group: null # The Azure resource group for the cluster
     azureml:
       experiment_name: "dask-cloudprovider" # default name of the Experiment to submit
@@ -65,7 +65,10 @@ cloudprovider:
       telemetry_opt_out: False # by default we log the version of the AzureMLCluster being used, set to True to opt-out
       datastores: [] # default list of datastores to mount
     azurevm:
+      resource_group: null # Azure resource group
       vnet: null # Azure Virtual Network to launch VMs in
+      security_group: null # Network security group to allow 8786 and 8787
+      public_ingress: true # Assign a public IP address to the scheduler
 
   digitalocean:
     token: null # API token for interacting with the Digital Ocean API
