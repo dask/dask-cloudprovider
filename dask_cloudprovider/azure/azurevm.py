@@ -276,7 +276,110 @@ class AzureVMCluster(VMCluster):
     Examples
     --------
 
-    TODO Examples
+    **Minimal example**
+
+    Create the cluster
+
+    >>> from dask_cloudprovider.azure import AzureVMCluster
+    >>> cluster = AzureVMCluster(resource_group="<resource group>",
+    ...                          vnet="<vnet>",
+    ...                          security_group="<security group>",
+    ...                          n_workers=1)
+    Creating scheduler instance
+    Assigned public IP
+    Network interface ready
+    Creating VM
+    Created VM dask-5648cc8b-scheduler
+    Waiting for scheduler to run
+    Scheduler is running
+    Creating worker instance
+    Network interface ready
+    Creating VM
+    Created VM dask-5648cc8b-worker-e1ebfc0e
+
+    Connect a client.
+
+    >>> from dask.distributed import Client
+    >>> client = Client(cluster)
+
+    Do some work.
+
+    >>> import dask.array as da
+    >>> arr = da.random.random((1000, 1000), chunks=(100, 100))
+    >>> arr.mean().compute()
+    0.5004117488368686
+
+    Close the cluster.
+
+    >>> client.close()
+    >>> cluster.close()
+    Terminated VM dask-5648cc8b-worker-e1ebfc0e
+    Removed disks for VM dask-5648cc8b-worker-e1ebfc0e
+    Deleted network interface
+    Terminated VM dask-5648cc8b-scheduler
+    Removed disks for VM dask-5648cc8b-scheduler
+    Deleted network interface
+    Unassigned public IP
+
+    You can also do this all in one go with context managers to ensure the cluster is
+    created and cleaned up.
+
+    >>> with AzureVMCluster(resource_group="<resource group>",
+    ...                     vnet="<vnet>",
+    ...                     security_group="<security group>",
+    ...                     n_workers=1) as cluster:
+    ...     with Client(cluster) as client:
+    ...             print(da.random.random((1000, 1000), chunks=(100, 100)).mean().compute())
+    Creating scheduler instance
+    Assigned public IP
+    Network interface ready
+    Creating VM
+    Created VM dask-1e6dac4e-scheduler
+    Waiting for scheduler to run
+    Scheduler is running
+    Creating worker instance
+    Network interface ready
+    Creating VM
+    Created VM dask-1e6dac4e-worker-c7c4ca23
+    0.4996427609642539
+    Terminated VM dask-1e6dac4e-worker-c7c4ca23
+    Removed disks for VM dask-1e6dac4e-worker-c7c4ca23
+    Deleted network interface
+    Terminated VM dask-1e6dac4e-scheduler
+    Removed disks for VM dask-1e6dac4e-scheduler
+    Deleted network interface
+    Unassigned public IP
+
+
+    **RAPIDS example**
+
+    You can also use ``AzureVMCluster`` to run a GPU enabled cluster and
+    leverage the `RAPIDS <https://rapids.ai/>`_ accelerated libraries.
+
+    >>> cluster = AzureVMCluster(resource_group="<resource group>",
+    ...                          vnet="<vnet>",
+    ...                          security_group="<security group>",
+    ...                          n_workers=1,
+    ...                          vm_size="Standard_NC12s_v3",  # Or any NVIDIA GPU enabled size
+    ...                          docker_image="rapidsai/rapidsai:cuda11.0-runtime-ubuntu18.04-py3.8",
+    ...                          worker_class="dask_cuda.CUDAWorker")
+    >>> from dask.distributed import Client
+    >>> client = Client(cluster)
+
+    Run some GPU code.
+
+    >>> def get_gpu_model():
+    ...     import pynvml
+    ...     pynvml.nvmlInit()
+    ...     return pynvml.nvmlDeviceGetName(pynvml.nvmlDeviceGetHandleByIndex(0))
+
+    >>> client.submit(get_gpu_model).result()
+    b'Tesla V100-PCIE-16GB'
+
+    Close the cluster.
+
+    >>> client.close()
+    >>> cluster.close()
 
     """
 
@@ -347,7 +450,7 @@ class AzureVMCluster(VMCluster):
             if auto_shutdown is not None
             else self.config.get("auto_shutdown")
         )
-        self.docker_image = (docker_image or self.config.get("docker_image"),)
+        self.docker_image = docker_image or self.config.get("docker_image")
         self.options = {
             "cluster": self,
             "config": self.config,
