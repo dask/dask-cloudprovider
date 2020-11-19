@@ -10,31 +10,34 @@ from dask.distributed import Client
 from distributed.core import Status
 
 
-async def skip_without_credentials():
+def skip_without_credentials(func):
     try:
         get_azure_cli_credentials()
-    except:
-        pytest.skip(
-            """
+    except FileNotFoundError:
+        return pytest.mark.skip(
+            reason="""
         You must configure your Azure credentials to run this test.
 
             $ az login
 
         """
-        )
+        )(func)
 
     rg = dask.config.get("cloudprovider.azure.azurevm.resource_group", None)
     vnet = dask.config.get("cloudprovider.azure.azurevm.vnet", None)
-    if rg is None or vnet is None:
-        pytest.skip(
-            """
+    security_group = dask.config.get("cloudprovider.azure.azurevm.security_group", None)
+    if rg is None or vnet is None or security_group is None:
+        return pytest.mark.skip(
+            reason="""
         You must configure your Azure resource group and vnet to run this test.
 
             $ export DASK_CLOUDPROVIDER__AZURE__AZUREVM__RESOURCE_GROUP="<RESOURCE GROUP>"
             $ export DASK_CLOUDPROVIDER__AZURE__AZUREVM__VNET="<VNET>"
+            $ export DASK_CLOUDPROVIDER__AZURE__AZUREVM__SECURITY_GROUP="<SECUROTY GROUP>"
 
         """
-        )
+        )(func)
+    return func
 
 
 async def get_config():
@@ -42,6 +45,7 @@ async def get_config():
 
 
 @pytest.mark.asyncio
+@skip_without_credentials
 async def test_init():
     cluster = AzureVMCluster(asynchronous=True)
     assert cluster.status == Status.created
@@ -49,9 +53,8 @@ async def test_init():
 
 @pytest.mark.asyncio
 @pytest.mark.timeout(1200)
+@skip_without_credentials
 async def test_create_cluster():
-    await skip_without_credentials()
-
     async with AzureVMCluster(asynchronous=True) as cluster:
         assert cluster.status == Status.running
 
@@ -69,8 +72,8 @@ async def test_create_cluster():
 
 @pytest.mark.asyncio
 @pytest.mark.timeout(1200)
+@skip_without_credentials
 async def test_create_cluster_sync():
-    await skip_without_credentials()
 
     with AzureVMCluster() as cluster:
         with Client(cluster) as client:

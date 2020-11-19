@@ -1,6 +1,7 @@
 import time, os, socket, subprocess, logging
 import pathlib
 import threading
+import warnings
 
 from contextlib import suppress
 
@@ -242,6 +243,11 @@ class AzureMLCluster(Cluster):
         asynchronous=False,
         **kwargs,
     ):
+        warnings.warn(
+            "AzureMLCluster is deprecated and will be removed in a future release. Please use AzureVMCluster instead",
+            category=DeprecationWarning,
+        )
+
         ### REQUIRED PARAMETERS
         self.workspace = workspace
         self.compute_target = compute_target

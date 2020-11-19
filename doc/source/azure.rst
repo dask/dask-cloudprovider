@@ -4,7 +4,6 @@ Microsoft Azure
 .. currentmodule:: dask_cloudprovider.azure
 
 .. autosummary::
-   AzureMLCluster
    AzureVMCluster
 
 Overview
@@ -89,17 +88,10 @@ Or you can create a new security group.
          --priority 500 --source-address-prefixes Internet --destination-port-ranges 8786 8787 \
          --destination-address-prefixes '*' --access Allow --protocol Tcp --description "Allow Internet to Dask on ports 8786,8787."
 
+This example allows all traffic to 8786-8787 from the internet. It is recommended you make your rules more restrictive than this by limiting it to your corporate network
+or specific IP.
+
 Again take note of this security group name for later.
-
-AzureML
--------
-
-In order to start using ``dask_cloudprovider.AzureMLCluster`` you need, at a minimum,
-an `Azure subscription <https://azure.microsoft.com/free/services/machine-learning/>`_ and
-an `AzureML Workspace <https://docs.microsoft.com/python/api/azureml-core/azureml.core.workspace.workspace?view=azure-ml-py>`_.
-
-.. autoclass:: AzureMLCluster
-   :members:
 
 AzureVM
 -------

@@ -1,4 +1,3 @@
-import asyncio
 import base64
 import uuid
 
@@ -91,7 +90,7 @@ class AzureVM(VMInterface):
             nic_parameters["ip_configurations"][0]["public_ip_address"] = {
                 "id": self.public_ip.id
             }
-            self.cluster._log(f"Assigned public IP")
+            self.cluster._log("Assigned public IP")
         self.nic = (
             self.cluster.network_client.network_interfaces.begin_create_or_update(
                 self.cluster.resource_group,
@@ -99,7 +98,7 @@ class AzureVM(VMInterface):
                 nic_parameters,
             ).result()
         )
-        self.cluster._log(f"Network interface ready")
+        self.cluster._log("Network interface ready")
 
         cloud_init = (
             base64.b64encode(
@@ -147,7 +146,7 @@ class AzureVM(VMInterface):
             },
             "tags": self.cluster.get_tags(),
         }
-        self.cluster._log(f"Creating VM")
+        self.cluster._log("Creating VM")
         async_vm_creation = (
             self.cluster.compute_client.virtual_machines.begin_create_or_update(
                 self.cluster.resource_group, self.name, vm_parameters
@@ -181,12 +180,12 @@ class AzureVM(VMInterface):
         self.cluster.network_client.network_interfaces.begin_delete(
             self.cluster.resource_group, self.nic.name
         ).wait()
-        self.cluster._log(f"Deleted network interface")
+        self.cluster._log("Deleted network interface")
         if self.public_ingress:
             self.cluster.network_client.public_ip_addresses.begin_delete(
                 self.cluster.resource_group, self.public_ip.name
             ).wait()
-            self.cluster._log(f"Unassigned public IP")
+            self.cluster._log("Unassigned public IP")
 
 
 class AzureVMScheduler(SchedulerMixin, AzureVM):
@@ -216,7 +215,8 @@ class AzureVMCluster(VMCluster):
     vnet: str
         The vnet to attach VM network interfaces to. List your vnets with ``az network vnet list``.
     security_group: str
-        The security group to apply to your VMs. This must allow ports 8786-8787 from wherever you are running this from.
+        The security group to apply to your VMs.
+        This must allow ports 8786-8787 from wherever you are running this from.
         List your security greoups with ``az network nsg list``.
     public_ingress: bool
         Assign a public IP address to the scheduler. Default ``True``.
