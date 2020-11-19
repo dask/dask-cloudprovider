@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 import uuid
 
@@ -92,27 +93,51 @@ class WorkerMixin(object):
         self,
         scheduler: str,
         *args,
-        worker_module: str = "distributed.cli.dask_worker",
+        worker_module: str = None,
+        worker_class: str = None,
         worker_options: dict = {},
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
         self.scheduler = scheduler
-        self.worker_module = worker_module
-
         self.name = f"dask-{self.cluster.uuid}-worker-{str(uuid.uuid4())[:8]}"
-        self.command = " ".join(
-            [
-                self.set_env,
-                "python",
-                "-m",
-                self.worker_module,
-                self.scheduler,
-                "--name",
-                str(self.name),
-            ]
-            + cli_keywords(worker_options, cls=_Worker, cmd=self.worker_module)
-        )
+        if worker_module is not None:
+            self.worker_module = worker_module
+
+            self.command = " ".join(
+                [
+                    self.set_env,
+                    "python",
+                    "-m",
+                    self.worker_module,
+                    self.scheduler,
+                    "--name",
+                    str(self.name),
+                ]
+                + cli_keywords(worker_options, cls=_Worker, cmd=self.worker_module)
+            )
+        if worker_class is not None:
+            self.worker_class = worker_class
+            self.command = " ".join(
+                [
+                    self.set_env,
+                    "python",
+                    "-m",
+                    "distributed.cli.dask_spec",
+                    self.scheduler,
+                    "--spec",
+                    "''%s''"  # in yaml double single quotes escape the single quote
+                    % json.dumps(
+                        {
+                            "cls": self.worker_class,
+                            "opts": {
+                                **worker_options,
+                                "name": self.name,
+                            },
+                        }
+                    ),
+                ]
+            )
 
     async def start(self):
         self.cluster._log("Creating worker instance")
@@ -252,3 +277,7 @@ class VMCluster(SpecCluster):
             auto_shutdown=cluster.auto_shutdown,
             env_vars=cluster.worker_options["env_vars"],
         )
+
+    def get_tags(self):
+        """Generate tags to be applied to all resources."""
+        return {"creator": "dask-cloudprovider", "cluster-id": self.uuid}
