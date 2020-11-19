@@ -20,10 +20,9 @@ try:
     from azureml.core.runconfig import MpiConfiguration
 except ImportError as e:
     msg = (
-        "Dask Cloud Provider Azure requirements are not installed.\n\n"
-        "Please either conda or pip install as follows:\n\n"
-        "  conda install dask-cloudprovider                             # either conda install\n"
-        '  python -m pip install "dask-cloudprovider[azure]" --upgrade  # or python -m pip install'
+        "Dask Cloud Provider Azure ML requirements are not installed.\n\n"
+        "Please either pip install as follows:\n\n"
+        '  python -m pip install "dask-cloudprovider[azureml]" --upgrade  # or python -m pip install'
     )
     raise ImportError(msg) from e
 
