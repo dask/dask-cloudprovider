@@ -1105,6 +1105,13 @@ class ECSCluster(SpecCluster):
                             if not self._scheduler_extra_args
                             else self._scheduler_extra_args
                         ),
+                        "ulimits": [
+                            {
+                                "name": "nofile",
+                                "softLimit": 65535,
+                                "hardLimit": 65535,
+                            },
+                        ],
                         "logConfiguration": {
                             "logDriver": "awslogs",
                             "options": {
@@ -1171,6 +1178,13 @@ class ECSCluster(SpecCluster):
                             if not self._worker_extra_args
                             else self._worker_extra_args
                         ),
+                        "ulimits": [
+                            {
+                                "name": "nofile",
+                                "softLimit": 65535,
+                                "hardLimit": 65535,
+                            },
+                        ],
                         "logConfiguration": {
                             "logDriver": "awslogs",
                             "options": {
