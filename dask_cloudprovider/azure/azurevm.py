@@ -34,7 +34,13 @@ class AzureVM(VMInterface):
         vnet: str = None,
         public_ingress: bool = None,
         security_group: str = None,
+        vm_size: str = None,
+        vm_image: dict = {},
+        gpu_instance: bool = None,
+        docker_image: str = None,
         env_vars: dict = {},
+        bootstrap: bool = None,
+        auto_shutdown: bool = None,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
@@ -42,14 +48,18 @@ class AzureVM(VMInterface):
         self.cluster = cluster
         self.config = config
         self.location = location
-        self.gpu_instance = False  # TODO do not hardcode
-        self.bootstrap = True  # TODO do not hardcode
+        self.gpu_instance = gpu_instance
+        self.bootstrap = bootstrap
         self.admin_username = "dask"
         self.admin_password = str(uuid.uuid4())[:32]
         self.security_group = security_group
         self.nic_name = f"dask-cloudprovider-nic-{str(uuid.uuid4())[:8]}"
+        self.docker_image = docker_image
         self.public_ingress = public_ingress
         self.public_ip = None
+        self.vm_size = vm_size
+        self.vm_image = vm_image
+        self.auto_shutdown = auto_shutdown
         self.env_vars = env_vars
 
     async def create_vm(self):
@@ -107,7 +117,7 @@ class AzureVM(VMInterface):
                     command=self.command,
                     gpu_instance=self.gpu_instance,
                     bootstrap=self.bootstrap,
-                    auto_shutdown=self.cluster.auto_shutdown,
+                    auto_shutdown=self.auto_shutdown,
                     env_vars=self.env_vars,
                 ).encode("ascii")
             )
@@ -126,16 +136,9 @@ class AzureVM(VMInterface):
                 "admin_password": self.admin_password,
                 "custom_data": cloud_init,
             },
-            "hardware_profile": {
-                "vm_size": "Standard_DS1_v2"  # TODO Make configurable
-            },
+            "hardware_profile": {"vm_size": self.vm_size},
             "storage_profile": {
-                "image_reference": {  # TODO Make configurable
-                    "publisher": "Canonical",
-                    "offer": "UbuntuServer",
-                    "sku": "16.04.0-LTS",
-                    "version": "latest",
-                },
+                "image_reference": self.vm_image,
             },
             "network_profile": {
                 "network_interfaces": [
@@ -220,6 +223,23 @@ class AzureVMCluster(VMCluster):
         List your security greoups with ``az network nsg list``.
     public_ingress: bool
         Assign a public IP address to the scheduler. Default ``True``.
+    vm_size: str
+        Azure VM size to use for scheduler and workers. Default ``Standard_DS1_v2``.
+        List available VM sizes with ``az vm list-sizes --location <location>``.
+    vm_image: dict
+        By default all VMs will use the latest Ubuntu LTS release with the following configuration
+
+        ``{"publisher": "Canonical", "offer": "UbuntuServer","sku": "18.04-LTS", "version": "latest"}``
+
+        You can override any of these options by passing a dict with matching keys here.
+        For example if you wish to try Ubuntu 19.04 you can pass ``{"sku": "19.04"}`` and the ``publisher``,
+        ``offer`` and ``version`` will be used from the default.
+    bootstrap: bool (optional)
+        It is assumed that the ``VHD`` will not have Docker installed (or the NVIDIA drivers for GPU instances).
+        If ``bootstrap`` is ``True`` these dependencies will be installed on instance start. If you are using
+        a custom VHD which already has these dependencies set this to ``False.``
+    auto_shutdown: bool (optional)
+        Shutdown the VM if the Dask process exits. Default ``True``.
     worker_module: str
         The Dask worker module to start on worker VMs.
     n_workers: int
@@ -267,22 +287,33 @@ class AzureVMCluster(VMCluster):
         vnet: str = None,
         security_group: str = None,
         public_ingress: bool = None,
+        vm_size: str = None,
+        vm_image: dict = {},
+        bootstrap: bool = None,
+        auto_shutdown: bool = None,
+        docker_image=None,
         **kwargs,
     ):
-        self.config = dask.config.get("cloudprovider.azure", {})
+        self.config = dask.config.get("cloudprovider.azure.azurevm", {})
         self.scheduler_class = AzureVMScheduler
         self.worker_class = AzureVMWorker
+        self.location = (
+            location
+            if location is not None
+            else dask.config.get("cloudprovider.azure.location")
+        )
+
         self.resource_group = (
             resource_group
             if resource_group is not None
-            else self.config.get("azurevm").get("resource_group")
+            else self.config.get("resource_group")
         )
         if self.resource_group is None:
             raise ConfigError("You must configure a resource_group")
         self.public_ingress = (
             public_ingress
             if public_ingress is not None
-            else self.config.get("azurevm").get("public_ingress")
+            else self.config.get("public_ingress")
         )
         self.credentials, self.subscription_id = get_azure_cli_credentials()
         self.compute_client = ComputeManagementClient(
@@ -291,26 +322,43 @@ class AzureVMCluster(VMCluster):
         self.network_client = NetworkManagementClient(
             self.credentials, self.subscription_id
         )
-        self.vnet = vnet if vnet is not None else self.config.get("azurevm").get("vnet")
+        self.vnet = vnet if vnet is not None else self.config.get("vnet")
         if self.vnet is None:
             raise ConfigError("You must configure a vnet")
         self.security_group = (
             security_group
             if security_group is not None
-            else self.config.get("azurevm").get("security_group")
+            else self.config.get("security_group")
         )
         if self.security_group is None:
             raise ConfigError(
                 "You must configure a security group which allows traffic on 8786 and 8787"
             )
-
+        self.vm_size = vm_size if vm_size is not None else self.config.get("vm_size")
+        self.gpu_instance = "NC" in self.vm_size or "ND" in self.vm_size
+        self.vm_image = self.config.get("vm_image")
+        for key in vm_image:
+            self.vm_image[key] = vm_image[key]
+        self.bootstrap = (
+            bootstrap if bootstrap is not None else self.config.get("bootstrap")
+        )
+        self.auto_shutdown = (
+            auto_shutdown
+            if auto_shutdown is not None
+            else self.config.get("auto_shutdown")
+        )
+        self.docker_image = (docker_image or self.config.get("docker_image"),)
         self.options = {
             "cluster": self,
             "config": self.config,
             "security_group": self.security_group,
-            "location": location
-            if location is not None
-            else self.config.get("location"),
+            "location": self.location,
+            "vm_size": self.vm_size,
+            "vm_image": self.vm_image,
+            "gpu_instance": self.gpu_instance,
+            "bootstrap": self.bootstrap,
+            "auto_shutdown": self.auto_shutdown,
+            "docker_image": self.docker_image,
         }
         self.scheduler_options = {"public_ingress": self.public_ingress, **self.options}
         self.worker_options = {**self.options}

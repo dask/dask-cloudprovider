@@ -85,3 +85,30 @@ async def test_create_cluster_sync():
                 return x + 1
 
             assert client.submit(inc, 10).result() == 11
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(1200)
+@skip_without_credentials
+async def test_create_rapids_cluster_sync():
+
+    with AzureVMCluster(
+        vm_size="Standard_NC12s_v3",
+        docker_image="rapidsai/rapidsai:cuda11.0-runtime-ubuntu18.04-py3.8",
+        worker_class="dask_cuda.CUDAWorker",
+        worker_options={"rmm_pool_size": "15GB"},
+    ) as cluster:
+        with Client(cluster) as client:
+            cluster.scale(1)
+            client.wait_for_workers(1)
+
+            def gpu_mem():
+                from pynvml.smi import nvidia_smi
+
+                nvsmi = nvidia_smi.getInstance()
+                return nvsmi.DeviceQuery("memory.free, memory.total")
+
+            results = client.run(gpu_mem)
+            for w, res in results.items():
+                assert "total" in res["gpu"][0]["fb_memory_usage"].keys()
+                print(res)
