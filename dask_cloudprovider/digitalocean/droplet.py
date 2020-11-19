@@ -170,6 +170,7 @@ class DropletCluster(VMCluster):
 
     Close the cluster
 
+    >>> client.close()
     >>> cluster.close()
     Terminated droplet dask-38b817c1-worker-dc95260d
     Terminated droplet dask-38b817c1-scheduler
