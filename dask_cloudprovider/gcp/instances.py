@@ -511,7 +511,7 @@ class GCPCluster(VMCluster):
         **kwargs,
     ):
 
-        self.compute = authenticate()
+        self.compute = GCPCompute()
 
         self.config = dask.config.get("cloudprovider.gcp", {})
         self.auto_shutdown = (
@@ -546,24 +546,41 @@ class GCPCluster(VMCluster):
         super().__init__(**kwargs)
 
 
-def authenticate():
-    if os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", False):
-        compute = googleapiclient.discovery.build("compute", "v1")
-    else:
-        import google.auth.credentials  # google-auth
+class GCPCompute:
+    """Wrapper for the ``googleapiclient`` compute object."""
 
-        path = os.path.join(os.path.expanduser("~"), ".config/gcloud/credentials.db")
-        if not os.path.exists(path):
-            raise GCPCredentialsError()
-        conn = sqlite3.connect(path)
-        creds_rows = conn.execute("select * from credentials").fetchall()
-        with tmpfile() as f:
-            with open(f, "w") as f_:
-                # take first row
-                f_.write(creds_rows[0][1])
-            creds, _ = google.auth.load_credentials_from_file(filename=f)
-        compute = googleapiclient.discovery.build("compute", "v1", credentials=creds)
-    return compute
+    def __init__(self):
+        self._compute = None
+        self.refresh_client()
+
+    def refresh_client(self):
+        if os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", False):
+            self._compute = googleapiclient.discovery.build("compute", "v1")
+        else:
+            import google.auth.credentials  # google-auth
+
+            path = os.path.join(
+                os.path.expanduser("~"), ".config/gcloud/credentials.db"
+            )
+            if not os.path.exists(path):
+                raise GCPCredentialsError()
+            conn = sqlite3.connect(path)
+            creds_rows = conn.execute("select * from credentials").fetchall()
+            with tmpfile() as f:
+                with open(f, "w") as f_:
+                    # take first row
+                    f_.write(creds_rows[0][1])
+                creds, _ = google.auth.load_credentials_from_file(filename=f)
+            self._compute = googleapiclient.discovery.build(
+                "compute", "v1", credentials=creds
+            )
+
+    def instances(self):
+        try:
+            return self._compute.instances()
+        except Exception:  # noqa
+            self.refresh_client()
+            return self._compute.instances()
 
 
 # Note: if you have trouble connecting make sure firewall rules in GCP are stetup for 8787,8786,22
