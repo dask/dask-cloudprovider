@@ -30,7 +30,8 @@ setup(
     license="BSD",
     packages=find_packages(),
     include_package_data=True,
-    long_description=(open("README.md").read() if exists("README.md") else ""),
+    long_description=(open("README.rst").read() if exists("README.rst") else ""),
+    long_description_content_type="text/x-rst",
     zip_safe=False,
     install_requires=list(open("requirements.txt").read().strip().split("\n")),
     extras_require=extras_require,
@@ -38,5 +39,5 @@ setup(
     [console_scripts]
     dask-ecs=dask_cloudprovider.cli.ecs:go
     """,
-    python_requires=">=3.5",
+    python_requires=">=3.7",
 )
