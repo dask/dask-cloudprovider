@@ -13,9 +13,8 @@ try:
 except ImportError as e:
     msg = (
         "Dask Cloud Provider Digital Ocean requirements are not installed.\n\n"
-        "Please either conda or pip install as follows:\n\n"
-        "  conda install dask-cloudprovider                           # either conda install\n"
-        '  python -m pip install "dask-cloudprovider[digitalocean]" --upgrade  # or python -m pip install'
+        "Please pip install as follows:\n\n"
+        '  pip install "dask-cloudprovider[digitalocean]" --upgrade  # or python -m pip install'
     )
     raise ImportError(msg) from e
 

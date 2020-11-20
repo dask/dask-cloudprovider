@@ -23,8 +23,8 @@ except ImportError as e:
     msg = (
         "Dask Cloud Provider GCP requirements are not installed.\n\n"
         "Please either conda or pip install as follows:\n\n"
-        "  conda install -c conda-forge google-api-python-client google-auth # either conda install\n"
-        '  python -m pip install "dask-cloudprovider[gcp]" --upgrade  # or python -m pip install'
+        "  conda install -c conda-forge dask-cloudprovider       # either conda install\n"
+        '  pip install "dask-cloudprovider[gcp]" --upgrade       # or python -m pip install'
     )
     raise ImportError(msg) from e
 

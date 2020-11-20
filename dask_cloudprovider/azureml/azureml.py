@@ -22,7 +22,7 @@ except ImportError as e:
     msg = (
         "Dask Cloud Provider Azure ML requirements are not installed.\n\n"
         "Please either pip install as follows:\n\n"
-        '  python -m pip install "dask-cloudprovider[azureml]" --upgrade  # or python -m pip install'
+        '  pip install "dask-cloudprovider[azureml]" --upgrade  # or python -m pip install'
     )
     raise ImportError(msg) from e
 
