@@ -8,15 +8,15 @@ import versioneer
 extras_require = {
     "aws": ["aiobotocore>=0.10.2"],
     "azure": [
-        "azure-mgmt-compute",
-        "azure-mgmt-network",
-        "azure-cli-core",
+        "azure-mgmt-compute>=18.0.0",
+        "azure-mgmt-network>=16.0.0",
+        "azure-cli-core>=2.15.1",
     ],
     "azureml": [
         "azureml-sdk>=1.0.83",
     ],
-    "digitalocean": ["python-digitalocean"],
-    "gcp": ["google-api-python-client", "google-auth"],
+    "digitalocean": ["python-digitalocean>=1.15.0"],
+    "gcp": ["google-api-python-client>=1.12.5", "google-auth>=1.23.0"],
 }
 extras_require["all"] = set(pkg for pkgs in extras_require.values() for pkg in pkgs)
 
