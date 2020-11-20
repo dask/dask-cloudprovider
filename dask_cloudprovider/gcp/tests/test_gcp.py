@@ -3,7 +3,7 @@ import pytest
 import dask
 from dask_cloudprovider.gcp.instances import (
     GCPCluster,
-    authenticate,
+    GCPCompute,
     GCPCredentialsError,
 )
 from dask.distributed import Client
@@ -12,7 +12,7 @@ from distributed.core import Status
 
 def skip_without_credentials():
     try:
-        authenticate()
+        _ = GCPCompute()
     except GCPCredentialsError:
         pytest.skip(
             """
