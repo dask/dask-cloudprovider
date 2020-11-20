@@ -435,8 +435,7 @@ class ECSCluster(SpecCluster):
     All the other required resources such as roles, task definitions, tasks, etc
     will be created automatically like in :class:`FargateCluster`.
 
-    Examples
-    --------
+    **Example usage**
 
     >>> from dask_cloudprovider.aws import ECSCluster
     >>> cluster = ECSCluster(cluster_arn="arn:aws:ecs:<region>:<acctid>:cluster/<clustername>")

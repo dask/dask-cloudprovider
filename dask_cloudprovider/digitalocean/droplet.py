@@ -97,8 +97,7 @@ class DropletCluster(VMCluster):
 
     https://www.digitalocean.com/docs/apis-clis/doctl/how-to/install/
 
-    Examples
-    --------
+    **Example usage**
 
     Create the cluster.
 

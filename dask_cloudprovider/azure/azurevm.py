@@ -209,10 +209,7 @@ class AzureVMCluster(VMCluster):
 
     https://docs.microsoft.com/en-us/cli/azure/install-azure-cli
 
-    Examples
-    --------
-
-    **Minimal example**
+    **Example usage**
 
     Create the cluster
 

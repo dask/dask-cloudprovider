@@ -35,8 +35,7 @@ class AzureMLCluster(Cluster):
 
     This creates a dask scheduler and workers on an Azure ML Compute Target.
 
-    Examples
-    --------
+    **Example usage**
 
     First, import all necessary modules.
 

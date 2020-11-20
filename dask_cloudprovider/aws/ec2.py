@@ -178,8 +178,7 @@ class EC2Cluster(VMCluster):
 
     See https://docs.dask.org/en/latest/configuration.html for more info.
 
-    Examples
-    --------
+    **Example usage**
 
     Regular cluster.
 

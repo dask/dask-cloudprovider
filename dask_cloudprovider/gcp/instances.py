@@ -353,8 +353,7 @@ class GCPCluster(VMCluster):
 
     https://cloud.google.com/sdk/gcloud
 
-    Examples
-    --------
+    **Example usage**
 
     Create the cluster.
 
