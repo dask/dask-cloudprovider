@@ -550,12 +550,11 @@ class GCPCompute:
     """Wrapper for the ``googleapiclient`` compute object."""
 
     def __init__(self):
-        self._compute = None
-        self.refresh_client()
+        self._compute = self.refresh_client()
 
     def refresh_client(self):
         if os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", False):
-            self._compute = googleapiclient.discovery.build("compute", "v1")
+            return googleapiclient.discovery.build("compute", "v1")
         else:
             import google.auth.credentials  # google-auth
 
@@ -571,15 +570,13 @@ class GCPCompute:
                     # take first row
                     f_.write(creds_rows[0][1])
                 creds, _ = google.auth.load_credentials_from_file(filename=f)
-            self._compute = googleapiclient.discovery.build(
-                "compute", "v1", credentials=creds
-            )
+            return googleapiclient.discovery.build("compute", "v1", credentials=creds)
 
     def instances(self):
         try:
             return self._compute.instances()
         except Exception:  # noqa
-            self.refresh_client()
+            self._compute = self.refresh_client()
             return self._compute.instances()
 
 
