@@ -435,6 +435,28 @@ class ECSCluster(SpecCluster):
     All the other required resources such as roles, task definitions, tasks, etc
     will be created automatically like in :class:`FargateCluster`.
 
+    Examples
+    --------
+
+    >>> from dask_cloudprovider.aws import ECSCluster
+    >>> cluster = ECSCluster(cluster_arn="arn:aws:ecs:<region>:<acctid>:cluster/<clustername>")
+
+    There is also support in ``ECSCluster`` for GPU aware Dask clusters. To do
+    this you need to create an ECS cluster with GPU capable instances (from the
+    ``g3``, ``p3`` or ``p3dn`` families) and specify the number of GPUs each worker task
+    should have.
+
+    >>> from dask_cloudprovider.aws import ECSCluster
+    >>> cluster = ECSCluster(
+    ...     cluster_arn="arn:aws:ecs:<region>:<acctid>:cluster/<gpuclustername>",
+    ...     worker_gpu=1)
+
+    By setting the ``worker_gpu`` option to something other than ``None`` will cause the cluster
+    to run ``dask-cuda-worker`` as the worker startup command. Setting this option will also change
+    the default Docker image to ``rapidsai/rapidsai:latest``, if you're using a custom image
+    you must ensure the NVIDIA CUDA toolkit is installed with a version that matches the host machine
+    along with ``dask-cuda``.
+
     Parameters
     ----------
     fargate_scheduler: bool (optional)
@@ -617,28 +639,6 @@ class ECSCluster(SpecCluster):
         Default ``False``.
     **kwargs: dict
         Additional keyword arguments to pass to ``SpecCluster``.
-
-    Examples
-    --------
-
-    >>> from dask_cloudprovider.aws import ECSCluster
-    >>> cluster = ECSCluster(cluster_arn="arn:aws:ecs:<region>:<acctid>:cluster/<clustername>")
-
-    There is also support in ``ECSCluster`` for GPU aware Dask clusters. To do
-    this you need to create an ECS cluster with GPU capable instances (from the
-    ``g3``, ``p3`` or ``p3dn`` families) and specify the number of GPUs each worker task
-    should have.
-
-    >>> from dask_cloudprovider.aws import ECSCluster
-    >>> cluster = ECSCluster(
-    ...     cluster_arn="arn:aws:ecs:<region>:<acctid>:cluster/<gpuclustername>",
-    ...     worker_gpu=1)
-
-    By setting the ``worker_gpu`` option to something other than ``None`` will cause the cluster
-    to run ``dask-cuda-worker`` as the worker startup command. Setting this option will also change
-    the default Docker image to ``rapidsai/rapidsai:latest``, if you're using a custom image
-    you must ensure the NVIDIA CUDA toolkit is installed with a version that matches the host machine
-    along with ``dask-cuda``.
 
     .. _troubleshooting guide: ./troubleshooting.html#invalid-cpu-or-memory
     """
@@ -1238,11 +1238,6 @@ class FargateCluster(ECSCluster):
     If you do not configure a cluster one will be created for you with sensible
     defaults.
 
-    Parameters
-    ----------
-    kwargs: dict
-        Keyword arguments to be passed to :class:`ECSCluster`.
-
     Examples
     --------
 
@@ -1264,6 +1259,11 @@ class FargateCluster(ECSCluster):
     ``package-list.txt`` in your Dockerfile.  You could use the default
     `Dask Dockerfile <https://github.com/dask/dask-docker/blob/master/base/Dockerfile>`_ as a template and simply add
     your pinned additional packages.
+
+    Parameters
+    ----------
+    kwargs: dict
+        Keyword arguments to be passed to :class:`ECSCluster`.
 
     Notes
     -----

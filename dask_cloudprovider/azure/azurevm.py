@@ -209,70 +209,6 @@ class AzureVMCluster(VMCluster):
 
     https://docs.microsoft.com/en-us/cli/azure/install-azure-cli
 
-    Parameters
-    ----------
-    location: str
-        The Azure location to launch you cluster in. List available locations with ``az account list-locations``.
-    resource_group: str
-        The resource group to create components in. List your resource groups with ``az group list``.
-    vnet: str
-        The vnet to attach VM network interfaces to. List your vnets with ``az network vnet list``.
-    security_group: str
-        The security group to apply to your VMs.
-        This must allow ports 8786-8787 from wherever you are running this from.
-        List your security greoups with ``az network nsg list``.
-    public_ingress: bool
-        Assign a public IP address to the scheduler. Default ``True``.
-    vm_size: str
-        Azure VM size to use for scheduler and workers. Default ``Standard_DS1_v2``.
-        List available VM sizes with ``az vm list-sizes --location <location>``.
-    vm_image: dict
-        By default all VMs will use the latest Ubuntu LTS release with the following configuration
-
-        ``{"publisher": "Canonical", "offer": "UbuntuServer","sku": "18.04-LTS", "version": "latest"}``
-
-        You can override any of these options by passing a dict with matching keys here.
-        For example if you wish to try Ubuntu 19.04 you can pass ``{"sku": "19.04"}`` and the ``publisher``,
-        ``offer`` and ``version`` will be used from the default.
-    bootstrap: bool (optional)
-        It is assumed that the ``VHD`` will not have Docker installed (or the NVIDIA drivers for GPU instances).
-        If ``bootstrap`` is ``True`` these dependencies will be installed on instance start. If you are using
-        a custom VHD which already has these dependencies set this to ``False.``
-    auto_shutdown: bool (optional)
-        Shutdown the VM if the Dask process exits. Default ``True``.
-    worker_module: str
-        The Dask worker module to start on worker VMs.
-    n_workers: int
-        Number of workers to initialise the cluster with. Defaults to ``0``.
-    worker_module: str
-        The Python module to run for the worker. Defaults to ``distributed.cli.dask_worker``
-    worker_options: dict
-        Params to be passed to the worker class.
-        See :class:`distributed.worker.Worker` for default worker class.
-        If you set ``worker_module`` then refer to the docstring for the custom worker class.
-    scheduler_options: dict
-        Params to be passed to the scheduler class.
-        See :class:`distributed.scheduler.Scheduler`.
-    docker_image: string (optional)
-        The Docker image to run on all instances.
-
-        This image must have a valid Python environment and have ``dask`` installed in order for the
-        ``dask-scheduler`` and ``dask-worker`` commands to be available. It is recommended the Python
-        environment matches your local environment where ``AzureVMCluster`` is being created from.
-
-        For GPU instance types the Docker image much have NVIDIA drivers and ``dask-cuda`` installed.
-
-        By default the ``daskdev/dask:latest`` image will be used.
-    silence_logs: bool
-        Whether or not we should silence logging when setting up the cluster.
-    asynchronous: bool
-        If this is intended to be used directly within an event loop with
-        async/await
-    security : Security or bool, optional
-        Configures communication security in this cluster. Can be a security
-        object, or True. If True, temporary self-signed credentials will
-        be created automatically.
-
     Examples
     --------
 
@@ -380,6 +316,70 @@ class AzureVMCluster(VMCluster):
 
     >>> client.close()
     >>> cluster.close()
+
+    Parameters
+    ----------
+    location: str
+        The Azure location to launch you cluster in. List available locations with ``az account list-locations``.
+    resource_group: str
+        The resource group to create components in. List your resource groups with ``az group list``.
+    vnet: str
+        The vnet to attach VM network interfaces to. List your vnets with ``az network vnet list``.
+    security_group: str
+        The security group to apply to your VMs.
+        This must allow ports 8786-8787 from wherever you are running this from.
+        List your security greoups with ``az network nsg list``.
+    public_ingress: bool
+        Assign a public IP address to the scheduler. Default ``True``.
+    vm_size: str
+        Azure VM size to use for scheduler and workers. Default ``Standard_DS1_v2``.
+        List available VM sizes with ``az vm list-sizes --location <location>``.
+    vm_image: dict
+        By default all VMs will use the latest Ubuntu LTS release with the following configuration
+
+        ``{"publisher": "Canonical", "offer": "UbuntuServer","sku": "18.04-LTS", "version": "latest"}``
+
+        You can override any of these options by passing a dict with matching keys here.
+        For example if you wish to try Ubuntu 19.04 you can pass ``{"sku": "19.04"}`` and the ``publisher``,
+        ``offer`` and ``version`` will be used from the default.
+    bootstrap: bool (optional)
+        It is assumed that the ``VHD`` will not have Docker installed (or the NVIDIA drivers for GPU instances).
+        If ``bootstrap`` is ``True`` these dependencies will be installed on instance start. If you are using
+        a custom VHD which already has these dependencies set this to ``False.``
+    auto_shutdown: bool (optional)
+        Shutdown the VM if the Dask process exits. Default ``True``.
+    worker_module: str
+        The Dask worker module to start on worker VMs.
+    n_workers: int
+        Number of workers to initialise the cluster with. Defaults to ``0``.
+    worker_module: str
+        The Python module to run for the worker. Defaults to ``distributed.cli.dask_worker``
+    worker_options: dict
+        Params to be passed to the worker class.
+        See :class:`distributed.worker.Worker` for default worker class.
+        If you set ``worker_module`` then refer to the docstring for the custom worker class.
+    scheduler_options: dict
+        Params to be passed to the scheduler class.
+        See :class:`distributed.scheduler.Scheduler`.
+    docker_image: string (optional)
+        The Docker image to run on all instances.
+
+        This image must have a valid Python environment and have ``dask`` installed in order for the
+        ``dask-scheduler`` and ``dask-worker`` commands to be available. It is recommended the Python
+        environment matches your local environment where ``AzureVMCluster`` is being created from.
+
+        For GPU instance types the Docker image much have NVIDIA drivers and ``dask-cuda`` installed.
+
+        By default the ``daskdev/dask:latest`` image will be used.
+    silence_logs: bool
+        Whether or not we should silence logging when setting up the cluster.
+    asynchronous: bool
+        If this is intended to be used directly within an event loop with
+        async/await
+    security : Security or bool, optional
+        Configures communication security in this cluster. Can be a security
+        object, or True. If True, temporary self-signed credentials will
+        be created automatically.
 
     """
 

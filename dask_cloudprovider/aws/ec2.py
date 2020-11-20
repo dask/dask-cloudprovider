@@ -178,6 +178,23 @@ class EC2Cluster(VMCluster):
 
     See https://docs.dask.org/en/latest/configuration.html for more info.
 
+    Examples
+    --------
+
+    Regular cluster.
+
+    >>> cluster = EC2Cluster()
+    >>> cluster.scale(5)
+
+    RAPIDS Cluster.
+
+    >>> cluster = EC2Cluster(ami="ami-0c7c7d78f752f8f17",  # Example Deep Learning AMI (Ubuntu 18.04)
+                             docker_image="rapidsai/rapidsai:cuda10.1-runtime-ubuntu18.04",
+                             instance_type="p3.2xlarge",
+                             worker_module="dask_cuda.cli.dask_cuda_worker",
+                             bootstrap=False,
+                             filesystem_size=120)
+
     Parameters
     ----------
     region: string (optional)
@@ -287,22 +304,6 @@ class EC2Cluster(VMCluster):
             --query "Reservations[*].Instances[*].[InstanceId]" \\
             --output text | xargs aws ec2 terminate-instances --instance-ids
 
-    Examples
-    --------
-
-    Regular cluster.
-
-    >>> cluster = EC2Cluster()
-    >>> cluster.scale(5)
-
-    RAPIDS Cluster.
-
-    >>> cluster = EC2Cluster(ami="ami-0c7c7d78f752f8f17",  # Example Deep Learning AMI (Ubuntu 18.04)
-                             docker_image="rapidsai/rapidsai:cuda10.1-runtime-ubuntu18.04",
-                             instance_type="p3.2xlarge",
-                             worker_module="dask_cuda.cli.dask_cuda_worker",
-                             bootstrap=False,
-                             filesystem_size=120)
     """
 
     def __init__(

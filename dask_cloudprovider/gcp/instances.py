@@ -353,6 +353,76 @@ class GCPCluster(VMCluster):
 
     https://cloud.google.com/sdk/gcloud
 
+    Examples
+    --------
+
+    Create the cluster.
+
+    >>> from dask_cloudprovider.gcp import GCPCluster
+    >>> cluster = GCPCluster(n_workers=1)
+    Launching cluster with the following configuration:
+    Source Image: projects/ubuntu-os-cloud/global/images/ubuntu-minimal-1804-bionic-v20201014
+    Docker Image: daskdev/dask:latest
+    Machine Type: n1-standard-1
+    Filesytsem Size: 50
+    N-GPU Type:
+    Zone: us-east1-c
+    Creating scheduler instance
+    dask-acc897b9-scheduler
+            Internal IP: 10.142.0.37
+            External IP: 34.75.60.62
+    Waiting for scheduler to run
+    Scheduler is running
+    Creating worker instance
+    dask-acc897b9-worker-bfbc94bc
+            Internal IP: 10.142.0.39
+            External IP: 34.73.245.220
+
+    Connect a client.
+
+    >>> from dask.distributed import Client
+    >>> client = Client(cluster)
+
+    Do some work.
+
+    >>> import dask.array as da
+    >>> arr = da.random.random((1000, 1000), chunks=(100, 100))
+    >>> arr.mean().compute()
+    0.5001550986751964
+
+    Close the cluster
+
+    >>> cluster.close()
+    Closing Instance: dask-acc897b9-worker-bfbc94bc
+    Closing Instance: dask-acc897b9-scheduler
+
+    You can also do this all in one go with context managers to ensure the cluster is
+    created and cleaned up.
+
+    >>> with GCPCluster(n_workers=1) as cluster:
+    ...     with Client(cluster) as client:
+    ...         print(da.random.random((1000, 1000), chunks=(100, 100)).mean().compute())
+    Launching cluster with the following configuration:
+    Source Image: projects/ubuntu-os-cloud/global/images/ubuntu-minimal-1804-bionic-v20201014
+    Docker Image: daskdev/dask:latest
+    Machine Type: n1-standard-1
+    Filesytsem Size: 50
+    N-GPU Type:
+    Zone: us-east1-c
+    Creating scheduler instance
+    dask-19352f29-scheduler
+            Internal IP: 10.142.0.41
+            External IP: 34.73.217.251
+    Waiting for scheduler to run
+    Scheduler is running
+    Creating worker instance
+    dask-19352f29-worker-91a6bfe0
+            Internal IP: 10.142.0.48
+            External IP: 34.73.245.220
+    0.5000812282861661
+    Closing Instance: dask-19352f29-worker-91a6bfe0
+    Closing Instance: dask-19352f29-scheduler
+
     Parameters
     ----------
     projectid: str
@@ -423,76 +493,6 @@ class GCPCluster(VMCluster):
         Configures communication security in this cluster. Can be a security
         object, or True. If True, temporary self-signed credentials will
         be created automatically.
-
-    Examples
-    --------
-
-    Create the cluster.
-
-    >>> from dask_cloudprovider.gcp import GCPCluster
-    >>> cluster = GCPCluster(n_workers=1)
-    Launching cluster with the following configuration:
-    Source Image: projects/ubuntu-os-cloud/global/images/ubuntu-minimal-1804-bionic-v20201014
-    Docker Image: daskdev/dask:latest
-    Machine Type: n1-standard-1
-    Filesytsem Size: 50
-    N-GPU Type:
-    Zone: us-east1-c
-    Creating scheduler instance
-    dask-acc897b9-scheduler
-            Internal IP: 10.142.0.37
-            External IP: 34.75.60.62
-    Waiting for scheduler to run
-    Scheduler is running
-    Creating worker instance
-    dask-acc897b9-worker-bfbc94bc
-            Internal IP: 10.142.0.39
-            External IP: 34.73.245.220
-
-    Connect a client.
-
-    >>> from dask.distributed import Client
-    >>> client = Client(cluster)
-
-    Do some work.
-
-    >>> import dask.array as da
-    >>> arr = da.random.random((1000, 1000), chunks=(100, 100))
-    >>> arr.mean().compute()
-    0.5001550986751964
-
-    Close the cluster
-
-    >>> cluster.close()
-    Closing Instance: dask-acc897b9-worker-bfbc94bc
-    Closing Instance: dask-acc897b9-scheduler
-
-    You can also do this all in one go with context managers to ensure the cluster is
-    created and cleaned up.
-
-    >>> with GCPCluster(n_workers=1) as cluster:
-    ...     with Client(cluster) as client:
-    ...         print(da.random.random((1000, 1000), chunks=(100, 100)).mean().compute())
-    Launching cluster with the following configuration:
-    Source Image: projects/ubuntu-os-cloud/global/images/ubuntu-minimal-1804-bionic-v20201014
-    Docker Image: daskdev/dask:latest
-    Machine Type: n1-standard-1
-    Filesytsem Size: 50
-    N-GPU Type:
-    Zone: us-east1-c
-    Creating scheduler instance
-    dask-19352f29-scheduler
-            Internal IP: 10.142.0.41
-            External IP: 34.73.217.251
-    Waiting for scheduler to run
-    Scheduler is running
-    Creating worker instance
-    dask-19352f29-worker-91a6bfe0
-            Internal IP: 10.142.0.48
-            External IP: 34.73.245.220
-    0.5000812282861661
-    Closing Instance: dask-19352f29-worker-91a6bfe0
-    Closing Instance: dask-19352f29-scheduler
 
     """
 

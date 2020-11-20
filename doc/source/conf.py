@@ -91,6 +91,8 @@ pygments_style = "default"
 # If true, `todo` and `todoList` produce output, else they produce nothing.
 todo_include_todos = False
 
+# Order autodoc sections by the order they appear in the docstring
+autodoc_member_order = "bysource"
 
 # -- Options for HTML output ----------------------------------------------
 
