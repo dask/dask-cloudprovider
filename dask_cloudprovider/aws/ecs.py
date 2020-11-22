@@ -1,32 +1,36 @@
-try:
-    import asyncio
-    import logging
-    import uuid
-    import warnings
-    import weakref
-    from typing import List
+import asyncio
+import logging
+import uuid
+import warnings
+import weakref
+from typing import List
 
+import dask
+
+from dask_cloudprovider.utils.logs import Log, Logs
+from dask_cloudprovider.utils.timeout import Timeout
+from dask_cloudprovider.aws.helper import (
+    dict_to_aws,
+    aws_to_dict,
+    get_sleep_duration,
+    get_default_vpc,
+    get_vpc_subnets,
+    create_default_security_group,
+)
+
+from distributed.deploy.spec import SpecCluster
+from distributed.scheduler import Scheduler as LocalScheduler
+from distributed.utils import warn_on_duration
+
+try:
     from botocore.exceptions import ClientError
     import aiobotocore
-    import dask
-
-    from dask_cloudprovider.utils.logs import Log, Logs
-    from dask_cloudprovider.utils.timeout import Timeout
-    from dask_cloudprovider.providers.aws.helper import (
-        dict_to_aws,
-        aws_to_dict,
-        get_sleep_duration,
-    )
-
-    from distributed.deploy.spec import SpecCluster
-    from distributed.scheduler import Scheduler as LocalScheduler
-    from distributed.utils import warn_on_duration
 except ImportError as e:
     msg = (
         "Dask Cloud Provider AWS requirements are not installed.\n\n"
         "Please either conda or pip install as follows:\n\n"
-        "  conda install dask-cloudprovider                           # either conda install\n"
-        '  python -m pip install "dask-cloudprovider[aws]" --upgrade  # or python -m pip install'
+        "  conda install -c conda-forge dask-cloudprovider       # either conda install\n"
+        '  pip install "dask-cloudprovider[aws]" --upgrade       # or python -m pip install'
     )
     raise ImportError(msg) from e
 
@@ -39,7 +43,7 @@ DEFAULT_TAGS = {
 
 
 class Task:
-    """ A superclass for managing ECS Tasks
+    """A superclass for managing ECS Tasks
     Parameters
     ----------
 
@@ -93,6 +97,9 @@ class Task:
         Whether to use a private IP (if True) or public IP (if False) with Fargate.
         Defaults to False, i.e. public IP.
 
+    task_kwargs: dict (optional)
+        Additional keyword arguments for the ECS task.
+
     kwargs:
         Any additional kwargs which may need to be stored for later use.
 
@@ -118,6 +125,7 @@ class Task:
         name=None,
         platform_version=None,
         fargate_use_private_ip=False,
+        task_kwargs=None,
         **kwargs
     ):
         self.lock = asyncio.Lock()
@@ -145,6 +153,7 @@ class Task:
         self.platform_version = platform_version
         self._fargate_use_private_ip = fargate_use_private_ip
         self.kwargs = kwargs
+        self.task_kwargs = task_kwargs
         self.status = "created"
 
     def __await__(self):
@@ -211,18 +220,19 @@ class Task:
         timeout = Timeout(60, "Unable to start %s after 60 seconds" % self.task_type)
         while timeout.run():
             try:
-                kwargs = (
-                    {"tags": dict_to_aws(self.tags)}
-                    if await self._is_long_arn_format_enabled()
-                    else {}
-                )  # Tags are only supported if you opt into long arn format so we need to check for that
+                kwargs = self.task_kwargs.copy() if self.task_kwargs is not None else {}
+
+                # Tags are only supported if you opt into long arn format so we need to check for that
+                if await self._is_long_arn_format_enabled():
+                    kwargs["tags"] = dict_to_aws(self.tags)
                 if self.platform_version and self.fargate:
                     kwargs["platformVersion"] = self.platform_version
-                async with self._client("ecs") as ecs:
-                    response = await ecs.run_task(
-                        cluster=self.cluster_arn,
-                        taskDefinition=self.task_definition_arn,
-                        overrides={
+
+                kwargs.update(
+                    {
+                        "cluster": self.cluster_arn,
+                        "taskDefinition": self.task_definition_arn,
+                        "overrides": {
                             "containerOverrides": [
                                 {
                                     "name": "dask-{}".format(self.task_type),
@@ -233,9 +243,9 @@ class Task:
                                 }
                             ]
                         },
-                        count=1,
-                        launchType="FARGATE" if self.fargate else "EC2",
-                        networkConfiguration={
+                        "count": 1,
+                        "launchType": "FARGATE" if self.fargate else "EC2",
+                        "networkConfiguration": {
                             "awsvpcConfiguration": {
                                 "subnets": self._vpc_subnets,
                                 "securityGroups": self._security_groups,
@@ -244,8 +254,11 @@ class Task:
                                 else "DISABLED",
                             }
                         },
-                        **kwargs
-                    )
+                    }
+                )
+
+                async with self._client("ecs") as ecs:
+                    response = await ecs.run_task(**kwargs)
 
                 if not response.get("tasks"):
                     raise RuntimeError(response)  # print entire response
@@ -257,9 +270,17 @@ class Task:
                 await asyncio.sleep(1)
 
         self.task_arn = self.task["taskArn"]
+        wait_duration = 1
         while self.task["lastStatus"] in ["PENDING", "PROVISIONING"]:
-            await asyncio.sleep(1)
-            await self._update_task()
+            try:
+                await self._update_task()
+                wait_duration = 1
+            except ClientError as e:
+                if e.response["Error"]["Code"] == "ThrottlingException":
+                    wait_duration = wait_duration * 2
+                else:
+                    raise
+            await asyncio.sleep(min(wait_duration, 20))
         if not await self._task_is_running():
             raise RuntimeError("%s failed to start" % type(self).__name__)
         [eni] = [
@@ -354,7 +375,7 @@ class Task:
 
 
 class Scheduler(Task):
-    """ A Remote Dask Scheduler controlled by ECS
+    """A Remote Dask Scheduler controlled by ECS
 
     See :class:`Task` for parameter info.
     """
@@ -365,7 +386,7 @@ class Scheduler(Task):
 
 
 class Worker(Task):
-    """ A Remote Dask Worker controlled by ECS
+    """A Remote Dask Worker controlled by ECS
     Parameters
     ----------
     scheduler: str
@@ -408,10 +429,12 @@ class Worker(Task):
 
 
 class ECSCluster(SpecCluster):
-    """ Deploy a Dask cluster using ECS
+    """Deploy a Dask cluster using ECS
 
-    This creates a dask scheduler and workers on an ECS cluster. If you do not
-    configure a cluster one will be created for you with sensible defaults.
+    This creates a dask scheduler and workers on an existing ECS cluster.
+
+    All the other required resources such as roles, task definitions, tasks, etc
+    will be created automatically like in :class:`FargateCluster`.
 
     Parameters
     ----------
@@ -431,10 +454,12 @@ class ECSCluster(SpecCluster):
         The amount of CPU to request for the scheduler in milli-cpu (1/1024).
 
         Defaults to ``1024`` (one vCPU).
+        See the `troubleshooting guide`_ for information on the valid values for this argument.
     scheduler_mem: int (optional)
         The amount of memory to request for the scheduler in MB.
 
         Defaults to ``4096`` (4GB).
+        See the `troubleshooting guide`_ for information on the valid values for this argument.
     scheduler_timeout: str (optional)
         The scheduler task will exit after this amount of time if there are no clients connected.
 
@@ -443,14 +468,18 @@ class ECSCluster(SpecCluster):
         Any extra command line arguments to pass to dask-scheduler, e.g. ``["--tls-cert", "/path/to/cert.pem"]``
 
         Defaults to `None`, no extra command line arguments.
+    scheduler_task_kwargs: dict (optional)
+        Additional keyword arguments for the scheduler ECS task.
     worker_cpu: int (optional)
         The amount of CPU to request for worker tasks in milli-cpu (1/1024).
 
         Defaults to ``4096`` (four vCPUs).
+        See the `troubleshooting guide`_ for information on the valid values for this argument.
     worker_mem: int (optional)
         The amount of memory to request for worker tasks in MB.
 
         Defaults to ``16384`` (16GB).
+        See the `troubleshooting guide`_ for information on the valid values for this argument.
     worker_gpu: int (optional)
         The number of GPUs to expose to the worker.
 
@@ -464,6 +493,8 @@ class ECSCluster(SpecCluster):
         Any extra command line arguments to pass to dask-worker, e.g. ``["--tls-cert", "/path/to/cert.pem"]``
 
         Defaults to `None`, no extra command line arguments.
+    worker_task_kwargs: dict (optional)
+        Additional keyword arguments for the workers ECS task.
     n_workers: int (optional)
         Number of workers to start on cluster creation.
 
@@ -598,6 +629,26 @@ class ECSCluster(SpecCluster):
     Examples
     --------
 
+    >>> from dask_cloudprovider.aws import ECSCluster
+    >>> cluster = ECSCluster(cluster_arn="arn:aws:ecs:<region>:<acctid>:cluster/<clustername>")
+
+    There is also support in ``ECSCluster`` for GPU aware Dask clusters. To do
+    this you need to create an ECS cluster with GPU capable instances (from the
+    ``g3``, ``p3`` or ``p3dn`` families) and specify the number of GPUs each worker task
+    should have.
+
+    >>> from dask_cloudprovider.aws import ECSCluster
+    >>> cluster = ECSCluster(
+    ...     cluster_arn="arn:aws:ecs:<region>:<acctid>:cluster/<gpuclustername>",
+    ...     worker_gpu=1)
+
+    By setting the ``worker_gpu`` option to something other than ``None`` will cause the cluster
+    to run ``dask-cuda-worker`` as the worker startup command. Setting this option will also change
+    the default Docker image to ``rapidsai/rapidsai:latest``, if you're using a custom image
+    you must ensure the NVIDIA CUDA toolkit is installed with a version that matches the host machine
+    along with ``dask-cuda``.
+
+    .. _troubleshooting guide: ./troubleshooting.html#invalid-cpu-or-memory
     """
 
     def __init__(
@@ -609,10 +660,12 @@ class ECSCluster(SpecCluster):
         scheduler_mem=None,
         scheduler_timeout=None,
         scheduler_extra_args=None,
+        scheduler_task_kwargs=None,
         worker_cpu=None,
         worker_mem=None,
         worker_gpu=None,
         worker_extra_args=None,
+        worker_task_kwargs=None,
         n_workers=None,
         cluster_arn=None,
         cluster_name_template=None,
@@ -647,11 +700,13 @@ class ECSCluster(SpecCluster):
         self._scheduler_mem = scheduler_mem
         self._scheduler_timeout = scheduler_timeout
         self._scheduler_extra_args = scheduler_extra_args
+        self._scheduler_task_kwargs = scheduler_task_kwargs
         self.scheduler_task_definition_arn = None
         self._worker_cpu = worker_cpu
         self._worker_mem = worker_mem
         self._worker_gpu = worker_gpu
         self._worker_extra_args = worker_extra_args
+        self._worker_task_kwargs = worker_task_kwargs
         self._n_workers = n_workers
         self.cluster_arn = cluster_arn
         self.cluster_name = None
@@ -690,7 +745,9 @@ class ECSCluster(SpecCluster):
             region_name=self._region_name,
         )
 
-    async def _start(self,):
+    async def _start(
+        self,
+    ):
         while self.status == "starting":
             await asyncio.sleep(0.01)
         if self.status == "running":
@@ -813,12 +870,14 @@ class ECSCluster(SpecCluster):
             self._vpc = self.config.get("vpc")
 
         if self._vpc == "default":
-            self._vpc = await self._get_default_vpc()
+            async with self._client("ec2") as client:
+                self._vpc = await get_default_vpc(client)
 
         if self._vpc_subnets is None:
-            self._vpc_subnets = (
-                self.config.get("subnets") or await self._get_vpc_subnets()
-            )
+            async with self._client("ec2") as client:
+                self._vpc_subnets = self.config.get("subnets") or await get_vpc_subnets(
+                    client, self._vpc
+                )
 
         if self._security_groups is None:
             self._security_groups = (
@@ -848,6 +907,7 @@ class ECSCluster(SpecCluster):
             scheduler_options = {
                 "task_definition_arn": self.scheduler_task_definition_arn,
                 "fargate": self._fargate_scheduler,
+                "task_kwargs": self._scheduler_task_kwargs,
                 **options,
             }
 
@@ -862,7 +922,6 @@ class ECSCluster(SpecCluster):
         self.worker_task_definition_arn = (
             await self._create_worker_task_definition_arn()
         )
-
         worker_options = {
             "task_definition_arn": self.worker_task_definition_arn,
             "fargate": self._fargate_workers,
@@ -870,6 +929,7 @@ class ECSCluster(SpecCluster):
             "mem": self._worker_mem,
             "gpu": self._worker_gpu,
             "extra_args": self._worker_extra_args,
+            "task_kwargs": self._worker_task_kwargs,
             **options,
         }
 
@@ -1019,59 +1079,13 @@ class ECSCluster(SpecCluster):
         # Note: Not cleaning up the logs here as they may be useful after the cluster is destroyed
         return log_group_name
 
-    async def _get_default_vpc(self):
-        async with self._client("ec2") as ec2:
-            vpcs = (await ec2.describe_vpcs())["Vpcs"]
-            [vpc] = [vpc for vpc in vpcs if vpc["IsDefault"]]
-            return vpc["VpcId"]
-
-    async def _get_vpc_subnets(self):
-        async with self._client("ec2") as ec2:
-            vpcs = (await ec2.describe_vpcs())["Vpcs"]
-            [vpc] = [vpc for vpc in vpcs if vpc["VpcId"] == self._vpc]
-            subnets = (await ec2.describe_subnets())["Subnets"]
-            return [
-                subnet["SubnetId"]
-                for subnet in subnets
-                if subnet["VpcId"] == vpc["VpcId"]
-            ]
-
     async def _create_security_groups(self):
-        async with self._client("ec2") as ec2:
-            response = await ec2.create_security_group(
-                Description="A security group for dask-ecs",
-                GroupName=self.cluster_name,
-                VpcId=self._vpc,
-                DryRun=False,
+        async with self._client("ec2") as client:
+            group = await create_default_security_group(
+                client, self.cluster_name, self._vpc
             )
-
-            await ec2.authorize_security_group_ingress(
-                GroupId=response["GroupId"],
-                IpPermissions=[
-                    {
-                        "IpProtocol": "TCP",
-                        "FromPort": 8786,
-                        "ToPort": 8787,
-                        "IpRanges": [
-                            {"CidrIp": "0.0.0.0/0", "Description": "Anywhere"}
-                        ],
-                        "Ipv6Ranges": [{"CidrIpv6": "::/0", "Description": "Anywhere"}],
-                    },
-                    {
-                        "IpProtocol": "TCP",
-                        "FromPort": 0,
-                        "ToPort": 65535,
-                        "UserIdGroupPairs": [{"GroupId": response["GroupId"]}],
-                    },
-                ],
-                DryRun=False,
-            )
-            # await ec2.create_tags(
-            #     Resources=[response["GroupId"]], Tags=dict_to_aws(self.tags, upper=True)
-            #  )
-
-            weakref.finalize(self, self.sync, self._delete_security_groups)
-            return [response["GroupId"]]
+        weakref.finalize(self, self.sync, self._delete_security_groups)
+        return [group]
 
     async def _delete_security_groups(self):
         timeout = Timeout(
@@ -1112,6 +1126,13 @@ class ECSCluster(SpecCluster):
                             if not self._scheduler_extra_args
                             else self._scheduler_extra_args
                         ),
+                        "ulimits": [
+                            {
+                                "name": "nofile",
+                                "softLimit": 65535,
+                                "hardLimit": 65535,
+                            },
+                        ],
                         "logConfiguration": {
                             "logDriver": "awslogs",
                             "options": {
@@ -1179,6 +1200,13 @@ class ECSCluster(SpecCluster):
                             if not self._worker_extra_args
                             else self._worker_extra_args
                         ),
+                        "ulimits": [
+                            {
+                                "name": "nofile",
+                                "softLimit": 65535,
+                                "hardLimit": 65535,
+                            },
+                        ],
                         "logConfiguration": {
                             "logDriver": "awslogs",
                             "options": {
@@ -1237,6 +1265,118 @@ class FargateCluster(ECSCluster):
     kwargs: dict
         Keyword arguments to be passed to :class:`ECSCluster`.
 
+    Examples
+    --------
+
+    The ``FargateCluster`` will create a new Fargate ECS cluster by default along
+    with all the IAM roles, security groups, and so on that it needs to function.
+
+    >>> from dask_cloudprovider.aws import FargateCluster
+    >>> cluster = FargateCluster()
+
+    Note that in many cases you will want to specify a custom Docker image to ``FargateCluster`` so that Dask has the
+    packages it needs to execute your workflow.
+
+    >>> from dask_cloudprovider.aws import FargateCluster
+    >>> cluster = FargateCluster(image="<hub-user>/<repo-name>[:<tag>]")
+
+    One strategy to ensure that package versions match between your custom environment and the Docker container is to
+    create your environment from an ``environment.yml`` file, export the exact package list for that environment using
+    ``conda list --export > package-list.txt``, and then use the pinned package versions contained in
+    ``package-list.txt`` in your Dockerfile.  You could use the default
+    `Dask Dockerfile <https://github.com/dask/dask-docker/blob/master/base/Dockerfile>`_ as a template and simply add
+    your pinned additional packages.
+
+    Notes
+    -----
+
+    **IAM Permissions**
+
+    To create a ``FargateCluster`` the cluster manager will need to various AWS resources ranging from IAM roles to
+    VPCs to ECS tasks. Depending on your use case you may want the cluster to create all of these for you, or you
+    may wish to specify them youself ahead of time.
+
+    Here is the full minimal IAM policy that you need to create the whole cluster:
+
+    .. code-block:: json
+
+        {
+            "Statement": [
+                {
+                    "Action": [
+                        "ec2:AuthorizeSecurityGroupIngress",
+                        "ec2:CreateSecurityGroup",
+                        "ec2:CreateTags",
+                        "ec2:DescribeNetworkInterfaces",
+                        "ec2:DescribeSubnets",
+                        "ec2:DescribeVpcs",
+                        "ec2:DeleteSecurityGroup",
+                        "ecs:CreateCluster",
+                        "ecs:DescribeTasks",
+                        "ecs:ListAccountSettings",
+                        "ecs:RegisterTaskDefinition",
+                        "ecs:RunTask",
+                        "ecs:StopTask",
+                        "ecs:ListClusters",
+                        "ecs:DescribeClusters",
+                        "ecs:DeleteCluster",
+                        "ecs:ListTaskDefinitions",
+                        "ecs:DescribeTaskDefinition",
+                        "ecs:DeregisterTaskDefinition",
+                        "iam:AttachRolePolicy",
+                        "iam:CreateRole",
+                        "iam:TagRole",
+                        "iam:PassRole",
+                        "iam:DeleteRole",
+                        "iam:ListRoleTags",
+                        "iam:ListAttachedRolePolicies",
+                        "iam:DetachRolePolicy",
+                        "logs:DescribeLogGroups"
+                    ],
+                    "Effect": "Allow",
+                    "Resource": [
+                        "*"
+                    ]
+                }
+            ],
+            "Version": "2012-10-17"
+        }
+
+    If you specify all of the resources yourself you will need a minimal policy of:
+
+    .. code-block:: json
+
+        {
+            "Statement": [
+                {
+                    "Action": [
+                        "ec2:CreateTags",
+                        "ec2:DescribeNetworkInterfaces",
+                        "ec2:DescribeSubnets",
+                        "ec2:DescribeVpcs",
+                        "ecs:DescribeTasks",
+                        "ecs:ListAccountSettings",
+                        "ecs:RegisterTaskDefinition",
+                        "ecs:RunTask",
+                        "ecs:StopTask",
+                        "ecs:ListClusters",
+                        "ecs:DescribeClusters",
+                        "ecs:ListTaskDefinitions",
+                        "ecs:DescribeTaskDefinition",
+                        "ecs:DeregisterTaskDefinition",
+                        "iam:ListRoleTags",
+                        "logs:DescribeLogGroups"
+                    ],
+                    "Effect": "Allow",
+                    "Resource": [
+                        "*"
+                    ]
+                }
+            ],
+            "Version": "2012-10-17"
+        }
+
+
     """
 
     def __init__(self, **kwargs):
@@ -1244,7 +1384,7 @@ class FargateCluster(ECSCluster):
 
 
 async def _cleanup_stale_resources():
-    """ Clean up any stale resources which are tagged with 'createdBy': 'dask-cloudprovider'.
+    """Clean up any stale resources which are tagged with 'createdBy': 'dask-cloudprovider'.
 
     This function will scan through AWS looking for resources that were created
     by the ``ECSCluster`` class. Any ECS clusters which do not have any running

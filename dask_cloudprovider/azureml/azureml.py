@@ -1,36 +1,37 @@
+import time, os, socket, subprocess, logging
+import pathlib
+import threading
+import warnings
+
+from contextlib import suppress
+
+import dask
+from contextlib import suppress
+from distributed.deploy.cluster import Cluster
+from distributed.core import rpc
+from distributed.utils import LoopRunner, log_errors, format_bytes
+from tornado.ioloop import PeriodicCallback
+
 try:
     from azureml.core import Experiment, RunConfiguration, ScriptRunConfig
     from azureml.core.compute import AmlCompute, ComputeTarget
     from azureml.core.compute_target import ComputeTargetException
     from azureml.train.estimator import Estimator
     from azureml.core.runconfig import MpiConfiguration
-
-    import time, os, socket, subprocess, logging
-    import pathlib
-    import threading
-
-    from contextlib import suppress
-
-    import dask
-    from contextlib import suppress
-    from distributed.deploy.cluster import Cluster
-    from distributed.core import rpc
-    from distributed.utils import LoopRunner, log_errors, format_bytes
-    from tornado.ioloop import PeriodicCallback
 except ImportError as e:
     msg = (
-        "Dask Cloud Provider Azure requirements are not installed.\n\n"
-        "Please either conda or pip install as follows:\n\n"
-        "  conda install dask-cloudprovider                             # either conda install\n"
-        '  python -m pip install "dask-cloudprovider[azure]" --upgrade  # or python -m pip install'
+        "Dask Cloud Provider Azure ML requirements are not installed.\n\n"
+        "Please either pip install as follows:\n\n"
+        '  pip install "dask-cloudprovider[azureml]" --upgrade  # or python -m pip install'
     )
     raise ImportError(msg) from e
+
 
 logger = logging.getLogger(__name__)
 
 
 class AzureMLCluster(Cluster):
-    """ Deploy a Dask cluster using Azure ML
+    """Deploy a Dask cluster using Azure ML
 
     This creates a dask scheduler and workers on an Azure ML Compute Target.
 
@@ -144,6 +145,75 @@ class AzureMLCluster(Cluster):
 
     **kwargs: dict
         Additional keyword arguments.
+
+    Examples
+    --------
+
+    First, import all necessary modules.
+
+    >>> from azureml.core import Workspace
+    >>> from dask_cloudprovider.azure import AzureMLCluster
+
+    Next, create the ``Workspace`` object given your AzureML ``Workspace`` parameters. Check
+    more in the AzureML documentation for
+    `Workspace <https://docs.microsoft.com/python/api/azureml-core/azureml.core.workspace.workspace?view=azure-ml-py>`_.
+
+    You can use ``ws = Workspace.from_config()`` after downloading the config file from the
+    `Azure Portal <https://portal.azure.com>`_ or `ML Studio <https://ml.azure.com>`_.
+
+    >>> subscription_id = "<your-subscription-id-here>"
+    >>> resource_group = "<your-resource-group>"
+    >>> workspace_name = "<your-workspace-name>"
+
+    >>> ws = Workspace(
+    ...     workspace_name=workspace_name,
+    ...     subscription_id=subscription_id,
+    ...     resource_group=resource_group
+    ... )
+
+    Then create the cluster.
+
+    >>> amlcluster = AzureMLCluster(
+    ...     # required
+    ...     ws,
+    ...     # optional
+    ...     vm_size="STANDARD_DS13_V2",                                 # Azure VM size for the Compute Target
+    ...     datastores=ws.datastores.values(),                          # Azure ML Datastores to mount on the headnode
+    ...     environment_definition=ws.environments['AzureML-Dask-CPU'], # Azure ML Environment to run on the cluster
+    ...     jupyter=true,                                               # Start JupyterLab session on the headnode
+    ...     initial_node_count=2,                                       # number of nodes to start
+    ...     scheduler_idle_timeout=7200                                 # scheduler idle timeout in seconds
+    ... )
+
+    Once the cluster has started, the Dask Cluster widget will print out two links:
+
+    1. Jupyter link to a Jupyter Lab instance running on the headnode.
+    2. Dask Dashboard link.
+
+    Note that ``AzureMLCluster`` uses IPython Widgets to present this information, so if you are working in Jupyter Lab
+    and see text that starts with ``VBox(children=``..., make sure you have enabled the IPython Widget
+    `extension <https://jupyterlab.readthedocs.io/en/stable/user/extensions.html>`_.
+
+    To connect to the Jupyter Lab session running on the cluster from your own computer, click the link provided in the
+    widget printed above, or if you need the link directly it is stored in ``amlcluster.jupyter_link``.
+
+    Once connected, you'll be in an AzureML `Run` session. To connect Dask from within the session, just run to
+    following code to connect dask to the cluster:
+
+    .. code-block:: python
+
+        from azureml.core import Run
+        from dask.distributed import Client
+
+        run = Run.get_context()
+        c = Client(run.get_metrics()["scheduler"])
+
+
+    You can stop the cluster with `amlcluster.close()`. The cluster will automatically spin down if unused for
+    20 minutes by default. Alternatively, you can delete the Azure ML Compute Target or cancel the Run from the
+    Python SDK or UI to stop the cluster.
+
+
     """
 
     def __init__(
@@ -172,6 +242,11 @@ class AzureMLCluster(Cluster):
         asynchronous=False,
         **kwargs,
     ):
+        warnings.warn(
+            "AzureMLCluster is deprecated and will be removed in a future release. Please use AzureVMCluster instead",
+            category=DeprecationWarning,
+        )
+
         ### REQUIRED PARAMETERS
         self.workspace = workspace
         self.compute_target = compute_target
@@ -324,43 +399,45 @@ class AzureMLCluster(Cluster):
         self.config = dask.config.get("cloudprovider.azure", {})
 
         if self.experiment_name is None:
-            self.experiment_name = self.config.get("experiment_name")
+            self.experiment_name = self.config.get("azureml.experiment_name")
 
         if self.initial_node_count is None:
-            self.initial_node_count = self.config.get("initial_node_count")
+            self.initial_node_count = self.config.get("azureml.initial_node_count")
 
         if self.jupyter is None:
-            self.jupyter = self.config.get("jupyter")
+            self.jupyter = self.config.get("azureml.jupyter")
 
         if self.jupyter_port is None:
-            self.jupyter_port = self.config.get("jupyter_port")
+            self.jupyter_port = self.config.get("azureml.jupyter_port")
 
         if self.dashboard_port is None:
-            self.dashboard_port = self.config.get("dashboard_port")
+            self.dashboard_port = self.config.get("azureml.dashboard_port")
 
         if self.scheduler_port is None:
-            self.scheduler_port = self.config.get("scheduler_port")
+            self.scheduler_port = self.config.get("azureml.scheduler_port")
 
         if self.scheduler_idle_timeout is None:
-            self.scheduler_idle_timeout = self.config.get("scheduler_idle_timeout")
+            self.scheduler_idle_timeout = self.config.get(
+                "azureml.scheduler_idle_timeout"
+            )
 
         if self.worker_death_timeout is None:
-            self.worker_death_timeout = self.config.get("worker_death_timeout")
+            self.worker_death_timeout = self.config.get("azureml.worker_death_timeout")
 
         if self.additional_ports is None:
-            self.additional_ports = self.config.get("additional_ports")
+            self.additional_ports = self.config.get("azureml.additional_ports")
 
         if self.admin_username is None:
-            self.admin_username = self.config.get("admin_username")
+            self.admin_username = self.config.get("azureml.admin_username")
 
         if self.admin_ssh_key is None:
-            self.admin_ssh_key = self.config.get("admin_ssh_key")
+            self.admin_ssh_key = self.config.get("azureml.admin_ssh_key")
 
         if self.datastores is None:
-            self.datastores = self.config.get("datastores")
+            self.datastores = self.config.get("azureml.datastores")
 
         if self.telemetry_opt_out is None:
-            self.telemetry_opt_out = self.config.get("telemetry_opt_out")
+            self.telemetry_opt_out = self.config.get("azureml.telemetry_opt_out")
 
         ### PARAMETERS TO START THE CLUSTER
         self.scheduler_params = {}
@@ -738,8 +815,7 @@ class AzureMLCluster(Cluster):
 
     @property
     def dashboard_link(self):
-        """ Link to Dask dashboard.
-        """
+        """Link to Dask dashboard."""
         try:
             link = self.scheduler_info["dashboard_url"]
         except KeyError:
@@ -749,7 +825,7 @@ class AzureMLCluster(Cluster):
 
     @property
     def jupyter_link(self):
-        """ Link to JupyterLab on running on the headnode of the cluster.
+        """Link to JupyterLab on running on the headnode of the cluster.
         Set ``jupyter=True`` when creating the ``AzureMLCluster``.
         """
         try:
@@ -924,8 +1000,7 @@ class AzureMLCluster(Cluster):
             self.close()
 
     def scale(self, workers=1):
-        """ Scale the cluster. Scales to a maximum of the workers available in the cluster.
-        """
+        """Scale the cluster. Scales to a maximum of the workers available in the cluster."""
         if workers <= 0:
             self.close()
             return
@@ -941,8 +1016,7 @@ class AzureMLCluster(Cluster):
 
     # scale up
     def scale_up(self, workers=1):
-        """ Scale up the number of workers.
-        """
+        """Scale up the number of workers."""
         run_config = RunConfiguration()
         run_config.target = self.compute_target
         run_config.environment = self.environment_definition
@@ -968,8 +1042,7 @@ class AzureMLCluster(Cluster):
 
     # scale down
     def scale_down(self, workers=1):
-        """ Scale down the number of workers. Scales to minimum of 1.
-        """
+        """Scale down the number of workers. Scales to minimum of 1."""
         for i in range(workers):
             if self.workers_list:
                 child_run = self.workers_list.pop(0)  # deactivate oldest workers
@@ -1014,7 +1087,7 @@ class AzureMLCluster(Cluster):
         await super()._close()
 
     def close(self):
-        """ Close the cluster. All Azure ML Runs corresponding to the scheduler
+        """Close the cluster. All Azure ML Runs corresponding to the scheduler
         and worker processes will be completed. The Azure ML Compute Target will
         return to its minimum number of nodes after its idle time before scaledown.
         """
