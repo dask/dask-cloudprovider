@@ -616,13 +616,14 @@ class ECSCluster(SpecCluster):
         mounted in worker tasks. This setting controls whether volumes are also mounted in the scheduler task.
 
         Default ``False``.
-    local_scheduler: dict or bool (optional)
-        Local scheduler specification. If provided, the task scheduler will run locally rather than in the ECS.
-        See :class:`SpecCluster` documentation for more info about specification.
+    local_scheduler_spec: dict (optional)
+        Local scheduler specification. If provided, then ``deploy_mode`` auto sets to ``"local"``.
 
-        If set to ``True`` then default local specification will be used.
+        Default ``None``.
+    deploy_mode: str (optional)
+        Run the scheduler as ``"local"`` or ``"remote"``.
 
-        Defaults to ``None``, don't use local scheduler.
+        Default ``"remote"``.
     **kwargs: dict
         Additional keyword arguments to pass to ``SpecCluster``.
 
@@ -690,7 +691,8 @@ class ECSCluster(SpecCluster):
         mount_points=None,
         volumes=None,
         mount_volumes_on_scheduler=False,
-        local_scheduler=None,
+        deploy_mode=None,
+        local_scheduler_spec=None,
         **kwargs
     ):
         self._fargate_scheduler = fargate_scheduler
@@ -733,7 +735,8 @@ class ECSCluster(SpecCluster):
         self._region_name = region_name
         self._platform_version = platform_version
         self._lock = asyncio.Lock()
-        self._local_scheduler = local_scheduler
+        self._deploy_mode = deploy_mode
+        self._local_scheduler_spec = local_scheduler_spec
         self.session = aiobotocore.get_session()
         super().__init__(**kwargs)
 
@@ -885,6 +888,11 @@ class ECSCluster(SpecCluster):
                 or await self._create_security_groups()
             )
 
+        if self._local_scheduler_spec is not None:
+            self._deploy_mode = "local"
+
+        self._deploy_mode = self._deploy_mode or self.config.get("deploy-mode")
+
         options = {
             "client": self._client,
             "cluster_arn": self.cluster_arn,
@@ -899,7 +907,7 @@ class ECSCluster(SpecCluster):
             "fargate_use_private_ip": self._fargate_use_private_ip,
         }
 
-        if not self._local_scheduler:
+        if self._deploy_mode == "remote":
             self.scheduler_task_definition_arn = (
                 await self._create_scheduler_task_definition_arn()
             )
@@ -912,12 +920,16 @@ class ECSCluster(SpecCluster):
             }
 
             self.scheduler_spec = {"cls": Scheduler, "options": scheduler_options}
-        else:
-            if self._local_scheduler is True:
-                self.scheduler_spec = {"cls": LocalScheduler}
+        elif self._deploy_mode == "local":
+            if self._local_scheduler_spec:
+                self.scheduler_spec = self._local_scheduler_spec.copy()
             else:
-                self.scheduler_spec = self._local_scheduler.copy()
-                self.scheduler_spec.setdefault("cls", LocalScheduler)
+                self.scheduler_spec = {}
+            self.scheduler_spec.setdefault("cls", LocalScheduler)
+            self.scheduler_spec.setdefault("options", {})
+            self.scheduler_spec["options"].setdefault("security", self.security)
+        else:
+            raise RuntimeError("Unknown deploy mode %s" % self._deploy_mode)
 
         self.worker_task_definition_arn = (
             await self._create_worker_task_definition_arn()

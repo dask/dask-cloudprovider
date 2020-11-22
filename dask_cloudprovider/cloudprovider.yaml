@@ -33,6 +33,7 @@ cloudprovider:
     environment: {} # Environment variables that are set within a task container
     find_address_timeout: 60 # Configurable timeout in seconds for finding the task IP from the cloudwatch logs.
     skip_cleanup: False # Skip cleaning up of stale resources
+    deploy-mode: remote # Use remote scheduler.
 
   ec2:
     region: null # AWS region to create cluster. Defaults to environment or account default region.
