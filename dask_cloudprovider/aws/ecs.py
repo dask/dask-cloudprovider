@@ -616,10 +616,6 @@ class ECSCluster(SpecCluster):
         mounted in worker tasks. This setting controls whether volumes are also mounted in the scheduler task.
 
         Default ``False``.
-    local_scheduler_spec: dict (optional)
-        Local scheduler specification. If provided, then ``deploy_mode`` auto sets to ``"local"``.
-
-        Default ``None``.
     deploy_mode: str (optional)
         Run the scheduler as ``"local"`` or ``"remote"``.
 
@@ -692,7 +688,6 @@ class ECSCluster(SpecCluster):
         volumes=None,
         mount_volumes_on_scheduler=False,
         deploy_mode=None,
-        local_scheduler_spec=None,
         **kwargs
     ):
         self._fargate_scheduler = fargate_scheduler
@@ -736,7 +731,6 @@ class ECSCluster(SpecCluster):
         self._platform_version = platform_version
         self._lock = asyncio.Lock()
         self._deploy_mode = deploy_mode
-        self._local_scheduler_spec = local_scheduler_spec
         self.session = aiobotocore.get_session()
         super().__init__(**kwargs)
 
@@ -888,9 +882,6 @@ class ECSCluster(SpecCluster):
                 or await self._create_security_groups()
             )
 
-        if self._local_scheduler_spec is not None:
-            self._deploy_mode = "local"
-
         self._deploy_mode = self._deploy_mode or self.config.get("deploy-mode")
 
         options = {
@@ -921,13 +912,12 @@ class ECSCluster(SpecCluster):
 
             self.scheduler_spec = {"cls": Scheduler, "options": scheduler_options}
         elif self._deploy_mode == "local":
-            if self._local_scheduler_spec:
-                self.scheduler_spec = self._local_scheduler_spec.copy()
-            else:
-                self.scheduler_spec = {}
-            self.scheduler_spec.setdefault("cls", LocalScheduler)
-            self.scheduler_spec.setdefault("options", {})
-            self.scheduler_spec["options"].setdefault("security", self.security)
+            self.scheduler_spec = {
+                "cls": LocalScheduler,
+                "options": {
+                    "security": self.security
+                }
+            }
         else:
             raise RuntimeError("Unknown deploy mode %s" % self._deploy_mode)
 
