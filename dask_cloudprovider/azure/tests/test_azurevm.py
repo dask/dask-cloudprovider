@@ -32,7 +32,7 @@ def skip_without_credentials(func):
             reason="""
         You must configure your Azure resource group and vnet to run this test.
 
-            $ export DASK_CLOUDPROVIDER__AZURE__LOCATION="<RESOURCE GROUP>"
+            $ export DASK_CLOUDPROVIDER__AZURE__LOCATION="<LOCATION>"
             $ export DASK_CLOUDPROVIDER__AZURE__AZUREVM__RESOURCE_GROUP="<RESOURCE GROUP>"
             $ export DASK_CLOUDPROVIDER__AZURE__AZUREVM__VNET="<VNET>"
             $ export DASK_CLOUDPROVIDER__AZURE__AZUREVM__SECURITY_GROUP="<SECUROTY GROUP>"
