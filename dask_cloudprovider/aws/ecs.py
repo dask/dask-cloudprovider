@@ -914,9 +914,7 @@ class ECSCluster(SpecCluster):
         elif self._deploy_mode == "local":
             self.scheduler_spec = {
                 "cls": LocalScheduler,
-                "options": {
-                    "security": self.security
-                }
+                "options": {"security": self.security},
             }
         else:
             raise RuntimeError("Unknown deploy mode %s" % self._deploy_mode)
