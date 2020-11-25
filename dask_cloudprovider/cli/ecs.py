@@ -4,6 +4,7 @@ import sys
 
 import click
 from distributed.cli.utils import check_python_3, install_signal_handlers
+from distributed.core import Status
 from tornado.ioloop import IOLoop, TimeoutError
 
 from dask_cloudprovider.aws import ECSCluster
@@ -214,7 +215,7 @@ def main(
 
     async def run():
         logger.info("Ready")
-        while cluster.status != "closed":
+        while cluster.status != Status.closed:
             await sleep(0.2)
 
     def on_signal(signum):
