@@ -226,7 +226,7 @@ class AzureVMCluster(VMCluster):
     vm_size: str
         Azure VM size to use for scheduler and workers. Default ``Standard_DS1_v2``.
         List available VM sizes with ``az vm list-sizes --location <location>``.
-    vm_size: str
+    scheduler_vm_size: str
         Azure VM size to use for scheduler. If not set will use the ``vm_size``.
     vm_image: dict
         By default all VMs will use the latest Ubuntu LTS release with the following configuration
