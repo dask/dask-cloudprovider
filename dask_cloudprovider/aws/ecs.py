@@ -20,6 +20,7 @@ from dask_cloudprovider.aws.helper import (
 
 from distributed.deploy.spec import SpecCluster
 from distributed.utils import warn_on_duration
+from distributed.core import Status
 
 try:
     from botocore.exceptions import ClientError
@@ -153,7 +154,7 @@ class Task:
         self._fargate_use_private_ip = fargate_use_private_ip
         self.kwargs = kwargs
         self.task_kwargs = task_kwargs
-        self.status = "created"
+        self.status = Status.created
 
     def __await__(self):
         async def _():
@@ -301,7 +302,7 @@ class Task:
             self.public_ip = interface["Association"]["PublicIp"]
         self.private_ip = interface["PrivateIpAddresses"][0]["PrivateIpAddress"]
         await self._set_address_from_logs()
-        self.status = "running"
+        self.status = Status.running
 
     async def close(self, **kwargs):
         if self.task:
@@ -311,7 +312,7 @@ class Task:
             while self.task["lastStatus"] in ["RUNNING"]:
                 await asyncio.sleep(1)
                 await self._update_task()
-        self.status = "closed"
+        self.status = Status.closed
 
     @property
     def task_id(self):
@@ -737,11 +738,11 @@ class ECSCluster(SpecCluster):
     async def _start(
         self,
     ):
-        while self.status == "starting":
+        while self.status == Status.starting:
             await asyncio.sleep(0.01)
-        if self.status == "running":
+        if self.status == Status.running:
             return
-        if self.status == "closed":
+        if self.status == Status.closed:
             raise ValueError("Cluster is closed")
 
         self.config = dask.config.get("cloudprovider.ecs", {})

@@ -8,7 +8,7 @@ from contextlib import suppress
 import dask
 from contextlib import suppress
 from distributed.deploy.cluster import Cluster
-from distributed.core import rpc
+from distributed.core import rpc, Status
 from distributed.utils import LoopRunner, log_errors, format_bytes
 from tornado.ioloop import PeriodicCallback
 
@@ -1053,7 +1053,7 @@ class AzureMLCluster(Cluster):
 
     # close cluster
     async def _close(self):
-        if self.status == "closed":
+        if self.status == Status.closed:
             return
 
         while self.workers_list:
@@ -1065,7 +1065,7 @@ class AzureMLCluster(Cluster):
             self.run.complete()
             self.run.cancel()
 
-        self.status = "closed"
+        self.status = Status.closed
         self.__print_message("Scheduler and workers are disconnected.")
 
         if self.portforward_proc is not None:
