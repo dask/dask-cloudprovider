@@ -77,3 +77,10 @@ this code.
     troubleshooting.rst
     gpus.rst
     packer.rst
+
+.. toctree::
+    :maxdepth: 2
+    :hidden:
+    :caption: Developer
+
+    releasing.rst
