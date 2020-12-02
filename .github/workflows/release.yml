@@ -16,7 +16,7 @@ jobs:
           python-version: 3.7
 
       - name: Install pypa/build
-        run: pytnon -m pip install build
+        run: python -m pip install build
 
       - name: Build distributions
         shell: bash -l {0}
