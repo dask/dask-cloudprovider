@@ -25,12 +25,6 @@ def __getattr__(name):
             f"Please import dask_cloudprovider.aws.{name}"
         )
 
-    if name in ["AzureMLCluster"]:
-        raise ImportError(
-            "Azure Machine Learning cluster managers must be imported from the azureml subpackage. "
-            f"Please import dask_cloudprovider.azureml.{name}"
-        )
-
     if name in ["AzureVMCluster"]:
         raise ImportError(
             "Azure cluster managers must be imported from the the azure subpackage. "
