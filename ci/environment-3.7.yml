@@ -6,8 +6,6 @@ dependencies:
   - python=3.7
   - nomkl
   - pip
-  # Dask
-  - dask
   # testing / CI
   - flake8
   - ipywidgets
@@ -34,5 +32,5 @@ dependencies:
   - pytest-asyncio >=0.14.0
   - pytest-timeout
   - pip:
-      - git+https://github.com/dask/dask
-      - git+https://github.com/dask/distributed
+      - git+https://github.com/dask/dask.git@master
+      - git+https://github.com/dask/distributed@master
