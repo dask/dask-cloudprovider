@@ -12,7 +12,7 @@ Dask Cloud Provider
    :alt: Read the Docs
 
 .. image:: https://img.shields.io/readthedocs/dask-cloudprovider?color=%232980B9&label=developer%20docs&logo=read-the-docs&logoColor=white
-   :target: https://cloudprovider.dask.org/
+   :target: https://cloudprovider.dask.org/releasing.html
    :alt: Read the Docs Developer
 
 
