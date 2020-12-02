@@ -48,7 +48,7 @@ cloudprovider:
     filesystem_size: 40 # Default root filesystem size for scheduler and worker VMs in GB
 
   azure:
-    location: "eastus2" # The Azure location to launch your cluster
+    location: null # The Azure location to launch your cluster
     resource_group: null # The Azure resource group for the cluster
     azureml:
       experiment_name: "dask-cloudprovider" # default name of the Experiment to submit

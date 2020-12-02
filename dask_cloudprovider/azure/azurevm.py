@@ -405,7 +405,8 @@ class AzureVMCluster(VMCluster):
             if location is not None
             else dask.config.get("cloudprovider.azure.location")
         )
-
+        if self.location is None:
+            raise ConfigError("You must configure a location")
         self.resource_group = (
             resource_group
             if resource_group is not None
