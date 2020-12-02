@@ -226,6 +226,8 @@ class AzureVMCluster(VMCluster):
     vm_size: str
         Azure VM size to use for scheduler and workers. Default ``Standard_DS1_v2``.
         List available VM sizes with ``az vm list-sizes --location <location>``.
+    scheduler_vm_size: str
+        Azure VM size to use for scheduler. If not set will use the ``vm_size``.
     vm_image: dict
         By default all VMs will use the latest Ubuntu LTS release with the following configuration
 
@@ -391,6 +393,7 @@ class AzureVMCluster(VMCluster):
         security_group: str = None,
         public_ingress: bool = None,
         vm_size: str = None,
+        scheduler_vm_size: str = None,
         vm_image: dict = {},
         bootstrap: bool = None,
         auto_shutdown: bool = None,
@@ -439,6 +442,13 @@ class AzureVMCluster(VMCluster):
                 "You must configure a security group which allows traffic on 8786 and 8787"
             )
         self.vm_size = vm_size if vm_size is not None else self.config.get("vm_size")
+        self.scheduler_vm_size = (
+            scheduler_vm_size
+            if scheduler_vm_size is not None
+            else self.config.get("scheduler_vm_size")
+        )
+        if self.scheduler_vm_size is None:
+            self.scheduler_vm_size = self.vm_size
         self.gpu_instance = "NC" in self.vm_size or "ND" in self.vm_size
         self.vm_image = self.config.get("vm_image")
         for key in vm_image:
@@ -457,13 +467,16 @@ class AzureVMCluster(VMCluster):
             "config": self.config,
             "security_group": self.security_group,
             "location": self.location,
-            "vm_size": self.vm_size,
             "vm_image": self.vm_image,
             "gpu_instance": self.gpu_instance,
             "bootstrap": self.bootstrap,
             "auto_shutdown": self.auto_shutdown,
             "docker_image": self.docker_image,
         }
-        self.scheduler_options = {"public_ingress": self.public_ingress, **self.options}
-        self.worker_options = {**self.options}
+        self.scheduler_options = {
+            "vm_size": self.scheduler_vm_size,
+            "public_ingress": self.public_ingress,
+            **self.options,
+        }
+        self.worker_options = {"vm_size": self.vm_size, **self.options}
         super().__init__(**kwargs)
