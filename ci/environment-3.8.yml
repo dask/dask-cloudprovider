@@ -6,6 +6,8 @@ dependencies:
   - python=3.8
   - nomkl
   - pip
+  # Dask
+  - dask
   # testing / CI
   - flake8
   - ipywidgets
