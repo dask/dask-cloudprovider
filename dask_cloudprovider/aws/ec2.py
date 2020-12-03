@@ -338,6 +338,18 @@ class EC2Cluster(VMCluster):
                              worker_module="dask_cuda.cli.dask_cuda_worker",
                              bootstrap=False,
                              filesystem_size=120)
+
+    Enable SSH for debugging
+
+    >>> from dask_cloudprovider.aws import EC2Cluster
+    >>> cluster = EC2Cluster(key_name="myawesomekey",
+                             # Security group which allows ports 22, 8786, 8787 and all internal traffic
+                             security_groups=["sg-aabbcc112233"])
+
+    # You can now SSH to an instance with `ssh ubuntu@public_ip`
+
+    >>> cluster.close()
+
     """
 
     def __init__(
