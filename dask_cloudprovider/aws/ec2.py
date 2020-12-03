@@ -45,6 +45,8 @@ class EC2Instance(VMInterface):
         subnet_id=None,
         security_groups=None,
         filesystem_size=None,
+        key_name=None,
+        iam_instance_profile=None,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
@@ -62,6 +64,8 @@ class EC2Instance(VMInterface):
         self.subnet_id = subnet_id
         self.security_groups = security_groups
         self.filesystem_size = filesystem_size
+        self.key_name = key_name
+        self.iam_instance_profile = iam_instance_profile
 
     async def create_vm(self):
         """
@@ -86,8 +90,8 @@ class EC2Instance(VMInterface):
                 "099720109477",  # Canonical
             )
 
-            response = await client.run_instances(
-                BlockDeviceMappings=[
+            vm_kwargs = {
+                "BlockDeviceMappings": [
                     {
                         "DeviceName": "/dev/sda1",
                         "VirtualName": "sda1",
@@ -99,20 +103,20 @@ class EC2Instance(VMInterface):
                         },
                     }
                 ],
-                ImageId=self.ami,
-                InstanceType=self.instance_type,
-                MaxCount=1,
-                MinCount=1,
-                Monitoring={"Enabled": False},
-                UserData=self.cluster.render_cloud_init(
+                "ImageId": self.ami,
+                "InstanceType": self.instance_type,
+                "MaxCount": 1,
+                "MinCount": 1,
+                "Monitoring": {"Enabled": False},
+                "UserData": self.cluster.render_cloud_init(
                     image=self.docker_image,
                     command=self.command,
                     gpu_instance=self.gpu_instance,
                     bootstrap=self.bootstrap,
                     env_vars=self.env_vars,
                 ),
-                InstanceInitiatedShutdownBehavior="terminate",
-                NetworkInterfaces=[
+                "InstanceInitiatedShutdownBehavior": "terminate",
+                "NetworkInterfaces": [
                     {
                         "AssociatePublicIpAddress": True,
                         "DeleteOnTermination": True,
@@ -122,7 +126,15 @@ class EC2Instance(VMInterface):
                         "SubnetId": self.subnet_id,
                     }
                 ],
-            )
+            }
+
+            if self.key_name:
+                vm_kwargs["KeyName"] = self.key_name
+
+            if self.iam_instance_profile:
+                vm_kwargs["IamInstanceProfile"] = self.iam_instance_profile
+
+            response = await client.run_instances(**vm_kwargs)
             [self.instance] = response["Instances"]
             await client.create_tags(
                 Resources=[self.instance["InstanceId"]],
@@ -236,6 +248,16 @@ class EC2Cluster(VMCluster):
         The instance filesystem size in GB.
 
         Defaults to ``40``.
+    key_name: str (optional)
+        The SSH key name to assign to all instances created by the cluster manager.
+        You can list your existing key pair names with
+        ``aws ec2 describe-key-pairs  --query 'KeyPairs[*].KeyName' --output text``.
+
+        NOTE: You will need to ensure your security group allows access on port 22. If ``security_groups``
+        is not set the default group will not contain this rule and you will need to add it manually.
+    iam_instance_profile: dict (optional)
+        An IAM profile to assign to VMs. This can be used for allowing access to other AWS resources such as S3.
+        See https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/iam-roles-for-amazon-ec2.html.
     n_workers: int
         Number of workers to initialise the cluster with. Defaults to ``0``.
     worker_module: str
@@ -329,6 +351,8 @@ class EC2Cluster(VMCluster):
         subnet_id=None,
         security_groups=None,
         filesystem_size=None,
+        key_name=None,
+        iam_instance_profile=None,
         docker_image=None,
         **kwargs,
     ):
@@ -367,6 +391,14 @@ class EC2Cluster(VMCluster):
             else self.config.get("filesystem_size")
         )
 
+        self.key_name = (
+            key_name if key_name is not None else self.config.get("key_name")
+        )
+        self.iam_instance_profile = (
+            iam_instance_profile
+            if iam_instance_profile is not None
+            else self.config.get("iam_instance_profile")
+        )
         self.options = {
             "cluster": self,
             "config": self.config,
@@ -380,6 +412,8 @@ class EC2Cluster(VMCluster):
             "subnet_id": self.subnet_id,
             "security_groups": self.security_groups,
             "filesystem_size": self.filesystem_size,
+            "key_name": self.key_name,
+            "iam_instance_profile": self.iam_instance_profile,
         }
         self.scheduler_options = {**self.options}
         self.worker_options = {**self.options}
