@@ -13,9 +13,11 @@ from dask_cloudprovider.aws.helper import (
     get_vpc_subnets,
     get_security_group,
 )
+from dask_cloudprovider.utils.timeout import Timeout
 
 try:
     import aiobotocore
+    import botocore.exceptions
 except ImportError as e:
     msg = (
         "Dask Cloud Provider AWS requirements are not installed.\n\n"
@@ -133,16 +135,27 @@ class EC2Instance(VMInterface):
                 f"Created instance {self.instance['InstanceId']} as {self.name}"
             )
 
+            timeout = Timeout(
+                300,
+                f"Failed Public IP for instance {self.instance['InstanceId']}",
+            )
             while (
                 "PublicIpAddress" not in self.instance
                 or self.instance["PublicIpAddress"] is None
-            ):
-                await asyncio.sleep(0.1)  # TODO back off correctly
-                response = await client.describe_instances(
-                    InstanceIds=[self.instance["InstanceId"]], DryRun=False
-                )
-                [reservation] = response["Reservations"]
-                [self.instance] = reservation["Instances"]
+            ) and timeout.run():
+                backoff = 0.1
+                await asyncio.sleep(
+                    min(backoff, 10) + backoff % 1
+                )  # Exponential backoff with a cap of 10 seconds and some jitter
+                try:
+                    response = await client.describe_instances(
+                        InstanceIds=[self.instance["InstanceId"]], DryRun=False
+                    )
+                    [reservation] = response["Reservations"]
+                    [self.instance] = reservation["Instances"]
+                except botocore.exceptions.ClientError as e:
+                    timeout.set_exception(e)
+                backoff = backoff * 2
             return self.instance["PublicIpAddress"]
 
     async def destroy_vm(self):
