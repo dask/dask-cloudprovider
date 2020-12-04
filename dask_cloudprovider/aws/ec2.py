@@ -309,13 +309,31 @@ class EC2Cluster(VMCluster):
     >>> cluster.scale(5)
 
     RAPIDS Cluster.
+    # Get AWS credentials from local machine to AWS EC2 workers
+    >>> def get_aws_credentials():
+        """Read in your AWS credentials file and convert to environment variables."""
+        parser = configparser.RawConfigParser()
 
-    >>> cluster = EC2Cluster(ami="ami-0c7c7d78f752f8f17",  # Example Deep Learning AMI (Ubuntu 18.04)
-                             docker_image="rapidsai/rapidsai:cuda10.1-runtime-ubuntu18.04",
-                             instance_type="p3.2xlarge",
-                             worker_module="dask_cuda.cli.dask_cuda_worker",
-                             bootstrap=False,
-                             filesystem_size=120)
+        parser.read(os.path.expanduser('~/.aws/config'))
+        config = parser.items('default')
+
+        parser.read(os.path.expanduser('~/.aws/credentials'))
+        credentials = parser.items('default')
+
+        all_credentials = {key.upper(): value for key, value in [*config, *credentials]}
+        with contextlib.suppress(KeyError):
+        all_credentials["AWS_REGION"] = all_credentials.pop("REGION")
+        return all_credentials
+        
+    >>> env_vars = get_aws_credentials()
+ 
+    >>> cluster = EC2Cluster(ami="ami-06d62f645899df7de",  # Example Deep Learning AMI (Ubuntu 18.04) # AWS AMI id can be region specific
+                          docker_image="rapidsai/rapidsai:cuda11.0-runtime-ubuntu18.04",
+                          instance_type="g4dn.xlarge",
+                          worker_class="dask_cuda.CUDAWorker",
+                          n_workers=2,
+                          bootstrap=False,
+                          filesystem_size=120, env_vars=env_vars ) # Pass env_vars with AWS credentials to Cluster
     """
 
     def __init__(
