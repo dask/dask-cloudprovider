@@ -31,28 +31,27 @@ Elastic Compute Cloud (EC2)
 If you are using EC2Cluster you would need to pass your aws credentials to the workers nodes. Here's a way to do that:
 
 .. code-block:: console
-
-def get_aws_credentials():
-    """Read in your AWS credentials file and convert to environment variables."""
-    parser = configparser.RawConfigParser()
+   
+   def get_aws_credentials():
+      """Read in your AWS credentials file and convert to environment variables."""
+      parser = configparser.RawConfigParser()
     
-    parser.read(os.path.expanduser('~/.aws/config'))
-    config = parser.items('default')
+      parser.read(os.path.expanduser('~/.aws/config'))
+      config = parser.items('default')
     
-    parser.read(os.path.expanduser('~/.aws/credentials'))
-    credentials = parser.items('default')
+      parser.read(os.path.expanduser('~/.aws/credentials'))
+      credentials = parser.items('default')
     
-    all_credentials = {key.upper(): value for key, value in [*config, *credentials]}
-    with contextlib.suppress(KeyError):
-        all_credentials["AWS_REGION"] = all_credentials.pop("REGION")
-        
-    return all_credentials
+      all_credentials = {key.upper(): value for key, value in [*config, *credentials]}
+      with contextlib.suppress(KeyError):
+      all_credentials["AWS_REGION"] = all_credentials.pop("REGION")
+      return all_credentials
 
 .. code-block:: console
 
    env_vars = get_aws_credentials()
 
- Then at the launch of EC2Cluster specify the env_vars
+Then at the launch of EC2Cluster specify the env_vars
  
 .. code-block:: console
 
