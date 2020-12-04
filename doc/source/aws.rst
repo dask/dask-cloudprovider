@@ -28,7 +28,7 @@ Elastic Compute Cloud (EC2)
 .. autoclass:: EC2Cluster
    :members:
 
-If you are using EC2Cluster you would need to pass your aws credentials to the workers nodes. Here's a way to do that:
+If you are using EC2Cluster you would need to pass your aws credentials to the workers nodes. Here's a way to do that if you can read your aws credentials from the local machine:
 
 .. code-block:: console
    
