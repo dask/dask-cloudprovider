@@ -29,7 +29,8 @@ Elastic Compute Cloud (EC2)
    :members:
 
 If you are using EC2Cluster you would need to pass your aws credentials to the workers nodes. Here's a way to do that:
-```
+.. code-block:: console
+
 def get_aws_credentials():
     """Read in your AWS credentials file and convert to environment variables."""
     parser = configparser.RawConfigParser()
@@ -45,12 +46,13 @@ def get_aws_credentials():
         all_credentials["AWS_REGION"] = all_credentials.pop("REGION")
         
     return all_credentials
- ```
- ```
+
+.. code-block:: console
  env_vars = get_aws_credentials()
- ```
+
  Then at the launch of EC2Cluster specify the env_vars
- ```
+ 
+.. code-block:: console
  from dask_cloudprovider.aws import EC2Cluster
 from dask.distributed import wait
 
@@ -61,7 +63,7 @@ cluster = EC2Cluster(ami="ami-06d62f645899df7de",  # Example Deep Learning AMI (
                              n_workers=2,
                              bootstrap=False,
                              filesystem_size=120, env_vars=env_vars )
-```
+
 
 Elastic Container Service (ECS)
 -------------------------------
