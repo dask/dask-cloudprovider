@@ -49,11 +49,13 @@ def get_aws_credentials():
     return all_credentials
 
 .. code-block:: console
+
    env_vars = get_aws_credentials()
 
  Then at the launch of EC2Cluster specify the env_vars
  
 .. code-block:: console
+
    from dask_cloudprovider.aws import EC2Cluster
    from dask.distributed import wait
 
