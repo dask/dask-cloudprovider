@@ -309,6 +309,7 @@ class EC2Cluster(VMCluster):
     >>> cluster.scale(5)
 
     RAPIDS Cluster.
+    
     # Get AWS credentials from local machine to AWS EC2 workers
     >>> def get_aws_credentials():
         """Read in your AWS credentials file and convert to environment variables."""
