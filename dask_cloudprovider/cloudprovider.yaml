@@ -46,6 +46,10 @@ cloudprovider:
     # subnet_id: "" # Subnet ID for instances to. Defaults to all subnets in default VPC.
     # security_groups: [] # Security groups for instances. Will create a minimal Dask security group by default.
     filesystem_size: 40 # Default root filesystem size for scheduler and worker VMs in GB
+    key_name: null # SSH Key name to assign to instances
+    iam_instance_profile: {} # Iam role to assign to instances
+      # Arn: 'string'
+      # Name: 'string'
 
   azure:
     location: null # The Azure location to launch your cluster
