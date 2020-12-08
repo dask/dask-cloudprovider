@@ -304,6 +304,28 @@ class EC2Cluster(VMCluster):
         EC2 Instance, dask-worker-{cluster uuid}-{worker uuid}, Dask Workers, "`EC2 Pricing
         <https://aws.amazon.com/ec2/pricing/>`_"
 
+    **Credentials**
+
+    In order for Dask workers to access AWS resources such as S3 they will need credentials.
+
+    The best practice way of doing this is to pass an IAM role to be used by workers. See the ``iam_instance_profile``
+    keyword for more information.
+
+    Alternatively you could read in your local credentials created with ``aws configure`` and pass them along
+    as environment variables. Here is a small example to help you do that.
+
+    >>> def get_aws_credentials():
+    ...     parser = configparser.RawConfigParser()
+    ...     parser.read(os.path.expanduser('~/.aws/config'))
+    ...     config = parser.items('default')
+    ...     parser.read(os.path.expanduser('~/.aws/credentials'))
+    ...     credentials = parser.items('default')
+    ...     all_credentials = {key.upper(): value for key, value in [*config, *credentials]}
+    ...     with contextlib.suppress(KeyError):
+    ...     all_credentials["AWS_REGION"] = all_credentials.pop("REGION")
+    ...     return all_credentials
+    >>> cluster = EC2Cluster(env_vars=get_aws_credentials())
+
     **Manual cleanup**
 
     If for some reason the cluster manager is terminated without being able to perform cleanup
@@ -332,12 +354,17 @@ class EC2Cluster(VMCluster):
 
     RAPIDS Cluster.
 
-    >>> cluster = EC2Cluster(ami="ami-0c7c7d78f752f8f17",  # Example Deep Learning AMI (Ubuntu 18.04)
-                             docker_image="rapidsai/rapidsai:cuda10.1-runtime-ubuntu18.04",
-                             instance_type="p3.2xlarge",
-                             worker_module="dask_cuda.cli.dask_cuda_worker",
-                             bootstrap=False,
-                             filesystem_size=120)
+
+    >>> env_vars =
+    >>> cluster = EC2Cluster(ami="ami-06d62f645899df7de",  # Deep Learning AMI Ubuntu 18.04 (these are region specific)
+    ...                      docker_image="rapidsai/rapidsai:cuda11.0-runtime-ubuntu18.04",
+    ...                      instance_type="g4dn.xlarge",
+    ...                      worker_class="dask_cuda.CUDAWorker",
+    ...                      n_workers=2,
+    ...                      bootstrap=False,
+    ...                      filesystem_size=120,
+    ...                      env_vars=get_aws_credentials()) # Pass credentials to Cluster see Notes section for info
+=======
 
     Enable SSH for debugging
 
