@@ -1,4 +1,5 @@
 import asyncio
+import random
 
 import dask
 from dask_cloudprovider.generic.vmcluster import (
@@ -137,6 +138,8 @@ class EC2Instance(VMInterface):
                 vm_kwargs["IamInstanceProfile"] = self.iam_instance_profile
 
             if self.availability_zone:
+                if isinstance(self.availability_zone, list):
+                    self.availability_zone = random.choice(self.availability_zone)
                 vm_kwargs["Placement"] = {"AvailabilityZone": self.availability_zone}
 
             response = await client.run_instances(**vm_kwargs)
@@ -212,8 +215,10 @@ class EC2Cluster(VMCluster):
     ----------
     region: string (optional)
         The region to start you clusters. By default this will be detected from your config.
-    availability_zone: string (optional)
+    availability_zone: string or List(string) (optional)
         The availability zone to start you clusters. By default AWS will select the AZ with most free capacity.
+        If you specify more than one then scheduler and worker VMs will be randomly assigned to one of your
+        chosen AZs.
     bootstrap: bool (optional)
         It is assumed that the ``ami`` will not have Docker installed (or the NVIDIA drivers for GPU instances).
         If ``bootstrap`` is ``True`` these dependencies will be installed on instance start. If you are using
