@@ -1,4 +1,5 @@
 import asyncio
+import random
 
 import dask
 from dask_cloudprovider.generic.vmcluster import (
@@ -35,6 +36,7 @@ class EC2Instance(VMInterface):
         config,
         *args,
         region=None,
+        availability_zone=None,
         bootstrap=None,
         ami=None,
         docker_image=None,
@@ -54,6 +56,7 @@ class EC2Instance(VMInterface):
         self.cluster = cluster
         self.config = config
         self.region = region
+        self.availability_zone = availability_zone
         self.bootstrap = bootstrap
         self.ami = ami
         self.docker_image = docker_image or self.config.get("docker_image")
@@ -134,6 +137,11 @@ class EC2Instance(VMInterface):
             if self.iam_instance_profile:
                 vm_kwargs["IamInstanceProfile"] = self.iam_instance_profile
 
+            if self.availability_zone:
+                if isinstance(self.availability_zone, list):
+                    self.availability_zone = random.choice(self.availability_zone)
+                vm_kwargs["Placement"] = {"AvailabilityZone": self.availability_zone}
+
             response = await client.run_instances(**vm_kwargs)
             [self.instance] = response["Instances"]
             await client.create_tags(
@@ -207,6 +215,10 @@ class EC2Cluster(VMCluster):
     ----------
     region: string (optional)
         The region to start you clusters. By default this will be detected from your config.
+    availability_zone: string or List(string) (optional)
+        The availability zone to start you clusters. By default AWS will select the AZ with most free capacity.
+        If you specify more than one then scheduler and worker VMs will be randomly assigned to one of your
+        chosen AZs.
     bootstrap: bool (optional)
         It is assumed that the ``ami`` will not have Docker installed (or the NVIDIA drivers for GPU instances).
         If ``bootstrap`` is ``True`` these dependencies will be installed on instance start. If you are using
@@ -382,6 +394,7 @@ class EC2Cluster(VMCluster):
     def __init__(
         self,
         region=None,
+        availability_zone=None,
         bootstrap=None,
         auto_shutdown=None,
         ami=None,
@@ -400,6 +413,11 @@ class EC2Cluster(VMCluster):
         self.scheduler_class = EC2Scheduler
         self.worker_class = EC2Worker
         self.region = region if region is not None else self.config.get("region")
+        self.availability_zone = (
+            availability_zone
+            if availability_zone is not None
+            else self.config.get("availability_zone")
+        )
         self.bootstrap = (
             bootstrap if bootstrap is not None else self.config.get("bootstrap")
         )
@@ -442,6 +460,7 @@ class EC2Cluster(VMCluster):
             "cluster": self,
             "config": self.config,
             "region": self.region,
+            "availability_zone": self.availability_zone,
             "bootstrap": self.bootstrap,
             "ami": self.ami,
             "docker_image": docker_image or self.config.get("docker_image"),

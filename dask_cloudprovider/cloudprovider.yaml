@@ -36,6 +36,7 @@ cloudprovider:
 
   ec2:
     region: null # AWS region to create cluster. Defaults to environment or account default region.
+    availability_zone: null # The availability zone to start you clusters. By default AWS will select the AZ with most free capacity.
     bootstrap: true # It is assumed that the AMI does not have Docker and needs bootstrapping. Set this to false if using a custom AMI with Docker already installed.
     auto_shutdown: true # Shutdown instances automatically if the scheduler or worker services time out.
     # worker_command: "dask-worker" # The command for workers to run. If the instance_type is a GPU instance dask-cuda-worker will be used.
