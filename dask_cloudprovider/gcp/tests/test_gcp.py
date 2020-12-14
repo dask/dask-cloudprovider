@@ -120,7 +120,7 @@ async def test_create_rapids_cluster():
         worker_options={"rmm_pool_size": "15GB"},
         asynchronous=True,
         auto_shutdown=True,
-        boostrap=False,
+        bootstrap=False,
     ) as cluster:
 
         assert cluster.status == Status.running
@@ -150,7 +150,8 @@ async def test_create_rapids_cluster():
 def test_create_rapids_cluster_sync():
     skip_without_credentials()
     cluster = GCPCluster(
-        source_image="projects/nv-ai-infra/global/images/ngc-docker-11-20200916",
+        source_image="projects/nv-ai-infra/global/images/packer-1607527229",
+        network="dask-gcp-network-test",
         zone="us-east1-c",
         machine_type="n1-standard-1",
         filesystem_size=50,
@@ -160,7 +161,7 @@ def test_create_rapids_cluster_sync():
         worker_class="dask_cuda.CUDAWorker",
         worker_options={"rmm_pool_size": "15GB"},
         asynchronous=False,
-        boostrap=False,
+        bootstrap=False,
     )
 
     cluster.scale(1)
@@ -178,5 +179,4 @@ def test_create_rapids_cluster_sync():
     for w, res in results.items():
         assert "total" in res["gpu"][0]["fb_memory_usage"].keys()
         print(res)
-
     cluster.close()
