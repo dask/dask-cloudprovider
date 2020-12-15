@@ -280,10 +280,10 @@ class GCPScheduler(SchedulerMixin, GCPInstance):
 
         if self.config.get("public_ingress", True):
             # scheduler is publicly available
-            self.address = f"tcp://{self.external_ip}:8786"
+            self.address = f"{self.cluster.protocol}://{self.external_ip}:8786"
         else:
             # scheduler is only accessible within VPC
-            self.address = f"tcp://{self.internal_ip}:8786"
+            self.address = f"{self.cluster.protocol}://{self.internal_ip}:8786"
         await self.wait_for_scheduler()
 
         # need to reserve internal IP for workers
@@ -307,7 +307,9 @@ class GCPWorker(GCPInstance):
         self.scheduler = scheduler
         self.worker_class = worker_class
         self.name = f"dask-{self.cluster.uuid}-worker-{str(uuid.uuid4())[:8]}"
-        internal_scheduler = f"{self.cluster.scheduler_internal_ip}:8786"
+        internal_scheduler = (
+            f"{self.cluster.protocol}://{self.cluster.scheduler_internal_ip}:8786"
+        )
         self.command = " ".join(
             [
                 self.set_env,
