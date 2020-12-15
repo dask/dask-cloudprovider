@@ -93,6 +93,7 @@ cloudprovider:
   gcp:
     source_image: "projects/ubuntu-os-cloud/global/images/ubuntu-minimal-1804-bionic-v20201014" # the gcp image to use for all instances
     zone: "us-east1-c" # the zone of of where to launch the instances
+    network: "default" # the network/subnetwork in GCP to use
     projectid: "" # name of the google cloud project
     machine_type: "n1-standard-1" # size of the machine type to use
     filesystem_size: 50 # amount in GBs of hard drive space to allocate

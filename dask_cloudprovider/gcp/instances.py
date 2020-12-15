@@ -114,7 +114,7 @@ class GCPInstance(VMInterface):
             "networkInterfaces": [
                 {
                     "kind": "compute#networkInterface",
-                    "subnetwork": f"projects/{self.projectid}/regions/{self.general_zone}/subnetworks/{self.network or 'default'}",
+                    "subnetwork": f"projects/{self.projectid}/regions/{self.general_zone}/subnetworks/{self.network}",
                     "aliasIpRanges": [],
                 }
             ],
@@ -369,7 +369,12 @@ class GCPCluster(VMCluster):
     zone: str
         The GCP zone to launch you cluster in. A full list can be obtained with ``gcloud compute zones list``.
     network: str
-        The GCP VPC network/subnetwork to use.  The default is `default`
+        The GCP VPC network/subnetwork to use.  The default is `default`.  If using firewall rules,
+        please ensure the follwing accesses are configured:
+            - egress 0.0.0.0/0 on all ports for downloading docker images and general data access
+            - ingress 10.0.0.0/8 on all ports for internal communication of workers
+            - ingress 0.0.0.0/0 on 8786-8787 for external accessibility of the dashboard/scheduler
+            - (optional) ingress 0.0.0.0./0 on 22 for ssh access
     machine_type: str
         The VM machine_type. You can get a full list with ``gcloud compute machine-types list``.
         The default is ``n1-standard-1`` which is 3.75GB RAM and 1 vCPU
