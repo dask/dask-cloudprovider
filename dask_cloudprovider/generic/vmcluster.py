@@ -216,7 +216,7 @@ class VMCluster(SpecCluster):
         scheduler_options: dict = {},
         docker_image="daskdev/dask:latest",
         env_vars: dict = {},
-        security: bool = None,
+        security: bool = True,
         protocol: str = None,
         **kwargs,
     ):
@@ -226,7 +226,7 @@ class VMCluster(SpecCluster):
             )
         self._n_workers = n_workers
 
-        if security is None:
+        if not security:
             # Falsey values load the default configuration
             self.security = Security()
         elif security is True:
