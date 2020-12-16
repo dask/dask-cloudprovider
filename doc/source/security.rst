@@ -27,7 +27,7 @@ When a cluster is launched with any of these cluster managers a set of temporary
 via their startup script. All communication between the client, scheduler and workers will then be encrypted and only clients and workers with
 valid certificates will be able to connect to the scheduler.
 
-You can also specify your own certificates using the :class:`distributed.Security` object.
+You can also specify your own certificates using the :class:`distributed.security.Security` object.
 
 .. code-block:: python
 
