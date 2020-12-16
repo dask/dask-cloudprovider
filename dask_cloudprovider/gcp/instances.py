@@ -54,6 +54,7 @@ class GCPInstance(VMInterface):
         filesystem_size=None,
         source_image=None,
         docker_image=None,
+        network=None,
         env_vars=None,
         ngpus=None,
         gpu_type=None,
@@ -62,6 +63,7 @@ class GCPInstance(VMInterface):
         **kwargs,
     ):
         super().__init__(**kwargs)
+
         self.cluster = cluster
         self.config = config
         self.projectid = projectid or self.config.get("projectid")
@@ -76,6 +78,7 @@ class GCPInstance(VMInterface):
         self.env_vars = env_vars
         self.filesystem_size = filesystem_size or self.config.get("filesystem_size")
         self.ngpus = ngpus or self.config.get("ngpus")
+        self.network = network or self.config.get("network")
         self.gpu_type = gpu_type or self.config.get("gpu_type")
         self.gpu_instance = gpu_instance
         self.bootstrap = bootstrap
@@ -111,7 +114,7 @@ class GCPInstance(VMInterface):
             "networkInterfaces": [
                 {
                     "kind": "compute#networkInterface",
-                    "subnetwork": f"projects/{self.projectid}/regions/{self.general_zone}/subnetworks/default",
+                    "subnetwork": f"projects/{self.projectid}/regions/{self.general_zone}/subnetworks/{self.network}",
                     "aliasIpRanges": [],
                 }
             ],
@@ -365,6 +368,13 @@ class GCPCluster(VMCluster):
         https://cloudprovider.dask.org/en/latest/gcp.html#project-id
     zone: str
         The GCP zone to launch you cluster in. A full list can be obtained with ``gcloud compute zones list``.
+    network: str
+        The GCP VPC network/subnetwork to use.  The default is `default`.  If using firewall rules,
+        please ensure the follwing accesses are configured:
+            - egress 0.0.0.0/0 on all ports for downloading docker images and general data access
+            - ingress 10.0.0.0/8 on all ports for internal communication of workers
+            - ingress 0.0.0.0/0 on 8786-8787 for external accessibility of the dashboard/scheduler
+            - (optional) ingress 0.0.0.0./0 on 22 for ssh access
     machine_type: str
         The VM machine_type. You can get a full list with ``gcloud compute machine-types list``.
         The default is ``n1-standard-1`` which is 3.75GB RAM and 1 vCPU
@@ -500,6 +510,7 @@ class GCPCluster(VMCluster):
         self,
         projectid=None,
         zone=None,
+        network=None,
         machine_type=None,
         source_image=None,
         docker_image=None,
@@ -536,6 +547,7 @@ class GCPCluster(VMCluster):
             "zone": zone or self.config.get("zone"),
             "machine_type": self.machine_type,
             "ngpus": ngpus or self.config.get("ngpus"),
+            "network": network or self.config.get("network"),
             "gpu_type": gpu_type or self.config.get("gpu_type"),
             "gpu_instance": self.gpu_instance,
             "bootstrap": self.bootstrap,
