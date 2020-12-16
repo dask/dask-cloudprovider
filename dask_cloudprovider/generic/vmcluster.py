@@ -227,8 +227,7 @@ class VMCluster(SpecCluster):
         self._n_workers = n_workers
 
         if not security:
-            # Falsey values load the default configuration
-            self.security = Security()
+            self.security = None
         elif security is True:
             # True indicates self-signed temporary credentials should be used
             self.security = Security.temporary()
