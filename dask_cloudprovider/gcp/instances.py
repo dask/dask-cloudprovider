@@ -12,6 +12,7 @@ from dask_cloudprovider.generic.vmcluster import (
     VMInterface,
     SchedulerMixin,
 )
+from dask_cloudprovider.gcp.utils import build_request
 
 
 from distributed.core import Status
@@ -191,10 +192,10 @@ class GCPInstance(VMInterface):
         self.gcp_config = self.create_gcp_config()
 
         try:
-            inst = (
+            inst = await self.cluster.call_async(
                 self.cluster.compute.instances()
                 .insert(project=self.projectid, zone=self.zone, body=self.gcp_config)
-                .execute()
+                .execute
             )
             self.gcp_inst = inst
             self.id = self.gcp_inst["id"]
@@ -202,12 +203,12 @@ class GCPInstance(VMInterface):
             # something failed
             print(str(e))
             raise Exception(str(e))
-        while self.update_status() != "RUNNING":
+        while await self.update_status() != "RUNNING":
             await asyncio.sleep(0.5)
 
-        self.internal_ip = self.get_internal_ip()
+        self.internal_ip = await self.get_internal_ip()
         if self.config.get("public_ingress", True):
-            self.external_ip = self.get_external_ip()
+            self.external_ip = await self.get_external_ip()
         else:
             self.external_ip = None
         self.cluster._log(
@@ -215,25 +216,33 @@ class GCPInstance(VMInterface):
         )
         return self.internal_ip, self.external_ip
 
-    def get_internal_ip(self):
+    async def get_internal_ip(self):
         return (
-            self.cluster.compute.instances()
-            .list(project=self.projectid, zone=self.zone, filter=f"name={self.name}")
-            .execute()["items"][0]["networkInterfaces"][0]["networkIP"]
-        )
+            await self.cluster.call_async(
+                self.cluster.compute.instances()
+                .list(
+                    project=self.projectid, zone=self.zone, filter=f"name={self.name}"
+                )
+                .execute
+            )
+        )["items"][0]["networkInterfaces"][0]["networkIP"]
 
-    def get_external_ip(self):
+    async def get_external_ip(self):
         return (
-            self.cluster.compute.instances()
-            .list(project=self.projectid, zone=self.zone, filter=f"name={self.name}")
-            .execute()["items"][0]["networkInterfaces"][0]["accessConfigs"][0]["natIP"]
-        )
+            await self.cluster.call_async(
+                self.cluster.compute.instances()
+                .list(
+                    project=self.projectid, zone=self.zone, filter=f"name={self.name}"
+                )
+                .execute
+            )
+        )["items"][0]["networkInterfaces"][0]["accessConfigs"][0]["natIP"]
 
-    def update_status(self):
-        d = (
+    async def update_status(self):
+        d = await self.cluster.call_async(
             self.cluster.compute.instances()
             .list(project=self.projectid, zone=self.zone, filter=f"name={self.name}")
-            .execute()
+            .execute
         )
         self.gcp_inst = d
 
@@ -253,9 +262,11 @@ class GCPInstance(VMInterface):
 
     async def close(self):
         self.cluster._log(f"Closing Instance: {self.name}")
-        self.cluster.compute.instances().delete(
-            project=self.projectid, zone=self.zone, instance=self.name
-        ).execute()
+        await self.cluster.call_async(
+            self.cluster.compute.instances()
+            .delete(project=self.projectid, zone=self.zone, instance=self.name)
+            .execute
+        )
 
 
 class GCPScheduler(SchedulerMixin, GCPInstance):
@@ -565,8 +576,14 @@ class GCPCompute:
         self._compute = self.refresh_client()
 
     def refresh_client(self):
+
         if os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", False):
-            return googleapiclient.discovery.build("compute", "v1")
+            import google.oauth2.service_account  # google-auth
+
+            creds = google.oauth2.service_account.Credentials.from_service_account_file(
+                os.environ["GOOGLE_APPLICATION_CREDENTIALS"],
+                scopes=["https://www.googleapis.com/auth/cloud-platform"],
+            )
         else:
             import google.auth.credentials  # google-auth
 
@@ -582,7 +599,9 @@ class GCPCompute:
                     # take first row
                     f_.write(creds_rows[0][1])
                 creds, _ = google.auth.load_credentials_from_file(filename=f)
-            return googleapiclient.discovery.build("compute", "v1", credentials=creds)
+        return googleapiclient.discovery.build(
+            "compute", "v1", credentials=creds, requestBuilder=build_request(creds)
+        )
 
     def instances(self):
         try:

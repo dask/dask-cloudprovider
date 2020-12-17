@@ -71,9 +71,9 @@ async def test_create_cluster():
 
         assert cluster.status == Status.running
 
-        cluster.scale(1)
+        cluster.scale(2)
         await cluster
-        assert len(cluster.workers) == 1
+        assert len(cluster.workers) == 2
 
         async with Client(cluster, asynchronous=True) as client:
 
