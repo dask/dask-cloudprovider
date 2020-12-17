@@ -60,20 +60,20 @@ class Droplet(VMInterface):
                 env_vars=self.env_vars,
             ),
         )
-        self.droplet.create()
+        await self.cluster.call_async(self.droplet.create)
         for action in self.droplet.get_actions():
             while action.status != "completed":
                 action.load()
                 await asyncio.sleep(0.1)
         while self.droplet.ip_address is None:
-            self.droplet.load()
+            await self.cluster.call_async(self.droplet.load)
             await asyncio.sleep(0.1)
         self.cluster._log(f"Created droplet {self.name}")
 
         return self.droplet.ip_address
 
     async def destroy_vm(self):
-        self.droplet.destroy()
+        await self.cluster.call_async(self.droplet.destroy)
         self.cluster._log(f"Terminated droplet {self.name}")
 
 
