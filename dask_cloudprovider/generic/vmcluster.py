@@ -234,6 +234,21 @@ class VMCluster(SpecCluster):
 
         super().__init__(**kwargs)
 
+    async def call_async(self, f, *args, **kwargs):
+        """Run a blocking function in a thread as a coroutine.
+
+        This can only be used to make IO-bound operations non-blocking due to the GIL.
+
+        As of Python 3.9 this can be replaced with :func:`asyncio.to_thread`.
+        Once 3.9 is our minimum supported version this can be removed/replaced.
+
+        """
+        [done], _ = await asyncio.wait(
+            fs={self.loop.run_in_executor(None, lambda: f(*args, **kwargs))},
+            return_when=asyncio.ALL_COMPLETED,
+        )
+        return done.result()
+
     async def _start(
         self,
     ):
