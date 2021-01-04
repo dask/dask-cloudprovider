@@ -435,7 +435,7 @@ class EC2Cluster(VMCluster):
         self.gpu_instance = self.instance_type.startswith(("p", "g"))
         self.vpc = vpc if vpc is not None else self.config.get("vpc")
         self.subnet_id = (
-            subnet_id if subnet_id is None else self.config.get("subnet_id")
+            subnet_id if subnet_id is not None else self.config.get("subnet_id")
         )
         self.security_groups = (
             security_groups
