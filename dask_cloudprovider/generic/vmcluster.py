@@ -42,7 +42,7 @@ class VMInterface(ProcessInterface):
         _, address = self.address.split("://")
         ip, port = address.split(":")
 
-        self.cluster._log("Waiting for scheduler to run")
+        self.cluster._log(f"Waiting for scheduler to run at {ip}:{port}")
         while not is_socket_open(ip, port):
             await asyncio.sleep(0.1)
         self.cluster._log("Scheduler is running")

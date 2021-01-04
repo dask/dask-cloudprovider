@@ -12,8 +12,7 @@ from dask_cloudprovider.generic.vmcluster import (
     VMInterface,
     SchedulerMixin,
 )
-from dask_cloudprovider.gcp.utils import build_request
-
+from dask_cloudprovider.gcp.utils import build_request, is_inside_gce
 
 from distributed.core import Status
 
@@ -293,11 +292,15 @@ class GCPScheduler(SchedulerMixin, GCPInstance):
         self.cluster._log("Creating scheduler instance")
         self.internal_ip, self.external_ip = await self.create_vm()
 
-        if self.config.get("public_ingress", True):
-            # scheduler is publicly available
+        if self.config.get("public_ingress", True) and not is_inside_gce():
+            # scheduler must be publicly available, and firewall
+            # needs to be in place to allow access to 8786 on
+            # the external IP
             self.address = f"tcp://{self.external_ip}:8786"
         else:
-            # scheduler is only accessible within VPC
+            # if the client is running inside GCE environment
+            # it's better to use internal IP, which doesn't
+            # require firewall setup
             self.address = f"tcp://{self.internal_ip}:8786"
         await self.wait_for_scheduler()
 
