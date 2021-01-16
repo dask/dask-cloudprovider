@@ -1388,7 +1388,9 @@ async def _cleanup_stale_resources():
                 )
             )["clusters"]
             for cluster in clusters:
-                if set(DEFAULT_TAGS.items()) <= set(aws_to_dict(cluster["tags"]).items()):
+                if set(DEFAULT_TAGS.items()) <= set(
+                    aws_to_dict(cluster["tags"]).items()
+                ):
                     if cluster["runningTasksCount"] == 0:
                         clusters_to_delete.append(cluster["clusterArn"])
                     else:
@@ -1407,7 +1409,9 @@ async def _cleanup_stale_resources():
                 task_definition_cluster = aws_to_dict(task_definition["tags"]).get(
                     "cluster"
                 )
-                if set(DEFAULT_TAGS.items()) <= set(aws_to_dict(task_definition["tags"]).items()):
+                if set(DEFAULT_TAGS.items()) <= set(
+                    aws_to_dict(task_definition["tags"]).items()
+                ):
                     if (
                         task_definition_cluster is None
                         or task_definition_cluster not in active_clusters
