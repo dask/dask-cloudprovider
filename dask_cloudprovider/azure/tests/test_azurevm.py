@@ -114,3 +114,10 @@ async def test_create_rapids_cluster_sync():
             for w, res in results.items():
                 assert "total" in res["gpu"][0]["fb_memory_usage"].keys()
                 print(res)
+
+
+@pytest.mark.asyncio
+@skip_without_credentials
+async def test_render_cloud_init():
+    cloud_init = AzureVMCluster.get_cloud_init(docker_args="--privileged")
+    assert " --privileged " in cloud_init

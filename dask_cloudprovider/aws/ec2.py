@@ -111,13 +111,7 @@ class EC2Instance(VMInterface):
                 "MaxCount": 1,
                 "MinCount": 1,
                 "Monitoring": {"Enabled": False},
-                "UserData": self.cluster.render_cloud_init(
-                    image=self.docker_image,
-                    command=self.command,
-                    gpu_instance=self.gpu_instance,
-                    bootstrap=self.bootstrap,
-                    env_vars=self.env_vars,
-                ),
+                "UserData": self.cluster.render_process_cloud_init(self),
                 "InstanceInitiatedShutdownBehavior": "terminate",
                 "NetworkInterfaces": [
                     {
@@ -291,6 +285,8 @@ class EC2Cluster(VMCluster):
         For GPU instance types the Docker image much have NVIDIA drivers and ``dask-cuda`` installed.
 
         By default the ``daskdev/dask:latest`` image will be used.
+    docker_args: string (optional)
+        Extra command line arguments to pass to Docker.
     env_vars: dict (optional)
         Environment variables to be passed to the worker.
     silence_logs: bool

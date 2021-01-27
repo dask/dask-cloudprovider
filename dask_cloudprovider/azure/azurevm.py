@@ -118,14 +118,7 @@ class AzureVM(VMInterface):
 
         cloud_init = (
             base64.b64encode(
-                self.cluster.render_cloud_init(
-                    image=self.docker_image,
-                    command=self.command,
-                    gpu_instance=self.gpu_instance,
-                    bootstrap=self.bootstrap,
-                    auto_shutdown=self.auto_shutdown,
-                    env_vars=self.env_vars,
-                ).encode("ascii")
+                self.cluster.render_process_cloud_init(self).encode("ascii")
             )
             .decode("utf-8")
             .replace("\n", "")
@@ -284,6 +277,8 @@ class AzureVMCluster(VMCluster):
         For GPU instance types the Docker image much have NVIDIA drivers and ``dask-cuda`` installed.
 
         By default the ``daskdev/dask:latest`` image will be used.
+    docker_args: string (optional)
+        Extra command line arguments to pass to Docker.
     silence_logs: bool
         Whether or not we should silence logging when setting up the cluster.
     asynchronous: bool

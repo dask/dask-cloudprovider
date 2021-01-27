@@ -63,3 +63,11 @@ async def test_create_cluster(cluster):
             return x + 1
 
         assert await client.submit(inc, 10).result() == 11
+
+
+@pytest.mark.asyncio
+async def test_get_cloud_init():
+    cloud_init = DropletCluster.get_cloud_init(
+        docker_args="--privileged",
+    )
+    assert " --privileged " in cloud_init

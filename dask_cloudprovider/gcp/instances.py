@@ -60,6 +60,7 @@ class GCPInstance(VMInterface):
         gpu_type=None,
         bootstrap=None,
         gpu_instance=None,
+        auto_shutdown=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -82,6 +83,7 @@ class GCPInstance(VMInterface):
         self.gpu_type = gpu_type or self.config.get("gpu_type")
         self.gpu_instance = gpu_instance
         self.bootstrap = bootstrap
+        self.auto_shutdown = auto_shutdown
 
         self.general_zone = "-".join(self.zone.split("-")[:2])  # us-east1-c -> us-east1
 
@@ -180,14 +182,7 @@ class GCPInstance(VMInterface):
 
     async def create_vm(self):
 
-        self.cloud_init = self.cluster.render_cloud_init(
-            image=self.docker_image,
-            command=self.command,
-            gpu_instance=self.gpu_instance,
-            bootstrap=self.bootstrap,
-            auto_shutdown=self.cluster.auto_shutdown,
-            env_vars=self.env_vars,
-        )
+        self.cloud_init = self.cluster.render_process_cloud_init(self)
 
         self.gcp_config = self.create_gcp_config()
 
@@ -415,6 +410,8 @@ class GCPCluster(VMCluster):
         For GPU instance types the Docker image much have NVIDIA drivers and ``dask-cuda`` installed.
 
         By default the ``daskdev/dask:latest`` image will be used.
+    docker_args: string (optional)
+        Extra command line arguments to pass to Docker.
     ngpus: int (optional)
         The number of GPUs to atatch to the instance.
         Default is ``0``.
@@ -566,6 +563,7 @@ class GCPCluster(VMCluster):
             "gpu_type": gpu_type or self.config.get("gpu_type"),
             "gpu_instance": self.gpu_instance,
             "bootstrap": self.bootstrap,
+            "auto_shutdown": self.auto_shutdown,
         }
         self.scheduler_options = {**self.options}
         self.worker_options = {**self.options}
