@@ -9,6 +9,7 @@ import dask.config
 from distributed.core import Status
 from distributed.worker import Worker as _Worker
 from distributed.scheduler import Scheduler as _Scheduler
+from distributed.security import Security
 from distributed.deploy.spec import SpecCluster, ProcessInterface
 from distributed.utils import warn_on_duration, serialize_for_cli, cli_keywords
 
@@ -83,7 +84,7 @@ class SchedulerMixin(object):
     async def start(self):
         self.cluster._log("Creating scheduler instance")
         ip = await self.create_vm()
-        self.address = f"tcp://{ip}:8786"
+        self.address = f"{self.protocol}://{ip}:8786"
         await self.wait_for_scheduler()
         await super().start()
 
@@ -197,7 +198,7 @@ class VMCluster(SpecCluster):
     security : Security or bool, optional
         Configures communication security in this cluster. Can be a security
         object, or True. If True, temporary self-signed credentials will
-        be created automatically.
+        be created automatically. Default is ``True``.
 
     """
 
@@ -221,6 +222,8 @@ class VMCluster(SpecCluster):
         docker_image="daskdev/dask:latest",
         docker_args: str = "",
         env_vars: dict = {},
+        security: bool = True,
+        protocol: str = None,
         **kwargs,
     ):
         if self.scheduler_class is None or self.worker_class is None:
@@ -228,21 +231,57 @@ class VMCluster(SpecCluster):
                 "VMCluster is not intended to be used directly. See docstring for more info."
             )
         self._n_workers = n_workers
+
+        if not security:
+            self.security = None
+        elif security is True:
+            # True indicates self-signed temporary credentials should be used
+            self.security = Security.temporary()
+        elif not isinstance(security, Security):
+            raise TypeError("security must be a Security object")
+        else:
+            self.security = security
+
+        if protocol is None:
+            if self.security and self.security.require_encryption:
+                self.protocol = "tls"
+            else:
+                self.protocol = "tcp"
+        else:
+            self.protocol = protocol
+
+        if self.security and self.security.require_encryption:
+            dask.config.set(
+                {
+                    "distributed.comm.default-scheme": self.protocol,
+                    "distributed.comm.require-encryption": True,
+                    "distributed.comm.tls.ca-file": self.security.tls_ca_file,
+                    "distributed.comm.tls.scheduler.key": self.security.tls_scheduler_key,
+                    "distributed.comm.tls.scheduler.cert": self.security.tls_scheduler_cert,
+                    "distributed.comm.tls.worker.key": self.security.tls_worker_key,
+                    "distributed.comm.tls.worker.cert": self.security.tls_worker_cert,
+                    "distributed.comm.tls.client.key": self.security.tls_client_key,
+                    "distributed.comm.tls.client.cert": self.security.tls_client_cert,
+                }
+            )
+
         image = self.scheduler_options.get("docker_image", False) or docker_image
         self.options["docker_image"] = image
         self.scheduler_options["docker_image"] = image
         self.scheduler_options["env_vars"] = env_vars
+        self.scheduler_options["protocol"] = protocol
+        self.scheduler_options["scheduler_options"] = scheduler_options
         self.worker_options["env_vars"] = env_vars
         self.options["docker_args"] = docker_args
         self.scheduler_options["docker_args"] = docker_args
         self.worker_options["docker_args"] = docker_args
         self.worker_options["docker_image"] = image
         self.worker_options["worker_class"] = worker_class
+        self.worker_options["protocol"] = protocol
         self.worker_options["worker_options"] = worker_options
-        self.scheduler_options["scheduler_options"] = scheduler_options
         self.uuid = str(uuid.uuid4())[:8]
 
-        super().__init__(**kwargs)
+        super().__init__(**kwargs, security=self.security)
 
     async def call_async(self, f, *args, **kwargs):
         """Run a blocking function in a thread as a coroutine.

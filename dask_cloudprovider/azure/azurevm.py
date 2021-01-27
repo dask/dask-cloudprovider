@@ -287,7 +287,7 @@ class AzureVMCluster(VMCluster):
     security : Security or bool, optional
         Configures communication security in this cluster. Can be a security
         object, or True. If True, temporary self-signed credentials will
-        be created automatically.
+        be created automatically. Default is ``True``.
 
     Examples
     --------

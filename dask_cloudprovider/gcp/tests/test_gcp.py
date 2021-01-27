@@ -56,8 +56,7 @@ async def test_init():
 @pytest.mark.asyncio
 async def test_get_cloud_init():
     skip_without_credentials()
-
-    cloud_init = GCPCluster.get_cloud_init(docker_args="--privileged")
+    cloud_init = GCPCluster.get_cloud_init(security=True, docker_args="--privileged")
     assert "dask-scheduler" in cloud_init
     assert "# Bootstrap" in cloud_init
     assert " --privileged " in cloud_init
@@ -68,7 +67,9 @@ async def test_get_cloud_init():
 async def test_create_cluster():
     skip_without_credentials()
 
-    async with GCPCluster(asynchronous=True, env_vars={"FOO": "bar"}) as cluster:
+    async with GCPCluster(
+        asynchronous=True, env_vars={"FOO": "bar"}, security=True
+    ) as cluster:
 
         assert cluster.status == Status.running
 
