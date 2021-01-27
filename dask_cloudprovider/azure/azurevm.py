@@ -63,8 +63,10 @@ class AzureVM(VMInterface):
         self.env_vars = env_vars
 
     async def create_vm(self):
-        [subnet_info, *_] = self.cluster.network_client.subnets.list(
-            self.cluster.resource_group, self.cluster.vnet
+        [subnet_info, *_] = await self.cluster.call_async(
+            self.cluster.network_client.subnets.list,
+            self.cluster.resource_group,
+            self.cluster.vnet,
         )
 
         nic_parameters = {
@@ -76,15 +78,19 @@ class AzureVM(VMInterface):
                 }
             ],
             "networkSecurityGroup": {
-                "id": self.cluster.network_client.network_security_groups.get(
-                    self.cluster.resource_group, self.security_group
+                "id": (
+                    await self.cluster.call_async(
+                        self.cluster.network_client.network_security_groups.get,
+                        self.cluster.resource_group,
+                        self.security_group,
+                    )
                 ).id,
                 "location": self.location,
             },
             "tags": self.cluster.get_tags(),
         }
         if self.public_ingress:
-            self.public_ip = (
+            self.public_ip = await self.cluster.call_async(
                 self.cluster.network_client.public_ip_addresses.begin_create_or_update(
                     self.cluster.resource_group,
                     self.nic_name,
@@ -95,31 +101,24 @@ class AzureVM(VMInterface):
                         "public_ip_address_version": "IPV4",
                         "tags": self.cluster.get_tags(),
                     },
-                ).result()
+                ).result
             )
             nic_parameters["ip_configurations"][0]["public_ip_address"] = {
                 "id": self.public_ip.id
             }
             self.cluster._log("Assigned public IP")
-        self.nic = (
+        self.nic = await self.cluster.call_async(
             self.cluster.network_client.network_interfaces.begin_create_or_update(
                 self.cluster.resource_group,
                 self.nic_name,
                 nic_parameters,
-            ).result()
+            ).result
         )
         self.cluster._log("Network interface ready")
 
         cloud_init = (
             base64.b64encode(
-                self.cluster.render_cloud_init(
-                    image=self.docker_image,
-                    command=self.command,
-                    gpu_instance=self.gpu_instance,
-                    bootstrap=self.bootstrap,
-                    auto_shutdown=self.auto_shutdown,
-                    env_vars=self.env_vars,
-                ).encode("ascii")
+                self.cluster.render_process_cloud_init(self).encode("ascii")
             )
             .decode("utf-8")
             .replace("\n", "")
@@ -150,17 +149,20 @@ class AzureVM(VMInterface):
             "tags": self.cluster.get_tags(),
         }
         self.cluster._log("Creating VM")
-        async_vm_creation = (
+        await self.cluster.call_async(
             self.cluster.compute_client.virtual_machines.begin_create_or_update(
                 self.cluster.resource_group, self.name, vm_parameters
-            )
+            ).wait
         )
-        async_vm_creation.wait()
-        self.vm = self.cluster.compute_client.virtual_machines.get(
-            self.cluster.resource_group, self.name
+        self.vm = await self.cluster.call_async(
+            self.cluster.compute_client.virtual_machines.get,
+            self.cluster.resource_group,
+            self.name,
         )
-        self.nic = self.cluster.network_client.network_interfaces.get(
-            self.cluster.resource_group, self.nic.name
+        self.nic = await self.cluster.call_async(
+            self.cluster.network_client.network_interfaces.get,
+            self.cluster.resource_group,
+            self.nic.name,
         )
         self.cluster._log(f"Created VM {self.name}")
         if self.public_ingress:
@@ -168,26 +170,36 @@ class AzureVM(VMInterface):
         return self.nic.ip_configurations[0].private_ip_address
 
     async def destroy_vm(self):
-        self.cluster.compute_client.virtual_machines.begin_delete(
-            self.cluster.resource_group, self.name
-        ).wait()
+        await self.cluster.call_async(
+            self.cluster.compute_client.virtual_machines.begin_delete(
+                self.cluster.resource_group, self.name
+            ).wait
+        )
         self.cluster._log(f"Terminated VM {self.name}")
-        for disk in self.cluster.compute_client.disks.list_by_resource_group(
-            self.cluster.resource_group
+        for disk in await self.cluster.call_async(
+            self.cluster.compute_client.disks.list_by_resource_group,
+            self.cluster.resource_group,
         ):
             if self.name in disk.name:
-                self.cluster.compute_client.disks.begin_delete(
-                    self.cluster.resource_group, disk.name
+                await self.cluster.call_async(
+                    self.cluster.compute_client.disks.begin_delete(
+                        self.cluster.resource_group,
+                        disk.name,
+                    ).wait
                 )
         self.cluster._log(f"Removed disks for VM {self.name}")
-        self.cluster.network_client.network_interfaces.begin_delete(
-            self.cluster.resource_group, self.nic.name
-        ).wait()
+        await self.cluster.call_async(
+            self.cluster.network_client.network_interfaces.begin_delete(
+                self.cluster.resource_group, self.nic.name
+            ).wait
+        )
         self.cluster._log("Deleted network interface")
         if self.public_ingress:
-            self.cluster.network_client.public_ip_addresses.begin_delete(
-                self.cluster.resource_group, self.public_ip.name
-            ).wait()
+            await self.cluster.call_async(
+                self.cluster.network_client.public_ip_addresses.begin_delete(
+                    self.cluster.resource_group, self.public_ip.name
+                ).wait
+            )
             self.cluster._log("Unassigned public IP")
 
 
@@ -265,6 +277,8 @@ class AzureVMCluster(VMCluster):
         For GPU instance types the Docker image much have NVIDIA drivers and ``dask-cuda`` installed.
 
         By default the ``daskdev/dask:latest`` image will be used.
+    docker_args: string (optional)
+        Extra command line arguments to pass to Docker.
     silence_logs: bool
         Whether or not we should silence logging when setting up the cluster.
     asynchronous: bool

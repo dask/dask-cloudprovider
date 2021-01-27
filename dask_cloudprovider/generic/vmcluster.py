@@ -19,7 +19,7 @@ from dask_cloudprovider.utils.socket import is_socket_open
 class VMInterface(ProcessInterface):
     """A superclass for VM Schedulers, Workers and Nannies."""
 
-    def __init__(self, **kwargs):
+    def __init__(self, docker_args: str = "", **kwargs):
         super().__init__()
         self.name = None
         self.command = None
@@ -28,6 +28,8 @@ class VMInterface(ProcessInterface):
         self.gpu_instance = None
         self.bootstrap = None
         self.docker_image = "daskdev/dask:latest"
+        self.docker_args = docker_args
+        self.auto_shutdown = True
         self.set_env = 'env DASK_INTERNAL_INHERIT_CONFIG="{}"'.format(
             serialize_for_cli(dask.config.global_config)
         )
@@ -43,7 +45,7 @@ class VMInterface(ProcessInterface):
         _, address = self.address.split("://")
         ip, port = address.split(":")
 
-        self.cluster._log("Waiting for scheduler to run")
+        self.cluster._log(f"Waiting for scheduler to run at {ip}:{port}")
         while not is_socket_open(ip, port):
             await asyncio.sleep(0.1)
         self.cluster._log("Scheduler is running")
@@ -186,6 +188,8 @@ class VMCluster(SpecCluster):
         For GPU instance types the Docker image much have NVIDIA drivers and ``dask-cuda`` installed.
 
         By default the ``daskdev/dask:latest`` image will be used.
+    docker_args: string (optional)
+        Extra command line arguments to pass to Docker.
     silence_logs: bool
         Whether or not we should silence logging when setting up the cluster.
     asynchronous: bool
@@ -200,6 +204,7 @@ class VMCluster(SpecCluster):
 
     scheduler_class = None
     worker_class = None
+    options = {}
     scheduler_options = {}
     worker_options = {}
     docker_image = None
@@ -215,6 +220,7 @@ class VMCluster(SpecCluster):
         worker_options: dict = {},
         scheduler_options: dict = {},
         docker_image="daskdev/dask:latest",
+        docker_args: str = "",
         env_vars: dict = {},
         security: bool = True,
         protocol: str = None,
@@ -260,11 +266,15 @@ class VMCluster(SpecCluster):
             )
 
         image = self.scheduler_options.get("docker_image", False) or docker_image
+        self.options["docker_image"] = image
         self.scheduler_options["docker_image"] = image
         self.scheduler_options["env_vars"] = env_vars
         self.scheduler_options["protocol"] = protocol
         self.scheduler_options["scheduler_options"] = scheduler_options
         self.worker_options["env_vars"] = env_vars
+        self.options["docker_args"] = docker_args
+        self.scheduler_options["docker_args"] = docker_args
+        self.worker_options["docker_args"] = docker_args
         self.worker_options["docker_image"] = image
         self.worker_options["worker_class"] = worker_class
         self.worker_options["protocol"] = protocol
@@ -272,6 +282,21 @@ class VMCluster(SpecCluster):
         self.uuid = str(uuid.uuid4())[:8]
 
         super().__init__(**kwargs, security=self.security)
+
+    async def call_async(self, f, *args, **kwargs):
+        """Run a blocking function in a thread as a coroutine.
+
+        This can only be used to make IO-bound operations non-blocking due to the GIL.
+
+        As of Python 3.9 this can be replaced with :func:`asyncio.to_thread`.
+        Once 3.9 is our minimum supported version this can be removed/replaced.
+
+        """
+        [done], _ = await asyncio.wait(
+            fs={self.loop.run_in_executor(None, lambda: f(*args, **kwargs))},
+            return_when=asyncio.ALL_COMPLETED,
+        )
+        return done.result()
 
     async def _start(
         self,
@@ -298,6 +323,17 @@ class VMCluster(SpecCluster):
         ):
             await super()._start()
 
+    def render_process_cloud_init(self, process):
+        return self.render_cloud_init(
+            image=process.docker_image,
+            command=process.command,
+            docker_args=process.docker_args,
+            gpu_instance=process.gpu_instance,
+            bootstrap=process.bootstrap,
+            auto_shutdown=process.auto_shutdown,
+            env_vars=process.env_vars,
+        )
+
     def render_cloud_init(self, *args, **kwargs):
         loader = FileSystemLoader([os.path.dirname(os.path.abspath(__file__))])
         environment = Environment(loader=loader)
@@ -311,6 +347,7 @@ class VMCluster(SpecCluster):
         return cluster.render_cloud_init(
             image=cluster.options["docker_image"],
             command="dask-scheduler --version",
+            docker_args=cluster.options["docker_args"],
             gpu_instance=cluster.gpu_instance,
             bootstrap=cluster.bootstrap,
             auto_shutdown=cluster.auto_shutdown,

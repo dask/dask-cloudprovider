@@ -1388,7 +1388,9 @@ async def _cleanup_stale_resources():
                 )
             )["clusters"]
             for cluster in clusters:
-                if DEFAULT_TAGS.items() <= aws_to_dict(cluster["tags"]).items():
+                if set(DEFAULT_TAGS.items()) <= set(
+                    aws_to_dict(cluster["tags"]).items()
+                ):
                     if cluster["runningTasksCount"] == 0:
                         clusters_to_delete.append(cluster["clusterArn"])
                     else:
@@ -1407,13 +1409,16 @@ async def _cleanup_stale_resources():
                 task_definition_cluster = aws_to_dict(task_definition["tags"]).get(
                     "cluster"
                 )
-                if (
-                    task_definition_cluster is None
-                    or task_definition_cluster not in active_clusters
+                if set(DEFAULT_TAGS.items()) <= set(
+                    aws_to_dict(task_definition["tags"]).items()
                 ):
-                    await ecs.deregister_task_definition(
-                        taskDefinition=task_definition_arn
-                    )
+                    if (
+                        task_definition_cluster is None
+                        or task_definition_cluster not in active_clusters
+                    ):
+                        await ecs.deregister_task_definition(
+                            taskDefinition=task_definition_arn
+                        )
 
     # Clean up security groups (with no active clusters)
     async with session.create_client("ec2") as ec2:
@@ -1434,7 +1439,7 @@ async def _cleanup_stale_resources():
                 role["Tags"] = (
                     await iam.list_role_tags(RoleName=role["RoleName"])
                 ).get("Tags")
-                if DEFAULT_TAGS.items() <= aws_to_dict(role["Tags"]).items():
+                if set(DEFAULT_TAGS.items()) <= set(aws_to_dict(role["Tags"]).items()):
                     role_cluster = aws_to_dict(role["Tags"]).get("cluster")
                     if role_cluster is None or role_cluster not in active_clusters:
                         attached_policies = (

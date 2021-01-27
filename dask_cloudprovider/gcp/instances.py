@@ -12,7 +12,7 @@ from dask_cloudprovider.generic.vmcluster import (
     VMInterface,
     SchedulerMixin,
 )
-
+from dask_cloudprovider.gcp.utils import build_request, is_inside_gce
 
 from distributed.core import Status
 
@@ -54,14 +54,17 @@ class GCPInstance(VMInterface):
         filesystem_size=None,
         source_image=None,
         docker_image=None,
+        network=None,
         env_vars=None,
         ngpus=None,
         gpu_type=None,
         bootstrap=None,
         gpu_instance=None,
+        auto_shutdown=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
+
         self.cluster = cluster
         self.config = config
         self.projectid = projectid or self.config.get("projectid")
@@ -76,9 +79,11 @@ class GCPInstance(VMInterface):
         self.env_vars = env_vars
         self.filesystem_size = filesystem_size or self.config.get("filesystem_size")
         self.ngpus = ngpus or self.config.get("ngpus")
+        self.network = network or self.config.get("network")
         self.gpu_type = gpu_type or self.config.get("gpu_type")
         self.gpu_instance = gpu_instance
         self.bootstrap = bootstrap
+        self.auto_shutdown = auto_shutdown
 
         self.general_zone = "-".join(self.zone.split("-")[:2])  # us-east1-c -> us-east1
 
@@ -111,7 +116,7 @@ class GCPInstance(VMInterface):
             "networkInterfaces": [
                 {
                     "kind": "compute#networkInterface",
-                    "subnetwork": f"projects/{self.projectid}/regions/{self.general_zone}/subnetworks/default",
+                    "subnetwork": f"projects/{self.projectid}/regions/{self.general_zone}/subnetworks/{self.network}",
                     "aliasIpRanges": [],
                 }
             ],
@@ -122,6 +127,7 @@ class GCPInstance(VMInterface):
                     "scopes": [
                         "https://www.googleapis.com/auth/devstorage.read_write",
                         "https://www.googleapis.com/auth/logging.write",
+                        "https://www.googleapis.com/auth/monitoring.write",
                     ],
                 }
             ],
@@ -176,22 +182,15 @@ class GCPInstance(VMInterface):
 
     async def create_vm(self):
 
-        self.cloud_init = self.cluster.render_cloud_init(
-            image=self.docker_image,
-            command=self.command,
-            gpu_instance=self.gpu_instance,
-            bootstrap=self.bootstrap,
-            auto_shutdown=self.cluster.auto_shutdown,
-            env_vars=self.env_vars,
-        )
+        self.cloud_init = self.cluster.render_process_cloud_init(self)
 
         self.gcp_config = self.create_gcp_config()
 
         try:
-            inst = (
+            inst = await self.cluster.call_async(
                 self.cluster.compute.instances()
                 .insert(project=self.projectid, zone=self.zone, body=self.gcp_config)
-                .execute()
+                .execute
             )
             self.gcp_inst = inst
             self.id = self.gcp_inst["id"]
@@ -199,12 +198,12 @@ class GCPInstance(VMInterface):
             # something failed
             print(str(e))
             raise Exception(str(e))
-        while self.update_status() != "RUNNING":
+        while await self.update_status() != "RUNNING":
             await asyncio.sleep(0.5)
 
-        self.internal_ip = self.get_internal_ip()
+        self.internal_ip = await self.get_internal_ip()
         if self.config.get("public_ingress", True):
-            self.external_ip = self.get_external_ip()
+            self.external_ip = await self.get_external_ip()
         else:
             self.external_ip = None
         self.cluster._log(
@@ -212,25 +211,33 @@ class GCPInstance(VMInterface):
         )
         return self.internal_ip, self.external_ip
 
-    def get_internal_ip(self):
+    async def get_internal_ip(self):
         return (
-            self.cluster.compute.instances()
-            .list(project=self.projectid, zone=self.zone, filter=f"name={self.name}")
-            .execute()["items"][0]["networkInterfaces"][0]["networkIP"]
-        )
+            await self.cluster.call_async(
+                self.cluster.compute.instances()
+                .list(
+                    project=self.projectid, zone=self.zone, filter=f"name={self.name}"
+                )
+                .execute
+            )
+        )["items"][0]["networkInterfaces"][0]["networkIP"]
 
-    def get_external_ip(self):
+    async def get_external_ip(self):
         return (
-            self.cluster.compute.instances()
-            .list(project=self.projectid, zone=self.zone, filter=f"name={self.name}")
-            .execute()["items"][0]["networkInterfaces"][0]["accessConfigs"][0]["natIP"]
-        )
+            await self.cluster.call_async(
+                self.cluster.compute.instances()
+                .list(
+                    project=self.projectid, zone=self.zone, filter=f"name={self.name}"
+                )
+                .execute
+            )
+        )["items"][0]["networkInterfaces"][0]["accessConfigs"][0]["natIP"]
 
-    def update_status(self):
-        d = (
+    async def update_status(self):
+        d = await self.cluster.call_async(
             self.cluster.compute.instances()
             .list(project=self.projectid, zone=self.zone, filter=f"name={self.name}")
-            .execute()
+            .execute
         )
         self.gcp_inst = d
 
@@ -250,9 +257,11 @@ class GCPInstance(VMInterface):
 
     async def close(self):
         self.cluster._log(f"Closing Instance: {self.name}")
-        self.cluster.compute.instances().delete(
-            project=self.projectid, zone=self.zone, instance=self.name
-        ).execute()
+        await self.cluster.call_async(
+            self.cluster.compute.instances()
+            .delete(project=self.projectid, zone=self.zone, instance=self.name)
+            .execute
+        )
 
 
 class GCPScheduler(SchedulerMixin, GCPInstance):
@@ -278,11 +287,15 @@ class GCPScheduler(SchedulerMixin, GCPInstance):
         self.cluster._log("Creating scheduler instance")
         self.internal_ip, self.external_ip = await self.create_vm()
 
-        if self.config.get("public_ingress", True):
-            # scheduler is publicly available
+        if self.config.get("public_ingress", True) and not is_inside_gce():
+            # scheduler must be publicly available, and firewall
+            # needs to be in place to allow access to 8786 on
+            # the external IP
             self.address = f"{self.cluster.protocol}://{self.external_ip}:8786"
         else:
-            # scheduler is only accessible within VPC
+            # if the client is running inside GCE environment
+            # it's better to use internal IP, which doesn't
+            # require firewall setup
             self.address = f"{self.cluster.protocol}://{self.internal_ip}:8786"
         await self.wait_for_scheduler()
 
@@ -367,6 +380,13 @@ class GCPCluster(VMCluster):
         https://cloudprovider.dask.org/en/latest/gcp.html#project-id
     zone: str
         The GCP zone to launch you cluster in. A full list can be obtained with ``gcloud compute zones list``.
+    network: str
+        The GCP VPC network/subnetwork to use.  The default is `default`.  If using firewall rules,
+        please ensure the follwing accesses are configured:
+            - egress 0.0.0.0/0 on all ports for downloading docker images and general data access
+            - ingress 10.0.0.0/8 on all ports for internal communication of workers
+            - ingress 0.0.0.0/0 on 8786-8787 for external accessibility of the dashboard/scheduler
+            - (optional) ingress 0.0.0.0./0 on 22 for ssh access
     machine_type: str
         The VM machine_type. You can get a full list with ``gcloud compute machine-types list``.
         The default is ``n1-standard-1`` which is 3.75GB RAM and 1 vCPU
@@ -392,6 +412,8 @@ class GCPCluster(VMCluster):
         For GPU instance types the Docker image much have NVIDIA drivers and ``dask-cuda`` installed.
 
         By default the ``daskdev/dask:latest`` image will be used.
+    docker_args: string (optional)
+        Extra command line arguments to pass to Docker.
     ngpus: int (optional)
         The number of GPUs to atatch to the instance.
         Default is ``0``.
@@ -502,6 +524,7 @@ class GCPCluster(VMCluster):
         self,
         projectid=None,
         zone=None,
+        network=None,
         machine_type=None,
         source_image=None,
         docker_image=None,
@@ -538,9 +561,11 @@ class GCPCluster(VMCluster):
             "zone": zone or self.config.get("zone"),
             "machine_type": self.machine_type,
             "ngpus": ngpus or self.config.get("ngpus"),
+            "network": network or self.config.get("network"),
             "gpu_type": gpu_type or self.config.get("gpu_type"),
             "gpu_instance": self.gpu_instance,
             "bootstrap": self.bootstrap,
+            "auto_shutdown": self.auto_shutdown,
         }
         self.scheduler_options = {**self.options}
         self.worker_options = {**self.options}
@@ -555,8 +580,14 @@ class GCPCompute:
         self._compute = self.refresh_client()
 
     def refresh_client(self):
+
         if os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", False):
-            return googleapiclient.discovery.build("compute", "v1")
+            import google.oauth2.service_account  # google-auth
+
+            creds = google.oauth2.service_account.Credentials.from_service_account_file(
+                os.environ["GOOGLE_APPLICATION_CREDENTIALS"],
+                scopes=["https://www.googleapis.com/auth/cloud-platform"],
+            )
         else:
             import google.auth.credentials  # google-auth
 
@@ -572,7 +603,9 @@ class GCPCompute:
                     # take first row
                     f_.write(creds_rows[0][1])
                 creds, _ = google.auth.load_credentials_from_file(filename=f)
-            return googleapiclient.discovery.build("compute", "v1", credentials=creds)
+        return googleapiclient.discovery.build(
+            "compute", "v1", credentials=creds, requestBuilder=build_request(creds)
+        )
 
     def instances(self):
         try:

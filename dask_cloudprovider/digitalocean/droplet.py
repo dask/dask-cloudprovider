@@ -52,28 +52,22 @@ class Droplet(VMInterface):
             image=self.image,
             size_slug=self.size,
             backups=False,
-            user_data=self.cluster.render_cloud_init(
-                image=self.docker_image,
-                command=self.command,
-                gpu_instance=self.gpu_instance,
-                bootstrap=self.bootstrap,
-                env_vars=self.env_vars,
-            ),
+            user_data=self.cluster.render_process_cloud_init(self),
         )
-        self.droplet.create()
+        await self.cluster.call_async(self.droplet.create)
         for action in self.droplet.get_actions():
             while action.status != "completed":
                 action.load()
                 await asyncio.sleep(0.1)
         while self.droplet.ip_address is None:
-            self.droplet.load()
+            await self.cluster.call_async(self.droplet.load)
             await asyncio.sleep(0.1)
         self.cluster._log(f"Created droplet {self.name}")
 
         return self.droplet.ip_address
 
     async def destroy_vm(self):
-        self.droplet.destroy()
+        await self.cluster.call_async(self.droplet.destroy)
         self.cluster._log(f"Terminated droplet {self.name}")
 
 
@@ -129,6 +123,8 @@ class DropletCluster(VMCluster):
         For GPU instance types the Docker image much have NVIDIA drivers and ``dask-cuda`` installed.
 
         By default the ``daskdev/dask:latest`` image will be used.
+    docker_args: string (optional)
+        Extra command line arguments to pass to Docker.
     env_vars: dict (optional)
         Environment variables to be passed to the worker.
     silence_logs: bool

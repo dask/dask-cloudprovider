@@ -183,9 +183,11 @@ async def test_get_ubuntu_image(ec2_client):
 async def test_get_cloud_init():
     cloud_init = EC2Cluster.get_cloud_init(
         env_vars={"EXTRA_PIP_PACKAGES": "s3fs"},
+        docker_args="--privileged",
     )
     assert "systemctl start docker" in cloud_init
-    assert "-e EXTRA_PIP_PACKAGES=s3fs"
+    assert " -e EXTRA_PIP_PACKAGES=s3fs " in cloud_init
+    assert " --privileged " in cloud_init
 
 
 @pytest.mark.asyncio
