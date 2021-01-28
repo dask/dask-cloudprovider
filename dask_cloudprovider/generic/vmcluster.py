@@ -84,7 +84,7 @@ class SchedulerMixin(object):
     async def start(self):
         self.cluster._log("Creating scheduler instance")
         ip = await self.create_vm()
-        self.address = f"{self.protocol}://{ip}:8786"
+        self.address = f"{self.cluster.protocol}://{ip}:8786"
         await self.wait_for_scheduler()
         await super().start()
 
