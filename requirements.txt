@@ -1,3 +1,5 @@
+aiohttp>=3.7.3
 dask>=2021.01.1
 distributed>=2021.01.1
 jinja2
+tornado >= 5
