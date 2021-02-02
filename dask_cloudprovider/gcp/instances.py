@@ -68,7 +68,9 @@ class GCPInstance(VMInterface):
 
         self.cluster = cluster
         self.config = config
-        self.on_host_maintenance = on_host_maintenance or self.config.get("on_host_maintenance")
+        self.on_host_maintenance = on_host_maintenance or self.config.get(
+            "on_host_maintenance"
+        )
         self.projectid = projectid or self.config.get("projectid")
         self.zone = zone or self.config.get("zone")
 
@@ -563,7 +565,8 @@ class GCPCluster(VMCluster):
             "source_image": source_image or self.config.get("source_image"),
             "docker_image": docker_image or self.config.get("docker_image"),
             "filesystem_size": filesystem_size or self.config.get("filesystem_size"),
-            "on_host_maintenance": on_host_maintenance or self.config.get("on_host_maintenance"),
+            "on_host_maintenance": on_host_maintenance
+            or self.config.get("on_host_maintenance"),
             "zone": zone or self.config.get("zone"),
             "machine_type": self.machine_type,
             "ngpus": ngpus or self.config.get("ngpus"),
