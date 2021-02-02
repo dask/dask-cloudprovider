@@ -9,6 +9,10 @@ from tornado.ioloop import IOLoop, PeriodicCallback
 
 logger = logging.getLogger(__name__)
 
+AZURE_EVENTS_METADATA_URL = (
+    "http://169.254.169.254/metadata/scheduledevents?api-version=2019-08-01"
+)
+
 
 class AzurePreemptibleWorkerPlugin(WorkerPlugin):
     """A worker plugin for azure spot instances
@@ -16,6 +20,9 @@ class AzurePreemptibleWorkerPlugin(WorkerPlugin):
     This worker plugin will poll azure's metadata service for preemption notifications.
     When a node is preempted, the plugin will attempt to shutdown gracefully all workers
     on the node.
+
+    This plugin can be used on any worker running on azure spot instances, not just the
+    ones created by ``dask-cloudprovider``.
 
     For more details on azure spot instances see:
     https://docs.microsoft.com/en-us/azure/virtual-machines/linux/scheduled-events
@@ -47,7 +54,8 @@ class AzurePreemptibleWorkerPlugin(WorkerPlugin):
     Examples
     --------
 
-    Let's say you have cluster and a client instance. For example using ``KubeCluster``
+    Let's say you have cluster and a client instance.
+    For example using :class:`dask_kubernetes.KubeCluster`
 
     >>> from dask_kubernetes import KubeCluster
     >>> from distributed import Client
@@ -55,6 +63,7 @@ class AzurePreemptibleWorkerPlugin(WorkerPlugin):
     >>> client = Client(cluster)
 
     You can add the worker plugin using the following:
+
     >>> from dask_cloudprovider.azure import AzurePreemptibleWorkerPlugin
     >>> client.register_worker_plugin(AzurePreemptibleWorkerPlugin())
     """
@@ -70,10 +79,7 @@ class AzurePreemptibleWorkerPlugin(WorkerPlugin):
         self.loop = None
         self.worker = None
         self.poll_interval_s = poll_interval_s
-        self.metadata_url = (
-            metadata_url
-            or "http://169.254.169.254/metadata/scheduledevents?api-version=2019-08-01"
-        )
+        self.metadata_url = metadata_url or AZURE_EVENTS_METADATA_URL
         self.termination_events = termination_events or ["Preempt", "Terminate"]
         self.termination_offset = datetime.timedelta(minutes=termination_offset_minutes)
 
