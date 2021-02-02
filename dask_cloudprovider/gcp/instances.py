@@ -52,6 +52,7 @@ class GCPInstance(VMInterface):
         projectid=None,
         machine_type=None,
         filesystem_size=None,
+        on_host_maintenance=None,
         source_image=None,
         docker_image=None,
         network=None,
@@ -67,6 +68,7 @@ class GCPInstance(VMInterface):
 
         self.cluster = cluster
         self.config = config
+        self.on_host_maintenance = on_host_maintenance or self.config.get("on_host_maintenance")
         self.projectid = projectid or self.config.get("projectid")
         self.zone = zone or self.config.get("zone")
 
@@ -147,7 +149,7 @@ class GCPInstance(VMInterface):
             "labels": {"container-vm": "dask-cloudprovider"},
             "scheduling": {
                 "preemptible": "false",
-                "onHostMaintenance": "TERMINATE",
+                "onHostMaintenance": self.on_host_maintenance.upper(),
                 "automaticRestart": "true",
                 "nodeAffinities": [],
             },
@@ -422,6 +424,8 @@ class GCPCluster(VMCluster):
         You can see a list of GPUs available in each zone with ``gcloud compute accelerator-types list``.
     filesystem_size: int (optional)
         The VM filesystem size in GB. Defaults to ``50``.
+    on_host_maintenance: str (optional)
+        The Host Maintenance GCP option.  Defaults to ``TERMINATE``.
     n_workers: int (optional)
         Number of workers to initialise the cluster with. Defaults to ``0``.
     bootstrap: bool (optional)
@@ -501,7 +505,7 @@ class GCPCluster(VMCluster):
     Source Image: projects/ubuntu-os-cloud/global/images/ubuntu-minimal-1804-bionic-v20201014
     Docker Image: daskdev/dask:latest
     Machine Type: n1-standard-1
-    Filesytsem Size: 50
+    Filesystem Size: 50
     N-GPU Type:
     Zone: us-east1-c
     Creating scheduler instance
@@ -526,6 +530,7 @@ class GCPCluster(VMCluster):
         zone=None,
         network=None,
         machine_type=None,
+        on_host_maintenance=None,
         source_image=None,
         docker_image=None,
         ngpus=None,
@@ -558,6 +563,7 @@ class GCPCluster(VMCluster):
             "source_image": source_image or self.config.get("source_image"),
             "docker_image": docker_image or self.config.get("docker_image"),
             "filesystem_size": filesystem_size or self.config.get("filesystem_size"),
+            "on_host_maintenance": on_host_maintenance or self.config.get("on_host_maintenance"),
             "zone": zone or self.config.get("zone"),
             "machine_type": self.machine_type,
             "ngpus": ngpus or self.config.get("ngpus"),

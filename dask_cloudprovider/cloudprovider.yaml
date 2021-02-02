@@ -96,6 +96,7 @@ cloudprovider:
     zone: "us-east1-c" # the zone of of where to launch the instances
     network: "default" # the network/subnetwork in GCP to use
     projectid: "" # name of the google cloud project
+    on_host_maintenance: "TERMINATE"
     machine_type: "n1-standard-1" # size of the machine type to use
     filesystem_size: 50 # amount in GBs of hard drive space to allocate
     ngpus: "" # number of GPUs to use
