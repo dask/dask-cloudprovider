@@ -61,7 +61,7 @@ class GCPInstance(VMInterface):
         bootstrap=None,
         gpu_instance=None,
         auto_shutdown=None,
-        preemptible=None,
+        preemptible=False,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -571,7 +571,9 @@ class GCPCluster(VMCluster):
             "gpu_instance": self.gpu_instance,
             "bootstrap": self.bootstrap,
             "auto_shutdown": self.auto_shutdown,
-            "preemptible": preemptible if preemptible is not None else self.config.get("preemptible"),
+            "preemptible": preemptible
+            if preemptible is not None
+            else self.config.get("preemptible"),
         }
         self.scheduler_options = {**self.options}
         self.worker_options = {**self.options}
