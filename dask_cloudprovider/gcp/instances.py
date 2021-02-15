@@ -270,6 +270,7 @@ class GCPScheduler(SchedulerMixin, GCPInstance):
     """Scheduler running in a GCP instance."""
 
     def __init__(self, *args, **kwargs):
+        kwargs.pop("preemptible", None)  # scheduler instances are not preemptible
         super().__init__(*args, **kwargs)
 
     async def start(self):
@@ -450,7 +451,7 @@ class GCPCluster(VMCluster):
         object, or True. If True, temporary self-signed credentials will
         be created automatically. Default is ``True``.
     preemptible: bool (optional)
-        Whether to use preemptible instances in this cluster. Defaults to ``False``.
+        Whether to use preemptible instances for workers in this cluster. Defaults to ``False``.
 
     Examples
     --------
