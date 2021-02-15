@@ -61,6 +61,7 @@ class GCPInstance(VMInterface):
         bootstrap=None,
         gpu_instance=None,
         auto_shutdown=None,
+        preemptible=False,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -84,6 +85,7 @@ class GCPInstance(VMInterface):
         self.gpu_instance = gpu_instance
         self.bootstrap = bootstrap
         self.auto_shutdown = auto_shutdown
+        self.preemptible = preemptible
 
         self.general_zone = "-".join(self.zone.split("-")[:2])  # us-east1-c -> us-east1
 
@@ -146,9 +148,9 @@ class GCPInstance(VMInterface):
             },
             "labels": {"container-vm": "dask-cloudprovider"},
             "scheduling": {
-                "preemptible": "false",
+                "preemptible": ("true" if self.preemptible else "false"),
                 "onHostMaintenance": "TERMINATE",
-                "automaticRestart": "true",
+                "automaticRestart": ("false" if self.preemptible else "true"),
                 "nodeAffinities": [],
             },
             "shieldedInstanceConfig": {
@@ -268,6 +270,7 @@ class GCPScheduler(SchedulerMixin, GCPInstance):
     """Scheduler running in a GCP instance."""
 
     def __init__(self, *args, **kwargs):
+        kwargs.pop("preemptible", None)  # scheduler instances are not preemptible
         super().__init__(*args, **kwargs)
 
     async def start(self):
@@ -447,6 +450,8 @@ class GCPCluster(VMCluster):
         Configures communication security in this cluster. Can be a security
         object, or True. If True, temporary self-signed credentials will
         be created automatically. Default is ``True``.
+    preemptible: bool (optional)
+        Whether to use preemptible instances for workers in this cluster. Defaults to ``False``.
 
     Examples
     --------
@@ -533,6 +538,7 @@ class GCPCluster(VMCluster):
         filesystem_size=None,
         auto_shutdown=None,
         bootstrap=True,
+        preemptible=None,
         **kwargs,
     ):
 
@@ -566,6 +572,9 @@ class GCPCluster(VMCluster):
             "gpu_instance": self.gpu_instance,
             "bootstrap": self.bootstrap,
             "auto_shutdown": self.auto_shutdown,
+            "preemptible": preemptible
+            if preemptible is not None
+            else self.config.get("preemptible"),
         }
         self.scheduler_options = {**self.options}
         self.worker_options = {**self.options}
