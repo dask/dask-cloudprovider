@@ -195,4 +195,5 @@ intersphinx_mapping = {
     "python": ("https://docs.python.org/3", None),
     "dask": ("https://docs.dask.org/en/latest/", None),
     "distributed": ("https://distributed.dask.org/en/latest/", None),
+    "dask_kubernetes": ("https://kubernetes.dask.org/en/latest/", None),
 }
