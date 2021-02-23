@@ -186,7 +186,7 @@ async def test_get_cloud_init():
         docker_args="--privileged",
     )
     assert "systemctl start docker" in cloud_init
-    assert " -e EXTRA_PIP_PACKAGES=s3fs " in cloud_init
+    assert ' -e EXTRA_PIP_PACKAGES="s3fs" ' in cloud_init
     assert " --privileged " in cloud_init
 
 
