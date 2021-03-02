@@ -68,6 +68,7 @@ this code.
     gcp.rst
     azure.rst
     azureml.rst
+    hetzner.rst
 
 .. toctree::
     :maxdepth: 2

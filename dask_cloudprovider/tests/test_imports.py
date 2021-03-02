@@ -9,6 +9,7 @@ def test_imports():
     from dask_cloudprovider.azure import AzureVMCluster  # noqa
     from dask_cloudprovider.gcp import GCPCluster  # noqa
     from dask_cloudprovider.digitalocean import DropletCluster  # noqa
+    from dask_cloudprovider.hetzner import HetznerCluster  # noqa
 
 
 def test_import_exceptions():
@@ -26,3 +27,5 @@ def test_import_exceptions():
         from dask_cloudprovider import GCPCluster  # noqa
     with pytest.raises(ImportError):
         from dask_cloudprovider import DropletCluster  # noqa
+    with pytest.raises(ImportError):
+        from dask_cloudprovider import HetznerCluster  # noqa
