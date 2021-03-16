@@ -67,7 +67,6 @@ this code.
     digitalocean.rst
     gcp.rst
     azure.rst
-    azureml.rst
 
 .. toctree::
     :maxdepth: 2
