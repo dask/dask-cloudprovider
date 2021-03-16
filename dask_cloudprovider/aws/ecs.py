@@ -255,7 +255,7 @@ class Task:
                         },
                     }
                 )
-                
+
                 # Set launchType to FARGATE only if self.fargate. Otherwise, don't set this
                 # so that the default capacity provider of the ECS cluster or an alternate
                 # capacity provider can be specified. (dask/dask-cloudprovider#261)
