@@ -244,7 +244,6 @@ class Task:
                             ]
                         },
                         "count": 1,
-                        "launchType": "FARGATE" if self.fargate else "EC2",
                         "networkConfiguration": {
                             "awsvpcConfiguration": {
                                 "subnets": self._vpc_subnets,
@@ -256,6 +255,12 @@ class Task:
                         },
                     }
                 )
+
+                # Set launchType to FARGATE only if self.fargate. Otherwise, don't set this
+                # so that the default capacity provider of the ECS cluster or an alternate
+                # capacity provider can be specified. (dask/dask-cloudprovider#261)
+                if self.fargate:
+                    kwargs["launchType"] = "FARGATE"
 
                 async with self._client("ecs") as ecs:
                     response = await ecs.run_task(**kwargs)
