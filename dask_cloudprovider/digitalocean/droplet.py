@@ -136,6 +136,8 @@ class DropletCluster(VMCluster):
         Configures communication security in this cluster. Can be a security
         object, or True. If True, temporary self-signed credentials will
         be created automatically. Default is ``True``.
+    debug: bool, optional
+        More information will be printed when constructing clusters to enable debugging.
 
     Examples
     --------
@@ -193,11 +195,13 @@ class DropletCluster(VMCluster):
         region: str = None,
         size: str = None,
         image: str = None,
+        debug: bool = False,
         **kwargs,
     ):
         self.config = dask.config.get("cloudprovider.digitalocean", {})
         self.scheduler_class = DropletScheduler
         self.worker_class = DropletWorker
+        self.debug = debug
         self.options = {
             "cluster": self,
             "config": self.config,
@@ -207,4 +211,4 @@ class DropletCluster(VMCluster):
         }
         self.scheduler_options = {**self.options}
         self.worker_options = {**self.options}
-        super().__init__(**kwargs)
+        super().__init__(debug=debug, **kwargs)

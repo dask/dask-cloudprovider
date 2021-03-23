@@ -298,6 +298,8 @@ class EC2Cluster(VMCluster):
         Configures communication security in this cluster. Can be a security
         object, or True. If True, temporary self-signed credentials will
         be created automatically. Default is ``True``.
+    debug: bool, optional
+        More information will be printed when constructing clusters to enable debugging.
 
     Notes
     -----
@@ -402,6 +404,7 @@ class EC2Cluster(VMCluster):
         key_name=None,
         iam_instance_profile=None,
         docker_image=None,
+        debug=False,
         **kwargs,
     ):
         self.boto_session = aiobotocore.get_session()
@@ -452,6 +455,7 @@ class EC2Cluster(VMCluster):
             if iam_instance_profile is not None
             else self.config.get("iam_instance_profile")
         )
+        self.debug = debug
         self.options = {
             "cluster": self,
             "config": self.config,
@@ -471,4 +475,4 @@ class EC2Cluster(VMCluster):
         }
         self.scheduler_options = {**self.options}
         self.worker_options = {**self.options}
-        super().__init__(**kwargs)
+        super().__init__(debug=debug, **kwargs)

@@ -288,6 +288,8 @@ class AzureVMCluster(VMCluster):
         Configures communication security in this cluster. Can be a security
         object, or True. If True, temporary self-signed credentials will
         be created automatically. Default is ``True``.
+    debug: bool, optional
+        More information will be printed when constructing clusters to enable debugging.
 
     Examples
     --------
@@ -412,6 +414,7 @@ class AzureVMCluster(VMCluster):
         bootstrap: bool = None,
         auto_shutdown: bool = None,
         docker_image=None,
+        debug: bool = False,
         **kwargs,
     ):
         self.config = dask.config.get("cloudprovider.azure.azurevm", {})
@@ -478,6 +481,7 @@ class AzureVMCluster(VMCluster):
             else self.config.get("auto_shutdown")
         )
         self.docker_image = docker_image or self.config.get("docker_image")
+        self.debug = debug
         self.options = {
             "cluster": self,
             "config": self.config,
@@ -495,4 +499,4 @@ class AzureVMCluster(VMCluster):
             **self.options,
         }
         self.worker_options = {"vm_size": self.vm_size, **self.options}
-        super().__init__(**kwargs)
+        super().__init__(debug=debug, **kwargs)
