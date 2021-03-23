@@ -43,6 +43,16 @@ async def cluster(config):
 
 
 @pytest.fixture
+async def cluster_rapids(config):
+    await skip_without_credentials(config)
+    async with HetznerCluster(
+        asynchronous=True,
+        docker_image="rapidsai/rapidsai:cuda10.1-runtime-ubuntu18.04-py3.8",
+    ) as cluster:
+        yield cluster
+
+
+@pytest.fixture
 async def cluster_prefect(config):
     await skip_without_credentials(config)
     async with HetznerCluster(
@@ -77,24 +87,21 @@ async def test_create_cluster(cluster):
 
 @pytest.mark.asyncio
 @pytest.mark.timeout(600)
-async def test_create_prefect_cluster(cluster_prefect):
-    assert cluster_prefect.status == Status.running
+async def test_create_cluster_rapids(cluster_rapids):
+    assert cluster_rapids.status == Status.running
 
-    cluster_prefect.scale(1)
-    await cluster_prefect
-    assert len(cluster_prefect.workers) == 1
+    cluster_rapids.scale(1)
+    await cluster_rapids
+    assert len(cluster_rapids.workers) == 1
 
-    async with Client(cluster_prefect, asynchronous=True) as client:
+    async with Client(cluster_rapids, asynchronous=True) as client:
 
         def f():
-            import prefect
+            import cupy
 
-            logger = prefect.context.get("logger")
-            logger.info("Prefect docker image")
+            return float(cupy.random.random(100).mean())
 
-            return 0
-
-        assert await client.submit(f).result() == 0
+        assert await client.submit(f).result() < 1
 
 
 @pytest.mark.asyncio
