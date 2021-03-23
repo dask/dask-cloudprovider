@@ -463,7 +463,9 @@ class AzureVMCluster(VMCluster):
         )
         if self.scheduler_vm_size is None:
             self.scheduler_vm_size = self.vm_size
-        self.gpu_instance = "NC" in self.vm_size or "ND" in self.vm_size
+        self.gpu_instance = (
+            "_NC" in self.vm_size.upper() or "_ND" in self.vm_size.upper()
+        )
         self.vm_image = self.config.get("vm_image")
         for key in vm_image:
             self.vm_image[key] = vm_image[key]
