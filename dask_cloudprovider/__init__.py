@@ -48,3 +48,9 @@ def __getattr__(name):
             "DigitalOcean cluster managers must be imported from the digitalocean subpackage. "
             f"Please import dask_cloudprovider.digitalocean.{name}"
         )
+
+    if name in ["HetznerCluster"]:
+        raise ImportError(
+            "Hetzner cluster managers must be imported from the hetzner subpackage. "
+            f"Please import dask_cloudprovider.hetzner.{name}"
+        )
