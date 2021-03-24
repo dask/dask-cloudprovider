@@ -208,9 +208,9 @@ class EC2Cluster(VMCluster):
     Parameters
     ----------
     region: string (optional)
-        The region to start you clusters. By default this will be detected from your config.
+        The region to start your clusters. By default this will be detected from your config.
     availability_zone: string or List(string) (optional)
-        The availability zone to start you clusters. By default AWS will select the AZ with most free capacity.
+        The availability zone to start yourclusters clusters. By default AWS will select the AZ with most free capacity.
         If you specify more than one then scheduler and worker VMs will be randomly assigned to one of your
         chosen AZs.
     bootstrap: bool (optional)
