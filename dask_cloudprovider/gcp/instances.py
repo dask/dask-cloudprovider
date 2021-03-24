@@ -52,6 +52,7 @@ class GCPInstance(VMInterface):
         projectid=None,
         machine_type=None,
         filesystem_size=None,
+        disk_type=None,
         on_host_maintenance=None,
         source_image=None,
         docker_image=None,
@@ -83,6 +84,7 @@ class GCPInstance(VMInterface):
         self.docker_image = docker_image or self.config.get("docker_image")
         self.env_vars = env_vars
         self.filesystem_size = filesystem_size or self.config.get("filesystem_size")
+        self.disk_type = disk_type or self.config.get("disk_type")
         self.ngpus = ngpus or self.config.get("ngpus")
         self.network = network or self.config.get("network")
         self.gpu_type = gpu_type or self.config.get("gpu_type")
@@ -110,7 +112,7 @@ class GCPInstance(VMInterface):
                     "deviceName": self.name,
                     "initializeParams": {
                         "sourceImage": self.source_image,
-                        "diskType": f"projects/{self.projectid}/zones/{self.zone}/diskTypes/pd-standard",
+                        "diskType": f"projects/{self.projectid}/zones/{self.zone}/diskTypes/{self.disk_type}",
                         "diskSizeGb": f"{self.filesystem_size}",  # nvidia-gpu-cloud cannot be smaller than 32 GB
                         "labels": {},
                         # "source": "projects/nv-ai-infra/zones/us-east1-c/disks/ngc-gpu-dask-rapids-docker-experiment",
@@ -288,6 +290,7 @@ class GCPScheduler(SchedulerMixin, GCPInstance):
             f"\n  Docker Image: {self.docker_image} "
             f"\n  Machine Type: {self.machine_type} "
             f"\n  Filesytsem Size: {self.filesystem_size} "
+            f"\n  Disk Type: {self.disk_type} "
             f"\n  N-GPU Type: {self.ngpus} {self.gpu_type}"
             f"\n  Zone: {self.zone} "
         )
@@ -429,6 +432,9 @@ class GCPCluster(VMCluster):
         You can see a list of GPUs available in each zone with ``gcloud compute accelerator-types list``.
     filesystem_size: int (optional)
         The VM filesystem size in GB. Defaults to ``50``.
+    disk_type: str (optional)
+        Type of disk to use. Default is ``pd-standard``.
+        You can see a list of disks available in each zone with ``gcloud compute disk-types list``.
     on_host_maintenance: str (optional)
         The Host Maintenance GCP option.  Defaults to ``TERMINATE``.
     n_workers: int (optional)
@@ -543,6 +549,7 @@ class GCPCluster(VMCluster):
         ngpus=None,
         gpu_type=None,
         filesystem_size=None,
+        disk_type=None,
         auto_shutdown=None,
         bootstrap=True,
         preemptible=None,
@@ -571,6 +578,7 @@ class GCPCluster(VMCluster):
             "source_image": source_image or self.config.get("source_image"),
             "docker_image": docker_image or self.config.get("docker_image"),
             "filesystem_size": filesystem_size or self.config.get("filesystem_size"),
+            "disk_type": disk_type or self.config.get("disk_type"),
             "on_host_maintenance": on_host_maintenance
             or self.config.get("on_host_maintenance"),
             "zone": zone or self.config.get("zone"),

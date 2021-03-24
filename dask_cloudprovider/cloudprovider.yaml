@@ -48,7 +48,8 @@ cloudprovider:
     # security_groups: [] # Security groups for instances. Will create a minimal Dask security group by default.
     filesystem_size: 40 # Default root filesystem size for scheduler and worker VMs in GB
     key_name: null # SSH Key name to assign to instances
-    iam_instance_profile: {} # Iam role to assign to instances
+    iam_instance_profile:
+      {} # Iam role to assign to instances
       # Arn: 'string'
       # Name: 'string'
 
@@ -86,6 +87,7 @@ cloudprovider:
     filesystem_size: 50 # amount in GBs of hard drive space to allocate
     ngpus: "" # number of GPUs to use
     gpu_type: "" # type of gpus to use: nvidia-tesla-k80, nvidia-tesla-p100, nvidia-tesla-t4
+    disk_type: "pd-standard" # type of disk to use: pd-standard, pd-ssd
     docker_image: "daskdev/dask:latest" # docker image to use
     auto_shutdown: true # Shutdown instances automatically if the scheduler or worker services time out.
     public_ingress: true # configure the scheduler to be externally accessible.  This assumes firefwall rules for 8787 and 8786
