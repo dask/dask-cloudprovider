@@ -195,10 +195,12 @@ class VMCluster(SpecCluster):
     asynchronous: bool
         If this is intended to be used directly within an event loop with
         async/await
-    security : Security or bool, optional
+    security: Security or bool, optional
         Configures communication security in this cluster. Can be a security
         object, or True. If True, temporary self-signed credentials will
         be created automatically. Default is ``True``.
+    debug: bool, optional
+        More information will be printed when constructing clusters to enable debugging.
 
     """
 
@@ -224,6 +226,7 @@ class VMCluster(SpecCluster):
         env_vars: dict = {},
         security: bool = True,
         protocol: str = None,
+        debug: bool = False,
         **kwargs,
     ):
         if self.scheduler_class is None or self.worker_class is None:
@@ -249,6 +252,8 @@ class VMCluster(SpecCluster):
                 self.protocol = "tcp"
         else:
             self.protocol = protocol
+
+        self.debug = debug
 
         if self.security and self.security.require_encryption:
             dask.config.set(
@@ -338,7 +343,11 @@ class VMCluster(SpecCluster):
         loader = FileSystemLoader([os.path.dirname(os.path.abspath(__file__))])
         environment = Environment(loader=loader)
         template = environment.get_template("cloud-init.yaml.j2")
-        return template.render(**kwargs)
+        cloud_init = template.render(**kwargs)
+        if self.debug:
+            print("\nCloud init\n==========\n\n")
+            print(cloud_init)
+        return cloud_init
 
     @classmethod
     def get_cloud_init(cls, *args, **kwargs):

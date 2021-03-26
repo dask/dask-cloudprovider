@@ -464,6 +464,8 @@ class GCPCluster(VMCluster):
         be created automatically. Default is ``True``.
     preemptible: bool (optional)
         Whether to use preemptible instances for workers in this cluster. Defaults to ``False``.
+    debug: bool, optional
+        More information will be printed when constructing clusters to enable debugging.
 
     Examples
     --------
@@ -553,6 +555,7 @@ class GCPCluster(VMCluster):
         auto_shutdown=None,
         bootstrap=True,
         preemptible=None,
+        debug=False,
         **kwargs,
     ):
 
@@ -571,6 +574,7 @@ class GCPCluster(VMCluster):
         )
         self.machine_type = machine_type or self.config.get("machine_type")
         self.gpu_instance = "gpu" in self.machine_type or bool(ngpus)
+        self.debug = debug
         self.options = {
             "cluster": self,
             "config": self.config,
@@ -596,7 +600,7 @@ class GCPCluster(VMCluster):
         self.scheduler_options = {**self.options}
         self.worker_options = {**self.options}
 
-        super().__init__(**kwargs)
+        super().__init__(debug=debug, **kwargs)
 
 
 class GCPCompute:
