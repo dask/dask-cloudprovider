@@ -60,6 +60,7 @@ cloudprovider:
       security_group: null # Network security group to allow 8786 and 8787
       public_ingress: true # Assign a public IP address to the scheduler
       vm_size: "Standard_DS1_v2" # Azure VM size to use for scheduler and workers
+      disk_size: 50  # Specifies the size of the VM host OS disk in gigabytes. This value cannot be larger than `1023`.
       scheduler_vm_size: null # Set a different VM size for the scheduler. Will use vm_size if not set
       docker_image: "daskdev/dask:latest" # docker image to use
       vm_image: # OS image to use for the virtual machines

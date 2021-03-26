@@ -1,4 +1,5 @@
 import base64
+import json
 import uuid
 
 import dask
@@ -36,6 +37,7 @@ class AzureVM(VMInterface):
         security_group: str = None,
         vm_size: str = None,
         vm_image: dict = {},
+        disk_size: int = None,
         gpu_instance: bool = None,
         docker_image: str = None,
         env_vars: dict = {},
@@ -59,6 +61,7 @@ class AzureVM(VMInterface):
         self.public_ip = None
         self.vm_size = vm_size
         self.vm_image = vm_image
+        self.disk_size = disk_size
         self.auto_shutdown = auto_shutdown
         self.env_vars = env_vars
 
@@ -138,6 +141,10 @@ class AzureVM(VMInterface):
             "hardware_profile": {"vm_size": self.vm_size},
             "storage_profile": {
                 "image_reference": self.vm_image,
+                "os_disk": {
+                    "disk_size_gb": self.disk_size,
+                    "create_option": "FromImage",
+                },
             },
             "network_profile": {
                 "network_interfaces": [
@@ -149,6 +156,10 @@ class AzureVM(VMInterface):
             "tags": self.cluster.get_tags(),
         }
         self.cluster._log("Creating VM")
+        if self.cluster.debug:
+            self.cluster._log(
+                f"with parameters\n{json.dumps(vm_parameters, sort_keys=True, indent=2)}"
+            )
         await self.cluster.call_async(
             self.cluster.compute_client.virtual_machines.begin_create_or_update(
                 self.cluster.resource_group, self.name, vm_parameters
@@ -238,6 +249,9 @@ class AzureVMCluster(VMCluster):
     vm_size: str
         Azure VM size to use for scheduler and workers. Default ``Standard_DS1_v2``.
         List available VM sizes with ``az vm list-sizes --location <location>``.
+    disk_size: int
+        Specifies the size of the VM host OS disk in gigabytes.
+        Default is ``50``. This value cannot be larger than ``1023``.
     scheduler_vm_size: str
         Azure VM size to use for scheduler. If not set will use the ``vm_size``.
     vm_image: dict
@@ -411,6 +425,7 @@ class AzureVMCluster(VMCluster):
         vm_size: str = None,
         scheduler_vm_size: str = None,
         vm_image: dict = {},
+        disk_size: int = None,
         bootstrap: bool = None,
         auto_shutdown: bool = None,
         docker_image=None,
@@ -459,6 +474,13 @@ class AzureVMCluster(VMCluster):
                 "You must configure a security group which allows traffic on 8786 and 8787"
             )
         self.vm_size = vm_size if vm_size is not None else self.config.get("vm_size")
+        self.disk_size = (
+            disk_size if disk_size is not None else self.config.get("disk_size")
+        )
+        if self.disk_size > 1023:
+            raise ValueError(
+                "VM OS disk canot be larger than 1023. Please change the ``disk_size`` config option."
+            )
         self.scheduler_vm_size = (
             scheduler_vm_size
             if scheduler_vm_size is not None
@@ -488,6 +510,7 @@ class AzureVMCluster(VMCluster):
             "security_group": self.security_group,
             "location": self.location,
             "vm_image": self.vm_image,
+            "disk_size": self.disk_size,
             "gpu_instance": self.gpu_instance,
             "bootstrap": self.bootstrap,
             "auto_shutdown": self.auto_shutdown,
