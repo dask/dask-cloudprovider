@@ -15,6 +15,14 @@ Dask Cloud Provider
    :target: https://cloudprovider.dask.org/releasing.html
    :alt: Read the Docs Developer
 
+.. image:: https://img.shields.io/pypi/v/dask-cloudprovider
+   :target: https://pypi.org/project/dask-cloudprovider/
+   :alt: PyPI
+
+.. image:: https://img.shields.io/conda/vn/conda-forge/dask-cloudprovider
+   :target: https://anaconda.org/conda-forge/dask-cloudprovider
+   :alt: Conda Forge
+
 
 Native Cloud integration for Dask. This library intends to allow people to
 create dask clusters on a given cloud provider with no set up other than having
