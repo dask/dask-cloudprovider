@@ -27,5 +27,3 @@ def test_import_exceptions():
         from dask_cloudprovider import GCPCluster  # noqa
     with pytest.raises(ImportError):
         from dask_cloudprovider import DropletCluster  # noqa
-    with pytest.raises(ImportError):
-        from dask_cloudprovider import HetznerCluster  # noqa
