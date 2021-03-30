@@ -91,3 +91,11 @@ cloudprovider:
     docker_image: "daskdev/dask:latest" # docker image to use
     auto_shutdown: true # Shutdown instances automatically if the scheduler or worker services time out.
     public_ingress: true # configure the scheduler to be externally accessible.  This assumes firefwall rules for 8787 and 8786
+
+  hetzner:
+    token: null # API token for interacting with the Hetzner cloud API
+    location: "fsn1" # Location to launch vServer in
+    server_type: "cx11" # vServer server type to launch, default is 2GB RAM, 1 vCPU
+    image: "ubuntu-20.04" # Operating System image to use
+    docker_image: "daskdev/dask:latest" # docker image to use
+    bootstrap: true # It is assumed that the OS image does not have Docker and needs bootstrapping. Set this to false if using a custom image with Docker already installed.

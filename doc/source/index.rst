@@ -67,6 +67,7 @@ this code.
     digitalocean.rst
     gcp.rst
     azure.rst
+    hetzner.rst
 
 .. toctree::
     :maxdepth: 2
