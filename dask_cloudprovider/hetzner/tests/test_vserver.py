@@ -42,16 +42,6 @@ async def cluster(config):
         yield cluster
 
 
-@pytest.fixture
-async def cluster_prefect(config):
-    await skip_without_credentials(config)
-    async with HetznerCluster(
-        asynchronous=True,
-        docker_image="prefecthq/prefect:0.14.11",
-    ) as cluster:
-        yield cluster
-
-
 @pytest.mark.asyncio
 async def test_init():
     cluster = HetznerCluster(asynchronous=True)
