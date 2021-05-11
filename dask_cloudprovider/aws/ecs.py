@@ -1292,6 +1292,7 @@ class FargateCluster(ECSCluster):
                         "ec2:CreateSecurityGroup",
                         "ec2:CreateTags",
                         "ec2:DescribeNetworkInterfaces",
+                        "ec2:DescribeSecurityGroup",
                         "ec2:DescribeSubnets",
                         "ec2:DescribeVpcs",
                         "ec2:DeleteSecurityGroup",
@@ -1312,10 +1313,12 @@ class FargateCluster(ECSCluster):
                         "iam:TagRole",
                         "iam:PassRole",
                         "iam:DeleteRole",
+                        "iam:ListRoles",
                         "iam:ListRoleTags",
                         "iam:ListAttachedRolePolicies",
                         "iam:DetachRolePolicy",
-                        "logs:DescribeLogGroups"
+                        "logs:DescribeLogGroups",
+                        "logs:GetLogEvents"
                     ],
                     "Effect": "Allow",
                     "Resource": [
@@ -1336,6 +1339,7 @@ class FargateCluster(ECSCluster):
                     "Action": [
                         "ec2:CreateTags",
                         "ec2:DescribeNetworkInterfaces",
+                        "ec2:DescribeSecurityGroup",
                         "ec2:DescribeSubnets",
                         "ec2:DescribeVpcs",
                         "ecs:DescribeTasks",
@@ -1348,8 +1352,10 @@ class FargateCluster(ECSCluster):
                         "ecs:ListTaskDefinitions",
                         "ecs:DescribeTaskDefinition",
                         "ecs:DeregisterTaskDefinition",
+                        "iam:ListRoles",
                         "iam:ListRoleTags",
-                        "logs:DescribeLogGroups"
+                        "logs:DescribeLogGroups",
+                        "logs:GetLogEvents"
                     ],
                     "Effect": "Allow",
                     "Resource": [
