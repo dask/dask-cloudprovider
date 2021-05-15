@@ -1292,7 +1292,7 @@ class FargateCluster(ECSCluster):
                         "ec2:CreateSecurityGroup",
                         "ec2:CreateTags",
                         "ec2:DescribeNetworkInterfaces",
-                        "ec2:DescribeSecurityGroup",
+                        "ec2:DescribeSecurityGroups",
                         "ec2:DescribeSubnets",
                         "ec2:DescribeVpcs",
                         "ec2:DeleteSecurityGroup",
@@ -1339,7 +1339,7 @@ class FargateCluster(ECSCluster):
                     "Action": [
                         "ec2:CreateTags",
                         "ec2:DescribeNetworkInterfaces",
-                        "ec2:DescribeSecurityGroup",
+                        "ec2:DescribeSecurityGroups",
                         "ec2:DescribeSubnets",
                         "ec2:DescribeVpcs",
                         "ecs:DescribeTasks",
