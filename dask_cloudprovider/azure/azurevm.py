@@ -43,6 +43,7 @@ class AzureVM(VMInterface):
         env_vars: dict = {},
         bootstrap: bool = None,
         auto_shutdown: bool = None,
+        is_marketplace_vm: bool = False,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
@@ -64,6 +65,7 @@ class AzureVM(VMInterface):
         self.disk_size = disk_size
         self.auto_shutdown = auto_shutdown
         self.env_vars = env_vars
+        self.is_marketplace_vm = is_marketplace_vm
 
     async def create_vm(self):
         [subnet_info, *_] = await self.cluster.call_async(
@@ -155,6 +157,16 @@ class AzureVM(VMInterface):
             },
             "tags": self.cluster.get_tags(),
         }
+
+        if self.is_marketplace_vm:
+            self.cluster._log("Using Marketplace VM image")
+            plan = {
+                "name": self.vm_image["sku"],
+                "publisher": self.vm_image["publisher"],
+                "product": self.vm_image["offer"]
+            }
+            vm_parameters["plan"] = plan
+
         self.cluster._log("Creating VM")
         if self.cluster.debug:
             self.cluster._log(
@@ -304,6 +316,13 @@ class AzureVMCluster(VMCluster):
         be created automatically. Default is ``True``.
     debug: bool, optional
         More information will be printed when constructing clusters to enable debugging.
+    is_marketplace_vm: bool (optional)
+        Set to ``True`` if creating a virtual machine from Marketplace image or a custom image sourced
+        from a Marketplace image. Both cases require plan information to be passed in a `plan` field.
+
+        If ``True`` plan information will be extracted from the VM image information and pass along when
+        creating a new VM. Default ``False``.
+
 
     Examples
     --------
@@ -430,6 +449,7 @@ class AzureVMCluster(VMCluster):
         auto_shutdown: bool = None,
         docker_image=None,
         debug: bool = False,
+        is_marketplace_vm: bool = False,
         **kwargs,
     ):
         self.config = dask.config.get("cloudprovider.azure.azurevm", {})
@@ -504,6 +524,7 @@ class AzureVMCluster(VMCluster):
         )
         self.docker_image = docker_image or self.config.get("docker_image")
         self.debug = debug
+        self.is_marketplace_vm = is_marketplace_vm
         self.options = {
             "cluster": self,
             "config": self.config,
@@ -515,6 +536,7 @@ class AzureVMCluster(VMCluster):
             "bootstrap": self.bootstrap,
             "auto_shutdown": self.auto_shutdown,
             "docker_image": self.docker_image,
+            "is_marketplace_vm": self.is_marketplace_vm
         }
         self.scheduler_options = {
             "vm_size": self.scheduler_vm_size,
