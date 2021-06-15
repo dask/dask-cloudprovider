@@ -43,7 +43,7 @@ class AzureVM(VMInterface):
         env_vars: dict = {},
         bootstrap: bool = None,
         auto_shutdown: bool = None,
-        marketplace_plan : dict = {},
+        marketplace_plan: dict = {},
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
@@ -159,12 +159,18 @@ class AzureVM(VMInterface):
         }
 
         if self.marketplace_plan:
-            # Ref: https://docs.microsoft.com/en-us/rest/api/compute/virtual-machines/create-or-update#create-a-vm-with-a-marketplace-image-plan.
+            # Ref: https://docs.microsoft.com/en-us/rest/api/compute/virtual-machines/create-or-update#create-a-vm-with-a-marketplace-image-plan. # noqa
             # Creating a marketplace VM with a plan will override default vm_image values.
             vm_parameters["plan"] = self.marketplace_plan
-            vm_parameters["storage_profile"]["image_reference"]["sku"] = self.marketplace_plan["name"]
-            vm_parameters["storage_profile"]["image_reference"]["publisher"] = self.marketplace_plan["publisher"]
-            vm_parameters["storage_profile"]["image_reference"]["offer"] = self.marketplace_plan["product"]
+            vm_parameters["storage_profile"]["image_reference"][
+                "sku"
+            ] = self.marketplace_plan["name"]
+            vm_parameters["storage_profile"]["image_reference"][
+                "publisher"
+            ] = self.marketplace_plan["publisher"]
+            vm_parameters["storage_profile"]["image_reference"][
+                "offer"
+            ] = self.marketplace_plan["product"]
             vm_parameters["storage_profile"]["image_reference"]["version"] = "latest"
             self.cluster._log("Using Marketplace VM image with a Plan")
 
@@ -526,12 +532,15 @@ class AzureVMCluster(VMCluster):
         )
         self.docker_image = docker_image or self.config.get("docker_image")
         self.debug = debug
-        self.marketplace_plan = marketplace_plan or self.config.get('marketplace_plan')
+        self.marketplace_plan = marketplace_plan or self.config.get("marketplace_plan")
         if self.marketplace_plan:
-            # Check that self.marketplace_plan contains the right options with values 
-            if not all(self.marketplace_plan.get(item, "")!="" for item in ['name', 'publisher', 'product']):
+            # Check that self.marketplace_plan contains the right options with values
+            if not all(
+                self.marketplace_plan.get(item, "") != ""
+                for item in ["name", "publisher", "product"]
+            ):
                 raise ConfigError(
-                """To create a virtual machine from Marketplace image or a custom image sourced
+                    """To create a virtual machine from Marketplace image or a custom image sourced
                 from a Marketplace image with a plan, all 3 fields 'name', 'publisher' and 'product' must be passed."""
                 )
 
@@ -546,7 +555,7 @@ class AzureVMCluster(VMCluster):
             "bootstrap": self.bootstrap,
             "auto_shutdown": self.auto_shutdown,
             "docker_image": self.docker_image,
-            "marketplace_plan": self.marketplace_plan
+            "marketplace_plan": self.marketplace_plan,
         }
         self.scheduler_options = {
             "vm_size": self.scheduler_vm_size,
