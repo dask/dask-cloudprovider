@@ -1321,7 +1321,6 @@ class FargateCluster(ECSCluster):
                         "logs:GetLogEvents",
                         "logs:CreateLogGroup",
                         "logs:PutRetentionPolicy"
-
                     ],
                     "Effect": "Allow",
                     "Resource": [
