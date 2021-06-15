@@ -1318,7 +1318,10 @@ class FargateCluster(ECSCluster):
                         "iam:ListAttachedRolePolicies",
                         "iam:DetachRolePolicy",
                         "logs:DescribeLogGroups",
-                        "logs:GetLogEvents"
+                        "logs:GetLogEvents",
+                        "logs:CreateLogGroup",
+                        "logs:PutRetentionPolicy"
+
                     ],
                     "Effect": "Allow",
                     "Resource": [
