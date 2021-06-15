@@ -70,6 +70,10 @@ cloudprovider:
         version: "latest"
       bootstrap: true # It is assumed that the VHD does not have Docker and needs bootstrapping. Set this to false if using a custom VHD with Docker already installed.
       auto_shutdown: true # Shutdown instances automatically if the scheduler or worker services time out.
+      marketplace_plan:  null # This needs to be passed in if the user wants to use a Marketplace VM with a plan.
+        # name: "ngc-base-version-21-02-2"
+        # publisher: "nvidia"
+        # product: "ngc_azure_17_11"
 
   digitalocean:
     token: null # API token for interacting with the Digital Ocean API
