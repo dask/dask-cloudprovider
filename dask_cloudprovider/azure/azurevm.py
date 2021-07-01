@@ -3,6 +3,7 @@ import json
 import uuid
 
 import dask
+from dask_cloudprovider.config import ClusterConfig
 from dask_cloudprovider.generic.vmcluster import (
     VMCluster,
     VMInterface,
@@ -241,19 +242,6 @@ class AzureVMWorker(WorkerMixin, AzureVM):
     """Worker running on an AzureVM."""
 
 
-class _Config(dict):
-    """Simple config interface for `AzureVMCluster`.
-
-    Enables '.' notation for nested access, as per `dask.config.get`.
-
-    """
-    def __new__(cls, d):
-        return super().__new__(cls, d)
-        
-    def get(self, key, default=None, override_with=None):
-        return dask.config.get(key, default=default, config=self, override_with=override_with)
-
-
 class AzureVMCluster(VMCluster):
     """Cluster running on Azure Virtual machines.
 
@@ -473,28 +461,16 @@ class AzureVMCluster(VMCluster):
         marketplace_plan: dict = {},
         **kwargs,
     ):
-        self.config = _Config(dask.config.get("cloudprovider.azure", {}))
+        self.config = ClusterConfig(dask.config.get("cloudprovider.azure", {}))
         self.scheduler_class = AzureVMScheduler
         self.worker_class = AzureVMWorker
-        self.location = (
-            location
-            if location is not None
-            else self.config.get("location")
-        )
+        self.location = self.config.get("location", override_with=location)
         if self.location is None:
             raise ConfigError("You must configure a location")
-        self.resource_group = (
-            resource_group
-            if resource_group is not None
-            else self.config.get("resource_group")
-        )
+        self.resource_group = self.config.get("resource_group", override_with=resource_group)
         if self.resource_group is None:
             raise ConfigError("You must configure a resource_group")
-        self.public_ingress = (
-            public_ingress
-            if public_ingress is not None
-            else self.config.get("azurevm.public_ingress")
-        )
+        self.public_ingress = self.config.get("azurevm.public_ingress", override_with=public_ingress)
         self.credentials, self.subscription_id = get_azure_cli_credentials()
         self.compute_client = ComputeManagementClient(
             self.credentials, self.subscription_id
@@ -502,30 +478,23 @@ class AzureVMCluster(VMCluster):
         self.network_client = NetworkManagementClient(
             self.credentials, self.subscription_id
         )
-        self.vnet = vnet if vnet is not None else self.config.get("azurevm.vnet")
+        self.vnet = self.config.get("azurevm.vnet", override_with=vnet)
         if self.vnet is None:
             raise ConfigError("You must configure a vnet")
-        self.security_group = (
-            security_group
-            if security_group is not None
-            else self.config.get("azurevm.security_group")
-        )
+        self.security_group = self.config.get("azurevm.security_group", override_with=security_group)
         if self.security_group is None:
             raise ConfigError(
                 "You must configure a security group which allows traffic on 8786 and 8787"
             )
-        self.vm_size = vm_size if vm_size is not None else self.config.get("azurevm.vm_size")
-        self.disk_size = (
-            disk_size if disk_size is not None else self.config.get("azurevm.disk_size")
-        )
+        self.vm_size = self.config.get("azurevm.vm_size", override_with=vm_size)
+        self.disk_size = self.config.get("azurevm.disk_size", override_with=disk_size)
         if self.disk_size > 1023:
             raise ValueError(
                 "VM OS disk canot be larger than 1023. Please change the ``disk_size`` config option."
             )
-        self.scheduler_vm_size = (
-            scheduler_vm_size
-            if scheduler_vm_size is not None
-            else self.config.get("azurevm.scheduler_vm_size")
+        self.scheduler_vm_size = self.config.get(
+            "azurevm.scheduler_vm_size",
+            override_with=scheduler_vm_size
         )
         if self.scheduler_vm_size is None:
             self.scheduler_vm_size = self.vm_size
@@ -535,15 +504,8 @@ class AzureVMCluster(VMCluster):
         self.vm_image = self.config.get("azurevm.vm_image")
         for key in vm_image:
             self.vm_image[key] = vm_image[key]
-        self.bootstrap = (
-            bootstrap if bootstrap is not None else self.config.get("azurevm.bootstrap")
-        )
-        self.auto_shutdown = (
-            auto_shutdown
-            if auto_shutdown is not None
-            else self.config.get("azurevm.auto_shutdown")
-        )
-        self.docker_image = docker_image or self.config.get("azurevm.docker_image")
+        self.bootstrap = self.config.get("azurevm.bootstrap", override_with=bootstrap)
+        self.auto_shutdown = self.config.get("azurevm.auto_shutdown", override_with=auto_shutdown)
         self.debug = debug
         self.marketplace_plan = marketplace_plan or self.config.get("azurevm.marketplace_plan")
         if self.marketplace_plan:
