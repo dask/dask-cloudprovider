@@ -241,6 +241,19 @@ class AzureVMWorker(WorkerMixin, AzureVM):
     """Worker running on an AzureVM."""
 
 
+class _Config(dict):
+    """Simple config interface for `AzureVMCluster`.
+
+    Enables '.' notation for nested access, as per `dask.config.get`.
+
+    """
+    def __new__(cls, d):
+        return super().__new__(cls, d)
+        
+    def get(self, key, default=None, override_with=None):
+        return dask.config.get(key, default=default, config=self, override_with=override_with)
+
+
 class AzureVMCluster(VMCluster):
     """Cluster running on Azure Virtual machines.
 
@@ -460,13 +473,13 @@ class AzureVMCluster(VMCluster):
         marketplace_plan: dict = {},
         **kwargs,
     ):
-        self.config = dask.config.get("cloudprovider.azure.azurevm", {})
+        self.config = _Config(dask.config.get("cloudprovider.azure", {}))
         self.scheduler_class = AzureVMScheduler
         self.worker_class = AzureVMWorker
         self.location = (
             location
             if location is not None
-            else dask.config.get("cloudprovider.azure.location")
+            else self.config.get("location")
         )
         if self.location is None:
             raise ConfigError("You must configure a location")
@@ -480,7 +493,7 @@ class AzureVMCluster(VMCluster):
         self.public_ingress = (
             public_ingress
             if public_ingress is not None
-            else self.config.get("public_ingress")
+            else self.config.get("azurevm.public_ingress")
         )
         self.credentials, self.subscription_id = get_azure_cli_credentials()
         self.compute_client = ComputeManagementClient(
@@ -489,21 +502,21 @@ class AzureVMCluster(VMCluster):
         self.network_client = NetworkManagementClient(
             self.credentials, self.subscription_id
         )
-        self.vnet = vnet if vnet is not None else self.config.get("vnet")
+        self.vnet = vnet if vnet is not None else self.config.get("azurevm.vnet")
         if self.vnet is None:
             raise ConfigError("You must configure a vnet")
         self.security_group = (
             security_group
             if security_group is not None
-            else self.config.get("security_group")
+            else self.config.get("azurevm.security_group")
         )
         if self.security_group is None:
             raise ConfigError(
                 "You must configure a security group which allows traffic on 8786 and 8787"
             )
-        self.vm_size = vm_size if vm_size is not None else self.config.get("vm_size")
+        self.vm_size = vm_size if vm_size is not None else self.config.get("azurevm.vm_size")
         self.disk_size = (
-            disk_size if disk_size is not None else self.config.get("disk_size")
+            disk_size if disk_size is not None else self.config.get("azurevm.disk_size")
         )
         if self.disk_size > 1023:
             raise ValueError(
@@ -512,27 +525,27 @@ class AzureVMCluster(VMCluster):
         self.scheduler_vm_size = (
             scheduler_vm_size
             if scheduler_vm_size is not None
-            else self.config.get("scheduler_vm_size")
+            else self.config.get("azurevm.scheduler_vm_size")
         )
         if self.scheduler_vm_size is None:
             self.scheduler_vm_size = self.vm_size
         self.gpu_instance = (
             "_NC" in self.vm_size.upper() or "_ND" in self.vm_size.upper()
         )
-        self.vm_image = self.config.get("vm_image")
+        self.vm_image = self.config.get("azurevm.vm_image")
         for key in vm_image:
             self.vm_image[key] = vm_image[key]
         self.bootstrap = (
-            bootstrap if bootstrap is not None else self.config.get("bootstrap")
+            bootstrap if bootstrap is not None else self.config.get("azurevm.bootstrap")
         )
         self.auto_shutdown = (
             auto_shutdown
             if auto_shutdown is not None
-            else self.config.get("auto_shutdown")
+            else self.config.get("azurevm.auto_shutdown")
         )
-        self.docker_image = docker_image or self.config.get("docker_image")
+        self.docker_image = docker_image or self.config.get("azurevm.docker_image")
         self.debug = debug
-        self.marketplace_plan = marketplace_plan or self.config.get("marketplace_plan")
+        self.marketplace_plan = marketplace_plan or self.config.get("azurevm.marketplace_plan")
         if self.marketplace_plan:
             # Check that self.marketplace_plan contains the right options with values
             if not all(
