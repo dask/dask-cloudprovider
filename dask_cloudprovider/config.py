@@ -21,11 +21,14 @@ class ClusterConfig(dict):
     ...         self.option = self.config.get("option", override_with=option)
 
     """
+
     def __new__(cls, d):
         return super().__new__(cls, d)
-        
+
     def get(self, key, default=None, override_with=None):
-        return dask.config.get(key, default=default, config=self, override_with=override_with)
+        return dask.config.get(
+            key, default=default, config=self, override_with=override_with
+        )
 
 
 fn = os.path.join(os.path.dirname(__file__), "cloudprovider.yaml")

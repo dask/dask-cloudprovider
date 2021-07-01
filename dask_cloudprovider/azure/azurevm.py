@@ -467,10 +467,14 @@ class AzureVMCluster(VMCluster):
         self.location = self.config.get("location", override_with=location)
         if self.location is None:
             raise ConfigError("You must configure a location")
-        self.resource_group = self.config.get("resource_group", override_with=resource_group)
+        self.resource_group = self.config.get(
+            "resource_group", override_with=resource_group
+        )
         if self.resource_group is None:
             raise ConfigError("You must configure a resource_group")
-        self.public_ingress = self.config.get("azurevm.public_ingress", override_with=public_ingress)
+        self.public_ingress = self.config.get(
+            "azurevm.public_ingress", override_with=public_ingress
+        )
         self.credentials, self.subscription_id = get_azure_cli_credentials()
         self.compute_client = ComputeManagementClient(
             self.credentials, self.subscription_id
@@ -481,7 +485,9 @@ class AzureVMCluster(VMCluster):
         self.vnet = self.config.get("azurevm.vnet", override_with=vnet)
         if self.vnet is None:
             raise ConfigError("You must configure a vnet")
-        self.security_group = self.config.get("azurevm.security_group", override_with=security_group)
+        self.security_group = self.config.get(
+            "azurevm.security_group", override_with=security_group
+        )
         if self.security_group is None:
             raise ConfigError(
                 "You must configure a security group which allows traffic on 8786 and 8787"
@@ -493,8 +499,7 @@ class AzureVMCluster(VMCluster):
                 "VM OS disk canot be larger than 1023. Please change the ``disk_size`` config option."
             )
         self.scheduler_vm_size = self.config.get(
-            "azurevm.scheduler_vm_size",
-            override_with=scheduler_vm_size
+            "azurevm.scheduler_vm_size", override_with=scheduler_vm_size
         )
         if self.scheduler_vm_size is None:
             self.scheduler_vm_size = self.vm_size
@@ -505,9 +510,13 @@ class AzureVMCluster(VMCluster):
         for key in vm_image:
             self.vm_image[key] = vm_image[key]
         self.bootstrap = self.config.get("azurevm.bootstrap", override_with=bootstrap)
-        self.auto_shutdown = self.config.get("azurevm.auto_shutdown", override_with=auto_shutdown)
+        self.auto_shutdown = self.config.get(
+            "azurevm.auto_shutdown", override_with=auto_shutdown
+        )
         self.debug = debug
-        self.marketplace_plan = marketplace_plan or self.config.get("azurevm.marketplace_plan")
+        self.marketplace_plan = marketplace_plan or self.config.get(
+            "azurevm.marketplace_plan"
+        )
         if self.marketplace_plan:
             # Check that self.marketplace_plan contains the right options with values
             if not all(
