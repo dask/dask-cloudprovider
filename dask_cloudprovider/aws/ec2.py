@@ -332,7 +332,7 @@ class EC2Cluster(VMCluster):
     ...     credentials = parser.items('default')
     ...     all_credentials = {key.upper(): value for key, value in [*config, *credentials]}
     ...     with contextlib.suppress(KeyError):
-    ...     all_credentials["AWS_REGION"] = all_credentials.pop("REGION")
+    ...         all_credentials["AWS_REGION"] = all_credentials.pop("REGION")
     ...     return all_credentials
     >>> cluster = EC2Cluster(env_vars=get_aws_credentials())
 
