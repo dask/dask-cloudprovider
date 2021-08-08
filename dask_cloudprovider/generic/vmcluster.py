@@ -11,8 +11,9 @@ from distributed.worker import Worker as _Worker
 from distributed.scheduler import Scheduler as _Scheduler
 from distributed.security import Security
 from distributed.deploy.spec import SpecCluster, ProcessInterface
-from distributed.utils import warn_on_duration, serialize_for_cli, cli_keywords
+from distributed.utils import warn_on_duration, cli_keywords
 
+from dask_cloudprovider._compat import dask_serialize
 from dask_cloudprovider.utils.socket import is_socket_open
 
 
@@ -31,7 +32,7 @@ class VMInterface(ProcessInterface):
         self.docker_args = docker_args
         self.auto_shutdown = True
         self.set_env = 'env DASK_INTERNAL_INHERIT_CONFIG="{}"'.format(
-            serialize_for_cli(dask.config.global_config)
+            dask_serialize(dask.config.global_config)
         )
         self.kwargs = kwargs
 
