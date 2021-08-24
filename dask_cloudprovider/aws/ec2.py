@@ -17,7 +17,7 @@ from dask_cloudprovider.aws.helper import (
 from dask_cloudprovider.utils.timeout import Timeout
 
 try:
-    import aiobotocore
+    from aiobotocore.session import get_session
     import botocore.exceptions
 except ImportError as e:
     msg = (
@@ -407,7 +407,7 @@ class EC2Cluster(VMCluster):
         debug=False,
         **kwargs,
     ):
-        self.boto_session = aiobotocore.get_session()
+        self.boto_session = get_session()
         self.config = dask.config.get("cloudprovider.ec2", {})
         self.scheduler_class = EC2Scheduler
         self.worker_class = EC2Worker
