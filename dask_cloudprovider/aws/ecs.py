@@ -24,7 +24,7 @@ from distributed.core import Status
 
 try:
     from botocore.exceptions import ClientError
-    import aiobotocore
+    from aiobotocore.session import get_session
 except ImportError as e:
     msg = (
         "Dask Cloud Provider AWS requirements are not installed.\n\n"
@@ -729,7 +729,7 @@ class ECSCluster(SpecCluster):
         self._region_name = region_name
         self._platform_version = platform_version
         self._lock = asyncio.Lock()
-        self.session = aiobotocore.get_session()
+        self.session = get_session()
         super().__init__(**kwargs)
 
     def _client(self, name: str):
@@ -1390,7 +1390,7 @@ async def _cleanup_stale_resources():
 
     """
     # Clean up clusters (clusters with no running tasks)
-    session = aiobotocore.get_session()
+    session = get_session()
     async with session.create_client("ecs") as ecs:
         active_clusters = []
         clusters_to_delete = []
