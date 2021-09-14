@@ -181,11 +181,22 @@ class Task:
 
     async def _update_task(self):
         async with self._client("ecs") as ecs:
-            [self.task] = (
-                await ecs.describe_tasks(
-                    cluster=self.cluster_arn, tasks=[self.task_arn]
-                )
-            )["tasks"]
+            wait_duration = 1
+            while True:
+                try:
+                    [self.task] = (
+                        await ecs.describe_tasks(
+                            cluster=self.cluster_arn, tasks=[self.task_arn]
+                        )
+                    )["tasks"]
+                except ClientError as e:
+                    if e.response["Error"]["Code"] == "ThrottlingException":
+                        wait_duration = min(wait_duration * 2, 20)
+                    else:
+                        raise
+                else:
+                    break
+                await asyncio.sleep(wait_duration)
 
     async def _set_address_from_logs(self):
         timeout = Timeout(
@@ -275,17 +286,9 @@ class Task:
                 await asyncio.sleep(1)
 
         self.task_arn = self.task["taskArn"]
-        wait_duration = 1
         while self.task["lastStatus"] in ["PENDING", "PROVISIONING"]:
-            try:
-                await self._update_task()
-                wait_duration = 1
-            except ClientError as e:
-                if e.response["Error"]["Code"] == "ThrottlingException":
-                    wait_duration = wait_duration * 2
-                else:
-                    raise
-            await asyncio.sleep(min(wait_duration, 20))
+            await asyncio.sleep(1)
+            await self._update_task()
         if not await self._task_is_running():
             raise RuntimeError("%s failed to start" % type(self).__name__)
         [eni] = [
