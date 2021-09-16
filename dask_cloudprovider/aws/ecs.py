@@ -287,7 +287,6 @@ class Task:
 
         self.task_arn = self.task["taskArn"]
         while self.task["lastStatus"] in ["PENDING", "PROVISIONING"]:
-            await asyncio.sleep(1)
             await self._update_task()
         if not await self._task_is_running():
             raise RuntimeError("%s failed to start" % type(self).__name__)
