@@ -74,7 +74,7 @@ class Task:
         log group when launching this task.
 
     fargate: bool
-        Whether or not to launch with the Fargate launch type.
+        Whether or not to launch on Fargate.
 
     environment: dict
         Environment variables to set when launching the task.
@@ -96,6 +96,11 @@ class Task:
     fargate_use_private_ip: bool (optional)
         Whether to use a private IP (if True) or public IP (if False) with Fargate.
         Defaults to False, i.e. public IP.
+
+    fargate_capacity_provider: str (optional)
+        If launched on Fargate, use this capacity provider (FARGATE/FARGATE_SPOT).
+        If not set, launchType=FARGATE will be used.
+        Defaults to None.
 
     task_kwargs: dict (optional)
         Additional keyword arguments for the ECS task.
@@ -125,6 +130,7 @@ class Task:
         name=None,
         platform_version=None,
         fargate_use_private_ip=False,
+        fargate_capacity_provider=None,
         task_kwargs=None,
         **kwargs
     ):
@@ -152,6 +158,7 @@ class Task:
         self._find_address_timeout = find_address_timeout
         self.platform_version = platform_version
         self._fargate_use_private_ip = fargate_use_private_ip
+        self._fargate_capacity_provider = fargate_capacity_provider
         self.kwargs = kwargs
         self.task_kwargs = task_kwargs
         self.status = Status.created
@@ -271,7 +278,15 @@ class Task:
                 # so that the default capacity provider of the ECS cluster or an alternate
                 # capacity provider can be specified. (dask/dask-cloudprovider#261)
                 if self.fargate:
-                    kwargs["launchType"] = "FARGATE"
+                    # Use launchType only if capacity provider is not specified
+                    if not self._fargate_capacity_provider:
+                        kwargs["launchType"] = "FARGATE"
+                    else:
+                        kwargs["capacityProviderStrategy"] = [
+                            {
+                                "capacityProvider": self._fargate_capacity_provider
+                            }
+                        ]
 
                 async with self._client("ecs") as ecs:
                     response = await ecs.run_task(**kwargs)
@@ -451,6 +466,11 @@ class ECSCluster(SpecCluster):
         Defaults to ``False``. You must provide an existing cluster.
     fargate_workers: bool (optional)
         Select whether or not to use fargate for the workers.
+
+        Defaults to ``False``. You must provide an existing cluster.
+    fargate_spot: bool (optional)
+        Select whether or not to run cluster using Fargate Spot. This will run workers on FARGATE_SPOT
+        and scheduler on FARGATE capacity providers.
 
         Defaults to ``False``. You must provide an existing cluster.
     image: str (optional)
@@ -655,6 +675,7 @@ class ECSCluster(SpecCluster):
         self,
         fargate_scheduler=False,
         fargate_workers=False,
+        fargate_spot=False,
         image=None,
         scheduler_cpu=None,
         scheduler_mem=None,
@@ -694,6 +715,7 @@ class ECSCluster(SpecCluster):
     ):
         self._fargate_scheduler = fargate_scheduler
         self._fargate_workers = fargate_workers
+        self._fargate_spot = fargate_spot
         self.image = image
         self._scheduler_cpu = scheduler_cpu
         self._scheduler_mem = scheduler_mem
@@ -764,6 +786,8 @@ class ECSCluster(SpecCluster):
             self._fargate_scheduler = self.config.get("fargate_scheduler")
         if self._fargate_workers is None:
             self._fargate_workers = self.config.get("fargate_workers")
+        if self._fargate_spot is None:
+            self._fargate_spot = self.config.get("fargate_spot")
 
         if self._tags is None:
             self._tags = self.config.get("tags")
@@ -905,12 +929,14 @@ class ECSCluster(SpecCluster):
         scheduler_options = {
             "task_definition_arn": self.scheduler_task_definition_arn,
             "fargate": self._fargate_scheduler,
+            "fargate_capacity_provider": "FARGATE" if self._fargate_spot else None,
             "task_kwargs": self._scheduler_task_kwargs,
             **options,
         }
         worker_options = {
             "task_definition_arn": self.worker_task_definition_arn,
             "fargate": self._fargate_workers,
+            "fargate_capacity_provider": "FARGATE_SPOT" if self._fargate_spot else None,
             "cpu": self._worker_cpu,
             "mem": self._worker_mem,
             "gpu": self._worker_gpu,
@@ -1265,6 +1291,12 @@ class FargateCluster(ECSCluster):
 
     >>> from dask_cloudprovider.aws import FargateCluster
     >>> cluster = FargateCluster(image="<hub-user>/<repo-name>[:<tag>]")
+
+    To run cluster with workers using Fargate Spot
+    (<https://aws.amazon.com/blogs/aws/aws-fargate-spot-now-generally-available/>) set ``fargate_spot=True``
+
+    >>> from dask_cloudprovider.aws import FargateCluster
+    >>> cluster = FargateCluster(fargate_spot=True)
 
     One strategy to ensure that package versions match between your custom environment and the Docker container is to
     create your environment from an ``environment.yml`` file, export the exact package list for that environment using
