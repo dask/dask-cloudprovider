@@ -98,8 +98,9 @@ class Task:
         Defaults to False, i.e. public IP.
 
     fargate_capacity_provider: str (optional)
-        If launched on Fargate, use this capacity provider (FARGATE/FARGATE_SPOT).
-        If not set, launchType=FARGATE will be used.
+        If cluster is launched on Fargate with `fargate_spot=True`, use this capacity provider
+        (should be either `FARGATE` or `FARGATE_SPOT`).
+        If not set, `launchType=FARGATE` will be used.
         Defaults to None.
 
     task_kwargs: dict (optional)
@@ -467,8 +468,10 @@ class ECSCluster(SpecCluster):
 
         Defaults to ``False``. You must provide an existing cluster.
     fargate_spot: bool (optional)
-        Select whether or not to run cluster using Fargate Spot. This will run workers on FARGATE_SPOT
-        and scheduler on FARGATE capacity providers.
+        Select whether or not to run cluster using Fargate Spot with workers running on spot capacity.
+        If `fargate_scheduler=True` and `fargate_workers=True`, this will make sure worker tasks will use
+        `fargate_capacity_provider=FARGATE_SPOT` and scheduler task will use
+        `fargate_capacity_provider=FARGATE` capacity providers.
 
         Defaults to ``False``. You must provide an existing cluster.
     image: str (optional)
