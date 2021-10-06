@@ -283,9 +283,7 @@ class Task:
                         kwargs["launchType"] = "FARGATE"
                     else:
                         kwargs["capacityProviderStrategy"] = [
-                            {
-                                "capacityProvider": self._fargate_capacity_provider
-                            }
+                            {"capacityProvider": self._fargate_capacity_provider}
                         ]
 
                 async with self._client("ecs") as ecs:
