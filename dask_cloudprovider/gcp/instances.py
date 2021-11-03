@@ -401,7 +401,7 @@ class GCPCluster(VMCluster):
             - (optional) ingress 0.0.0.0./0 on 22 for ssh access
     network_projectid: str
         The project id of the GCP network. This defaults to the projectid. There may
-        be cases when network configurations from a different GCP project are used.
+        be cases (i.e. Shared VPC) when network configurations from a different GCP project are used.
     machine_type: str
         The VM machine_type. You can get a full list with ``gcloud compute machine-types list``.
         The default is ``n1-standard-1`` which is 3.75GB RAM and 1 vCPU
