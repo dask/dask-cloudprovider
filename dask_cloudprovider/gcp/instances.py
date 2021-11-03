@@ -100,6 +100,7 @@ class GCPInstance(VMInterface):
         self.general_zone = "-".join(self.zone.split("-")[:2])  # us-east1-c -> us-east1
 
     def create_gcp_config(self):
+        subnetwork = f"projects/{self.network_projectid}/regions/{self.general_zone}/subnetworks/{self.network}"
         config = {
             "name": self.name,
             "machineType": f"zones/{self.zone}/machineTypes/{self.machine_type}",
@@ -128,7 +129,7 @@ class GCPInstance(VMInterface):
             "networkInterfaces": [
                 {
                     "kind": "compute#networkInterface",
-                    "subnetwork": f"projects/{self.network_projectid}/regions/{self.general_zone}/subnetworks/{self.network}",
+                    "subnetwork": subnetwork,
                     "aliasIpRanges": [],
                 }
             ],
