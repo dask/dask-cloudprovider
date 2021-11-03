@@ -88,7 +88,9 @@ class GCPInstance(VMInterface):
         self.disk_type = disk_type or self.config.get("disk_type")
         self.ngpus = ngpus or self.config.get("ngpus")
         self.network = network or self.config.get("network")
-        self.network_projectid = network_projectid if network_projectid is not None else projectid
+        self.network_projectid = (
+            network_projectid if network_projectid is not None else projectid
+        )
         self.gpu_type = gpu_type or self.config.get("gpu_type")
         self.gpu_instance = gpu_instance
         self.bootstrap = bootstrap
