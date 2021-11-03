@@ -57,6 +57,7 @@ class GCPInstance(VMInterface):
         source_image=None,
         docker_image=None,
         network=None,
+        network_projectid=None,
         env_vars=None,
         ngpus=None,
         gpu_type=None,
@@ -87,6 +88,7 @@ class GCPInstance(VMInterface):
         self.disk_type = disk_type or self.config.get("disk_type")
         self.ngpus = ngpus or self.config.get("ngpus")
         self.network = network or self.config.get("network")
+        self.network_projectid = network_projectid if network_projectid is not None else projectid
         self.gpu_type = gpu_type or self.config.get("gpu_type")
         self.gpu_instance = gpu_instance
         self.bootstrap = bootstrap
@@ -124,7 +126,7 @@ class GCPInstance(VMInterface):
             "networkInterfaces": [
                 {
                     "kind": "compute#networkInterface",
-                    "subnetwork": f"projects/{self.projectid}/regions/{self.general_zone}/subnetworks/{self.network}",
+                    "subnetwork": f"projects/{self.network_projectid}/regions/{self.general_zone}/subnetworks/{self.network}",
                     "aliasIpRanges": [],
                 }
             ],
@@ -289,7 +291,7 @@ class GCPScheduler(SchedulerMixin, GCPInstance):
             f"\n  Source Image: {self.source_image} "
             f"\n  Docker Image: {self.docker_image} "
             f"\n  Machine Type: {self.machine_type} "
-            f"\n  Filesytsem Size: {self.filesystem_size} "
+            f"\n  Filesystem Size: {self.filesystem_size} "
             f"\n  Disk Type: {self.disk_type} "
             f"\n  N-GPU Type: {self.ngpus} {self.gpu_type}"
             f"\n  Zone: {self.zone} "
