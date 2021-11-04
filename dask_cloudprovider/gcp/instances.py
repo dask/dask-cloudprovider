@@ -598,7 +598,7 @@ class GCPCluster(VMCluster):
             "machine_type": self.machine_type,
             "ngpus": ngpus or self.config.get("ngpus"),
             "network": network or self.config.get("network"),
-            "network_projectid": network_projectid,
+            "network_projectid": network_projectid or self.config.get("network_projectid"),
             "gpu_type": gpu_type or self.config.get("gpu_type"),
             "gpu_instance": self.gpu_instance,
             "bootstrap": self.bootstrap,
