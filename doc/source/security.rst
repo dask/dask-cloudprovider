@@ -16,11 +16,8 @@ networking. For example:
 
 .. code-block:: python
 
-    >>> import dask, dask_cloudprovider
-    >>> config = dask.config.get("cloudprovider")
-    # Override the public ingress configuration for only the GCP cloud provider.
-    >>> config["gcp"]["public_ingress"] = False
-    >>> dask.config.set({"cloudprovider": config})
+    >>> import dask.config, dask_cloudprovider
+    >>> dask.config.set({"cloudprovider.gcp.public_ingress": False})
 
 See each cluster manager for configuration options.
 
