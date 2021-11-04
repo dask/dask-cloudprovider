@@ -113,6 +113,8 @@ class HetznerCluster(VMCluster):
         See :class:`distributed.scheduler.Scheduler`.
     env_vars: dict
         Environment variables to be passed to the worker.
+    extra_bootstrap: list[str] (optional)
+        Extra commands to be run during the bootstrap phase.
 
     Example
     --------

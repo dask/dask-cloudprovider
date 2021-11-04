@@ -19,7 +19,7 @@ from dask_cloudprovider.utils.socket import is_socket_open
 class VMInterface(ProcessInterface):
     """A superclass for VM Schedulers, Workers and Nannies."""
 
-    def __init__(self, docker_args: str = "", **kwargs):
+    def __init__(self, docker_args: str = "", extra_bootstrap: list = None, **kwargs):
         super().__init__()
         self.name = None
         self.command = None
@@ -29,6 +29,7 @@ class VMInterface(ProcessInterface):
         self.bootstrap = None
         self.docker_image = "daskdev/dask:latest"
         self.docker_args = docker_args
+        self.extra_bootstrap = extra_bootstrap
         self.auto_shutdown = True
         self.set_env = 'env DASK_INTERNAL_INHERIT_CONFIG="{}"'.format(
             dask.config.serialize(dask.config.global_config)
@@ -190,6 +191,8 @@ class VMCluster(SpecCluster):
         By default the ``daskdev/dask:latest`` image will be used.
     docker_args: string (optional)
         Extra command line arguments to pass to Docker.
+    extra_bootstrap: list[str] (optional)
+        Extra commands to be run during the bootstrap phase.
     silence_logs: bool
         Whether or not we should silence logging when setting up the cluster.
     asynchronous: bool
@@ -223,6 +226,7 @@ class VMCluster(SpecCluster):
         scheduler_options: dict = {},
         docker_image="daskdev/dask:latest",
         docker_args: str = "",
+        extra_bootstrap: list = None,
         env_vars: dict = {},
         security: bool = True,
         protocol: str = None,
@@ -278,6 +282,7 @@ class VMCluster(SpecCluster):
         self.scheduler_options["scheduler_options"] = scheduler_options
         self.worker_options["env_vars"] = env_vars
         self.options["docker_args"] = docker_args
+        self.options["extra_bootstrap"] = extra_bootstrap
         self.scheduler_options["docker_args"] = docker_args
         self.worker_options["docker_args"] = docker_args
         self.worker_options["docker_image"] = image
@@ -333,6 +338,7 @@ class VMCluster(SpecCluster):
             image=process.docker_image,
             command=process.command,
             docker_args=process.docker_args,
+            extra_bootstrap=process.extra_bootstrap,
             gpu_instance=process.gpu_instance,
             bootstrap=process.bootstrap,
             auto_shutdown=process.auto_shutdown,
@@ -357,6 +363,7 @@ class VMCluster(SpecCluster):
             image=cluster.options["docker_image"],
             command="dask-scheduler --version",
             docker_args=cluster.options["docker_args"],
+            extra_bootstrap=cluster.options["extra_bootstrap"],
             gpu_instance=cluster.gpu_instance,
             bootstrap=cluster.bootstrap,
             auto_shutdown=cluster.auto_shutdown,
