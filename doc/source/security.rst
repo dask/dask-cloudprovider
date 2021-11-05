@@ -12,7 +12,12 @@ This makes things quick and easy for new users to get up and running, but may po
 
 Many organisations have policies which do not allow users to assign public IP addresses or open ports. Our best practices
 advice is to use Dask Cloudprovider from within a cloud platform, either from a VM or a managed environment. Then disable public
-networking.
+networking. For example: 
+
+.. code-block:: python
+
+    >>> import dask.config, dask_cloudprovider
+    >>> dask.config.set({"cloudprovider.gcp.public_ingress": False})
 
 See each cluster manager for configuration options.
 
