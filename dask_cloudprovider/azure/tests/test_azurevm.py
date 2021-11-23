@@ -23,7 +23,7 @@ def skip_without_credentials(func):
         """
         )(func)
 
-    rg = dask.config.get("cloudprovider.azure.azurevm.resource_group", None)
+    rg = dask.config.get("cloudprovider.azure.resource_group", None)
     vnet = dask.config.get("cloudprovider.azure.azurevm.vnet", None)
     security_group = dask.config.get("cloudprovider.azure.azurevm.security_group", None)
     location = dask.config.get("cloudprovider.azure.location", None)
@@ -121,3 +121,9 @@ async def test_create_rapids_cluster_sync():
 async def test_render_cloud_init():
     cloud_init = AzureVMCluster.get_cloud_init(docker_args="--privileged")
     assert " --privileged " in cloud_init
+
+    cloud_init = AzureVMCluster.get_cloud_init(
+        extra_bootstrap=["echo 'hello world'", "echo 'foo bar'"]
+    )
+    assert "- echo 'hello world'" in cloud_init
+    assert "- echo 'foo bar'" in cloud_init

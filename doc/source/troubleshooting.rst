@@ -26,7 +26,7 @@ So, for example, code like this will result in an error
 
 .. code-block:: python
 
-    from dask_cloudprovider import FargateCluster
+    from dask_cloudprovider.aws import FargateCluster
     cluster = FargateCluster(
         image="daskdev/dask:latest",
         worker_cpu=256,
@@ -64,3 +64,18 @@ However, to get the desired cluster configuration you'll need to request a servi
 Go to ``https://<region>.aws.amazon.com/servicequotas/home/services/ec2/quotas`` and
 `request an increase <https://docs.aws.amazon.com/servicequotas/latest/userguide/request-quota-increase.html>`_ for
 "Running On-Demand Standard (A, C, D, H, I, M, R, T, Z) instances".
+
+Pulling private Docker images
+-----------------------------------
+
+For cluster managers like ``EC2Cluster``, ``AzureVMCluster`` and ``GCPCluster`` Docker images will be pulled onto VMs created on the cloud of your choice.
+
+If you need to pull a private Docker images which requires authentication each VM will need to be configured with credentials. These cluster managers accept
+and ``extra_bootstrap`` argument where you can provide additional bash commands to be run during startup. This is a good place to log into your Docker registry.
+
+.. code-block:: python
+
+    from dask_cloudprovider.azure import AzureVMCluster
+    cluster = AzureVMCluster(...
+                             docker_image="my_private_image:latest",
+                             extra_bootstrap=["docker login -u 'username' -p 'password'"])

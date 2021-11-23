@@ -125,6 +125,8 @@ class DropletCluster(VMCluster):
         By default the ``daskdev/dask:latest`` image will be used.
     docker_args: string (optional)
         Extra command line arguments to pass to Docker.
+    extra_bootstrap: list[str] (optional)
+        Extra commands to be run during the bootstrap phase.
     env_vars: dict (optional)
         Environment variables to be passed to the worker.
     silence_logs: bool
