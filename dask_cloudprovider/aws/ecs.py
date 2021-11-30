@@ -498,6 +498,10 @@ class ECSCluster(SpecCluster):
         Defaults to `None`, no extra command line arguments.
     scheduler_task_kwargs: dict (optional)
         Additional keyword arguments for the scheduler ECS task.
+    scheduler_address: str (optional)
+        If passed, no scheduler task will be started, and instead the workers will connect to the passed address.
+
+        Defaults to `None`, a scheduler task will start.
     worker_cpu: int (optional)
         The amount of CPU to request for worker tasks in milli-cpu (1/1024).
 
@@ -527,6 +531,14 @@ class ECSCluster(SpecCluster):
         Number of workers to start on cluster creation.
 
         Defaults to ``None``.
+    workers_name_start: int
+        Name workers from here on.
+
+        Defaults to `0`.
+    workers_name_step: int
+        Name workers by adding multiples of `workers_name_step` to `workers_name_start`.
+
+        Default to `1`.
     cluster_arn: str (optional if fargate is true)
         The ARN of an existing ECS cluster to use for launching tasks.
 
@@ -683,12 +695,15 @@ class ECSCluster(SpecCluster):
         scheduler_timeout=None,
         scheduler_extra_args=None,
         scheduler_task_kwargs=None,
+        scheduler_address=None,
         worker_cpu=None,
         worker_mem=None,
         worker_gpu=None,
         worker_extra_args=None,
         worker_task_kwargs=None,
         n_workers=None,
+        workers_name_start=0,
+        workers_name_step=1,
         cluster_arn=None,
         cluster_name_template=None,
         execution_role_arn=None,
@@ -723,12 +738,15 @@ class ECSCluster(SpecCluster):
         self._scheduler_timeout = scheduler_timeout
         self._scheduler_extra_args = scheduler_extra_args
         self._scheduler_task_kwargs = scheduler_task_kwargs
+        self._scheduler_address = scheduler_address
         self._worker_cpu = worker_cpu
         self._worker_mem = worker_mem
         self._worker_gpu = worker_gpu
         self._worker_extra_args = worker_extra_args
         self._worker_task_kwargs = worker_task_kwargs
         self._n_workers = n_workers
+        self._workers_name_start = workers_name_start
+        self._workers_name_step = workers_name_step
         self.cluster_arn = cluster_arn
         self.cluster_name = None
         self._cluster_name_template = cluster_name_template
@@ -948,7 +966,17 @@ class ECSCluster(SpecCluster):
 
         self.scheduler_spec = {"cls": Scheduler, "options": scheduler_options}
         self.new_spec = {"cls": Worker, "options": worker_options}
-        self.worker_spec = {i: self.new_spec for i in range(self._n_workers)}
+        self.worker_spec = {}
+        for _ in range(self._n_workers):
+            self.worker_spec.update(self.new_worker_spec())
+
+        if self._scheduler_address is not None:
+
+            class SchedulerAddress(object):
+                def __init__(self_):
+                    self_.address = self._scheduler_address
+
+            self.scheduler = SchedulerAddress()
 
         with warn_on_duration(
             "10s",
@@ -957,6 +985,10 @@ class ECSCluster(SpecCluster):
             "Hang tight! ",
         ):
             await super()._start()
+
+    def _new_worker_name(self, worker_number):
+        """Returns new worker name."""
+        return self._workers_name_start + self._workers_name_step * worker_number
 
     @property
     def tags(self):
