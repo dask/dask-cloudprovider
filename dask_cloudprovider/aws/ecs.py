@@ -3,7 +3,7 @@ import logging
 import uuid
 import warnings
 import weakref
-from typing import List
+from typing import List, Optional
 
 import dask
 
@@ -423,6 +423,7 @@ class Worker(Task):
         cpu: int,
         mem: int,
         gpu: int,
+        nthreads: Optional[int],
         extra_args: List[str],
         **kwargs
     ):
@@ -432,6 +433,7 @@ class Worker(Task):
         self._cpu = cpu
         self._mem = mem
         self._gpu = gpu
+        self._nthreads = nthreads
         self._overrides = {
             "command": [
                 "dask-cuda-worker" if self._gpu else "dask-worker",
@@ -439,7 +441,11 @@ class Worker(Task):
                 "--name",
                 str(self.name),
                 "--nthreads",
-                "{}".format(max(int(self._cpu / 1024), 1)),
+                "{}".format(
+                    max(int(self._cpu / 1024), 1)
+                    if nthreads is None
+                    else self._nthreads
+                ),
                 "--memory-limit",
                 "{}GB".format(int(self._mem / 1024)),
                 "--death-timeout",
@@ -503,6 +509,10 @@ class ECSCluster(SpecCluster):
 
         Defaults to ``4096`` (four vCPUs).
         See the `troubleshooting guide`_ for information on the valid values for this argument.
+    worker_nthreads: int (optional)
+        The number of threads to use in each worker.
+
+        Defaults to 1 per vCPU.
     worker_mem: int (optional)
         The amount of memory to request for worker tasks in MB.
 
@@ -684,6 +694,7 @@ class ECSCluster(SpecCluster):
         scheduler_extra_args=None,
         scheduler_task_kwargs=None,
         worker_cpu=None,
+        worker_nthreads=None,
         worker_mem=None,
         worker_gpu=None,
         worker_extra_args=None,
@@ -724,6 +735,7 @@ class ECSCluster(SpecCluster):
         self._scheduler_extra_args = scheduler_extra_args
         self._scheduler_task_kwargs = scheduler_task_kwargs
         self._worker_cpu = worker_cpu
+        self._worker_nthreads = worker_nthreads
         self._worker_mem = worker_mem
         self._worker_gpu = worker_gpu
         self._worker_extra_args = worker_extra_args
@@ -827,6 +839,9 @@ class ECSCluster(SpecCluster):
 
         if self._worker_cpu is None:
             self._worker_cpu = self.config.get("worker_cpu")
+
+        if self._worker_nthreads is None:
+            self._worker_nthreads = self.config.get("worker_nthreads")
 
         if self._worker_mem is None:
             self._worker_mem = self.config.get("worker_mem")
@@ -939,6 +954,7 @@ class ECSCluster(SpecCluster):
             "fargate": self._fargate_workers,
             "fargate_capacity_provider": "FARGATE_SPOT" if self._fargate_spot else None,
             "cpu": self._worker_cpu,
+            "nthreads": self._worker_nthreads,
             "mem": self._worker_mem,
             "gpu": self._worker_gpu,
             "extra_args": self._worker_extra_args,
@@ -1202,7 +1218,11 @@ class ECSCluster(SpecCluster):
                         "command": [
                             "dask-cuda-worker" if self._worker_gpu else "dask-worker",
                             "--nthreads",
-                            "{}".format(max(int(self._worker_cpu / 1024), 1)),
+                            "{}".format(
+                                max(int(self._worker_cpu / 1024), 1)
+                                if self._worker_nthreads is None
+                                else self._worker_nthreads
+                            ),
                             "--memory-limit",
                             "{}MB".format(int(self._worker_mem)),
                             "--death-timeout",
