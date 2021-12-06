@@ -24,6 +24,7 @@ async def skip_without_credentials():
 
 
 @pytest.fixture
+@pytest.mark.external
 async def cluster():
     await skip_without_credentials()
     async with EC2Cluster(asynchronous=True) as cluster:
@@ -31,6 +32,7 @@ async def cluster():
 
 
 @pytest.fixture
+@pytest.mark.external
 async def cluster_sync():
     await skip_without_credentials()
     cluster = EC2Cluster()
@@ -38,6 +40,7 @@ async def cluster_sync():
 
 
 @pytest.fixture
+@pytest.mark.external
 async def cluster_rapids():
     await skip_without_credentials()
     async with EC2Cluster(
@@ -54,6 +57,7 @@ async def cluster_rapids():
 
 
 @pytest.fixture
+@pytest.mark.external
 async def cluster_rapids_packer():
     await skip_without_credentials()
     async with EC2Cluster(
@@ -70,6 +74,7 @@ async def cluster_rapids_packer():
 
 
 @pytest.fixture
+@pytest.mark.external
 async def cluster_packer():
     await skip_without_credentials()
     async with EC2Cluster(
@@ -86,6 +91,7 @@ async def ec2_client():
 
 
 @pytest.mark.asyncio
+@pytest.mark.external
 async def test_init():
     cluster = EC2Cluster(asynchronous=True)
     assert cluster.status == Status.created

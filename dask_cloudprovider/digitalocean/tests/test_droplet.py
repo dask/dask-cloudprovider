@@ -36,6 +36,7 @@ async def config():
 
 
 @pytest.fixture
+@pytest.mark.external
 async def cluster(config):
     await skip_without_credentials(config)
     async with DropletCluster(asynchronous=True) as cluster:
@@ -43,6 +44,7 @@ async def cluster(config):
 
 
 @pytest.mark.asyncio
+@pytest.mark.external
 async def test_init():
     cluster = DropletCluster(asynchronous=True)
     assert cluster.status == Status.created
@@ -50,6 +52,7 @@ async def test_init():
 
 @pytest.mark.asyncio
 @pytest.mark.timeout(600)
+@pytest.mark.external
 async def test_create_cluster(cluster):
     assert cluster.status == Status.running
 

@@ -84,4 +84,5 @@ this code.
     :hidden:
     :caption: Developer
 
+    testing.rst
     releasing.rst
