@@ -64,6 +64,7 @@ async def test_get_cloud_init():
 
 @pytest.mark.asyncio
 @pytest.mark.timeout(1200)
+@pytest.mark.external
 async def test_create_cluster():
     skip_without_credentials()
 
@@ -93,6 +94,7 @@ async def test_create_cluster():
 
 @pytest.mark.asyncio
 @pytest.mark.timeout(1200)
+@pytest.mark.external
 async def test_create_cluster_sync():
     skip_without_credentials()
 
@@ -107,6 +109,7 @@ async def test_create_cluster_sync():
 
 @pytest.mark.asyncio
 @pytest.mark.timeout(1200)
+@pytest.mark.external
 async def test_create_rapids_cluster():
     skip_without_credentials()
 
@@ -149,6 +152,7 @@ async def test_create_rapids_cluster():
 
 
 @pytest.mark.timeout(1200)
+@pytest.mark.external
 def test_create_rapids_cluster_sync():
     skip_without_credentials()
     cluster = GCPCluster(

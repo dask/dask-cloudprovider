@@ -48,6 +48,7 @@ async def get_config():
 
 @pytest.mark.asyncio
 @skip_without_credentials
+@pytest.mark.external
 async def test_init():
     cluster = AzureVMCluster(asynchronous=True)
     assert cluster.status == Status.created
@@ -56,6 +57,7 @@ async def test_init():
 @pytest.mark.asyncio
 @pytest.mark.timeout(1200)
 @skip_without_credentials
+@pytest.mark.external
 async def test_create_cluster():
     async with AzureVMCluster(asynchronous=True) as cluster:
         assert cluster.status == Status.running
@@ -75,6 +77,7 @@ async def test_create_cluster():
 @pytest.mark.asyncio
 @pytest.mark.timeout(1200)
 @skip_without_credentials
+@pytest.mark.external
 async def test_create_cluster_sync():
 
     with AzureVMCluster() as cluster:
@@ -92,6 +95,7 @@ async def test_create_cluster_sync():
 @pytest.mark.asyncio
 @pytest.mark.timeout(1200)
 @skip_without_credentials
+@pytest.mark.external
 async def test_create_rapids_cluster_sync():
 
     with AzureVMCluster(
