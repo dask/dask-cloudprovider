@@ -323,7 +323,9 @@ class VMCluster(SpecCluster):
             "options": self.scheduler_options,
         }
         self.new_spec = {"cls": self.worker_class, "options": self.worker_options}
-        self.worker_spec = {i: self.new_spec for i in range(self._n_workers)}
+        self.worker_spec = {
+            self._new_worker_name(i): self.new_spec for i in range(self._n_workers)
+        }
 
         with warn_on_duration(
             "10s",
