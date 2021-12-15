@@ -3,3 +3,4 @@ dask>=2021.01.1
 distributed>=2021.01.1
 jinja2
 tornado>=5
+azure-identity

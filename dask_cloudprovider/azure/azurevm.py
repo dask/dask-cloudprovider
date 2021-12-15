@@ -16,6 +16,7 @@ try:
     from azure.common.credentials import get_azure_cli_credentials
     from azure.mgmt.network import NetworkManagementClient
     from azure.mgmt.compute import ComputeManagementClient
+    from azure.identity import DefaultAzureCredential
 except ImportError as e:
     msg = (
         "Dask Cloud Provider Azure requirements are not installed.\n\n"
@@ -478,6 +479,7 @@ class AzureVMCluster(VMCluster):
             "azurevm.public_ingress", override_with=public_ingress
         )
         self.credentials, self.subscription_id = get_azure_cli_credentials()
+        self.credentials = DefaultAzureCredential()
         self.compute_client = ComputeManagementClient(
             self.credentials, self.subscription_id
         )
