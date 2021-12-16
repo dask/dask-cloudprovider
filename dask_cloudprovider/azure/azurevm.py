@@ -13,9 +13,10 @@ from dask_cloudprovider.generic.vmcluster import (
 from dask_cloudprovider.exceptions import ConfigError
 
 try:
-    from azure.common.credentials import get_azure_cli_credentials
+    from azure.common.credentials import get_cli_profile
     from azure.mgmt.network import NetworkManagementClient
     from azure.mgmt.compute import ComputeManagementClient
+    from azure.identity import DefaultAzureCredential
 except ImportError as e:
     msg = (
         "Dask Cloud Provider Azure requirements are not installed.\n\n"
@@ -477,7 +478,8 @@ class AzureVMCluster(VMCluster):
         self.public_ingress = self.config.get(
             "azurevm.public_ingress", override_with=public_ingress
         )
-        self.credentials, self.subscription_id = get_azure_cli_credentials()
+        self.subscription_id = get_cli_profile().get_subscription_id()
+        self.credentials = DefaultAzureCredential()
         self.compute_client = ComputeManagementClient(
             self.credentials, self.subscription_id
         )
