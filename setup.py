@@ -12,6 +12,7 @@ extras_require = {
         "azure-mgmt-network>=16.0.0",
         "azure-cli-core>=2.15.1",
         "msrestazure",
+        "azure-identity",
     ],
     "digitalocean": ["python-digitalocean>=1.15.0"],
     "gcp": ["google-api-python-client>=1.12.5", "google-auth>=1.23.0"],
