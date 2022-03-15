@@ -811,7 +811,11 @@ class ECSCluster(SpecCluster):
         if self._skip_cleanup is None:
             self._skip_cleanup = self.config.get("skip_cleanup")
         if not self._skip_cleanup:
-            await _cleanup_stale_resources()
+            await _cleanup_stale_resources(
+                aws_access_key_id = self.config.get("aws_access_key_id"),
+                aws_secret_access_key = self.config.get("aws_secret_access_key"),
+                region_name = self.config.get("region_name"),
+            )
 
         if self._fargate_scheduler is None:
             self._fargate_scheduler = self.config.get("fargate_scheduler")
@@ -1462,7 +1466,7 @@ class FargateCluster(ECSCluster):
         super().__init__(fargate_scheduler=True, fargate_workers=True, **kwargs)
 
 
-async def _cleanup_stale_resources():
+async def _cleanup_stale_resources(**kwargs):
     """Clean up any stale resources which are tagged with 'createdBy': 'dask-cloudprovider'.
 
     This function will scan through AWS looking for resources that were created
@@ -1478,7 +1482,7 @@ async def _cleanup_stale_resources():
     """
     # Clean up clusters (clusters with no running tasks)
     session = get_session()
-    async with session.create_client("ecs") as ecs:
+    async with session.create_client("ecs", **kwargs) as ecs:
         active_clusters = []
         clusters_to_delete = []
         async for page in ecs.get_paginator("list_clusters").paginate():
@@ -1521,7 +1525,7 @@ async def _cleanup_stale_resources():
                         )
 
     # Clean up security groups (with no active clusters)
-    async with session.create_client("ec2") as ec2:
+    async with session.create_client("ec2", **kwargs) as ec2:
         async for page in ec2.get_paginator("describe_security_groups").paginate(
             Filters=[{"Name": "tag:createdBy", "Values": ["dask-cloudprovider"]}]
         ):
@@ -1533,7 +1537,7 @@ async def _cleanup_stale_resources():
                     )
 
     # Clean up roles (with no active clusters)
-    async with session.create_client("iam") as iam:
+    async with session.create_client("iam", **kwargs) as iam:
         async for page in iam.get_paginator("list_roles").paginate():
             for role in page["Roles"]:
                 role["Tags"] = (
