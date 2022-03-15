@@ -812,9 +812,9 @@ class ECSCluster(SpecCluster):
             self._skip_cleanup = self.config.get("skip_cleanup")
         if not self._skip_cleanup:
             await _cleanup_stale_resources(
-                aws_access_key_id = self.config.get("aws_access_key_id"),
-                aws_secret_access_key = self.config.get("aws_secret_access_key"),
-                region_name = self.config.get("region_name"),
+                aws_access_key_id=self.config.get("aws_access_key_id"),
+                aws_secret_access_key=self.config.get("aws_secret_access_key"),
+                region_name=self.config.get("region_name"),
             )
 
         if self._fargate_scheduler is None:
