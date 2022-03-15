@@ -12,7 +12,7 @@ from dask_cloudprovider.generic.vmcluster import (
     VMInterface,
     SchedulerMixin,
 )
-
+from dask_cloudprovider.gcp.utils import build_request, is_inside_gce
 
 from distributed.core import Status
 
@@ -52,18 +52,28 @@ class GCPInstance(VMInterface):
         projectid=None,
         machine_type=None,
         filesystem_size=None,
+        disk_type=None,
+        on_host_maintenance=None,
         source_image=None,
         docker_image=None,
+        network=None,
+        network_projectid=None,
         env_vars=None,
         ngpus=None,
         gpu_type=None,
         bootstrap=None,
         gpu_instance=None,
+        auto_shutdown=None,
+        preemptible=False,
         **kwargs,
     ):
         super().__init__(**kwargs)
+
         self.cluster = cluster
         self.config = config
+        self.on_host_maintenance = on_host_maintenance or self.config.get(
+            "on_host_maintenance"
+        )
         self.projectid = projectid or self.config.get("projectid")
         self.zone = zone or self.config.get("zone")
 
@@ -75,14 +85,22 @@ class GCPInstance(VMInterface):
         self.docker_image = docker_image or self.config.get("docker_image")
         self.env_vars = env_vars
         self.filesystem_size = filesystem_size or self.config.get("filesystem_size")
+        self.disk_type = disk_type or self.config.get("disk_type")
         self.ngpus = ngpus or self.config.get("ngpus")
+        self.network = network or self.config.get("network")
+        self.network_projectid = (
+            network_projectid if network_projectid is not None else projectid
+        )
         self.gpu_type = gpu_type or self.config.get("gpu_type")
         self.gpu_instance = gpu_instance
         self.bootstrap = bootstrap
+        self.auto_shutdown = auto_shutdown
+        self.preemptible = preemptible
 
         self.general_zone = "-".join(self.zone.split("-")[:2])  # us-east1-c -> us-east1
 
     def create_gcp_config(self):
+        subnetwork = f"projects/{self.network_projectid}/regions/{self.general_zone}/subnetworks/{self.network}"
         config = {
             "name": self.name,
             "machineType": f"zones/{self.zone}/machineTypes/{self.machine_type}",
@@ -99,7 +117,7 @@ class GCPInstance(VMInterface):
                     "deviceName": self.name,
                     "initializeParams": {
                         "sourceImage": self.source_image,
-                        "diskType": f"projects/{self.projectid}/zones/{self.zone}/diskTypes/pd-standard",
+                        "diskType": f"projects/{self.projectid}/zones/{self.zone}/diskTypes/{self.disk_type}",
                         "diskSizeGb": f"{self.filesystem_size}",  # nvidia-gpu-cloud cannot be smaller than 32 GB
                         "labels": {},
                         # "source": "projects/nv-ai-infra/zones/us-east1-c/disks/ngc-gpu-dask-rapids-docker-experiment",
@@ -111,7 +129,7 @@ class GCPInstance(VMInterface):
             "networkInterfaces": [
                 {
                     "kind": "compute#networkInterface",
-                    "subnetwork": f"projects/{self.projectid}/regions/{self.general_zone}/subnetworks/default",
+                    "subnetwork": subnetwork,
                     "aliasIpRanges": [],
                 }
             ],
@@ -122,6 +140,7 @@ class GCPInstance(VMInterface):
                     "scopes": [
                         "https://www.googleapis.com/auth/devstorage.read_write",
                         "https://www.googleapis.com/auth/logging.write",
+                        "https://www.googleapis.com/auth/monitoring.write",
                     ],
                 }
             ],
@@ -140,9 +159,9 @@ class GCPInstance(VMInterface):
             },
             "labels": {"container-vm": "dask-cloudprovider"},
             "scheduling": {
-                "preemptible": "false",
-                "onHostMaintenance": "TERMINATE",
-                "automaticRestart": "true",
+                "preemptible": ("true" if self.preemptible else "false"),
+                "onHostMaintenance": self.on_host_maintenance.upper(),
+                "automaticRestart": ("false" if self.preemptible else "true"),
                 "nodeAffinities": [],
             },
             "shieldedInstanceConfig": {
@@ -176,22 +195,15 @@ class GCPInstance(VMInterface):
 
     async def create_vm(self):
 
-        self.cloud_init = self.cluster.render_cloud_init(
-            image=self.docker_image,
-            command=self.command,
-            gpu_instance=self.gpu_instance,
-            bootstrap=self.bootstrap,
-            auto_shutdown=self.cluster.auto_shutdown,
-            env_vars=self.env_vars,
-        )
+        self.cloud_init = self.cluster.render_process_cloud_init(self)
 
         self.gcp_config = self.create_gcp_config()
 
         try:
-            inst = (
+            inst = await self.cluster.call_async(
                 self.cluster.compute.instances()
                 .insert(project=self.projectid, zone=self.zone, body=self.gcp_config)
-                .execute()
+                .execute
             )
             self.gcp_inst = inst
             self.id = self.gcp_inst["id"]
@@ -199,12 +211,12 @@ class GCPInstance(VMInterface):
             # something failed
             print(str(e))
             raise Exception(str(e))
-        while self.update_status() != "RUNNING":
+        while await self.update_status() != "RUNNING":
             await asyncio.sleep(0.5)
 
-        self.internal_ip = self.get_internal_ip()
+        self.internal_ip = await self.get_internal_ip()
         if self.config.get("public_ingress", True):
-            self.external_ip = self.get_external_ip()
+            self.external_ip = await self.get_external_ip()
         else:
             self.external_ip = None
         self.cluster._log(
@@ -212,25 +224,33 @@ class GCPInstance(VMInterface):
         )
         return self.internal_ip, self.external_ip
 
-    def get_internal_ip(self):
+    async def get_internal_ip(self):
         return (
-            self.cluster.compute.instances()
-            .list(project=self.projectid, zone=self.zone, filter=f"name={self.name}")
-            .execute()["items"][0]["networkInterfaces"][0]["networkIP"]
-        )
+            await self.cluster.call_async(
+                self.cluster.compute.instances()
+                .list(
+                    project=self.projectid, zone=self.zone, filter=f"name={self.name}"
+                )
+                .execute
+            )
+        )["items"][0]["networkInterfaces"][0]["networkIP"]
 
-    def get_external_ip(self):
+    async def get_external_ip(self):
         return (
-            self.cluster.compute.instances()
-            .list(project=self.projectid, zone=self.zone, filter=f"name={self.name}")
-            .execute()["items"][0]["networkInterfaces"][0]["accessConfigs"][0]["natIP"]
-        )
+            await self.cluster.call_async(
+                self.cluster.compute.instances()
+                .list(
+                    project=self.projectid, zone=self.zone, filter=f"name={self.name}"
+                )
+                .execute
+            )
+        )["items"][0]["networkInterfaces"][0]["accessConfigs"][0]["natIP"]
 
-    def update_status(self):
-        d = (
+    async def update_status(self):
+        d = await self.cluster.call_async(
             self.cluster.compute.instances()
             .list(project=self.projectid, zone=self.zone, filter=f"name={self.name}")
-            .execute()
+            .execute
         )
         self.gcp_inst = d
 
@@ -250,15 +270,18 @@ class GCPInstance(VMInterface):
 
     async def close(self):
         self.cluster._log(f"Closing Instance: {self.name}")
-        self.cluster.compute.instances().delete(
-            project=self.projectid, zone=self.zone, instance=self.name
-        ).execute()
+        await self.cluster.call_async(
+            self.cluster.compute.instances()
+            .delete(project=self.projectid, zone=self.zone, instance=self.name)
+            .execute
+        )
 
 
 class GCPScheduler(SchedulerMixin, GCPInstance):
     """Scheduler running in a GCP instance."""
 
     def __init__(self, *args, **kwargs):
+        kwargs.pop("preemptible", None)  # scheduler instances are not preemptible
         super().__init__(*args, **kwargs)
 
     async def start(self):
@@ -271,19 +294,24 @@ class GCPScheduler(SchedulerMixin, GCPInstance):
             f"\n  Source Image: {self.source_image} "
             f"\n  Docker Image: {self.docker_image} "
             f"\n  Machine Type: {self.machine_type} "
-            f"\n  Filesytsem Size: {self.filesystem_size} "
+            f"\n  Filesystem Size: {self.filesystem_size} "
+            f"\n  Disk Type: {self.disk_type} "
             f"\n  N-GPU Type: {self.ngpus} {self.gpu_type}"
             f"\n  Zone: {self.zone} "
         )
         self.cluster._log("Creating scheduler instance")
         self.internal_ip, self.external_ip = await self.create_vm()
 
-        if self.config.get("public_ingress", True):
-            # scheduler is publicly available
-            self.address = f"tcp://{self.external_ip}:8786"
+        if self.config.get("public_ingress", True) and not is_inside_gce():
+            # scheduler must be publicly available, and firewall
+            # needs to be in place to allow access to 8786 on
+            # the external IP
+            self.address = f"{self.cluster.protocol}://{self.external_ip}:8786"
         else:
-            # scheduler is only accessible within VPC
-            self.address = f"tcp://{self.internal_ip}:8786"
+            # if the client is running inside GCE environment
+            # it's better to use internal IP, which doesn't
+            # require firewall setup
+            self.address = f"{self.cluster.protocol}://{self.internal_ip}:8786"
         await self.wait_for_scheduler()
 
         # need to reserve internal IP for workers
@@ -307,7 +335,9 @@ class GCPWorker(GCPInstance):
         self.scheduler = scheduler
         self.worker_class = worker_class
         self.name = f"dask-{self.cluster.uuid}-worker-{str(uuid.uuid4())[:8]}"
-        internal_scheduler = f"{self.cluster.scheduler_internal_ip}:8786"
+        internal_scheduler = (
+            f"{self.cluster.protocol}://{self.cluster.scheduler_internal_ip}:8786"
+        )
         self.command = " ".join(
             [
                 self.set_env,
@@ -365,6 +395,16 @@ class GCPCluster(VMCluster):
         https://cloudprovider.dask.org/en/latest/gcp.html#project-id
     zone: str
         The GCP zone to launch you cluster in. A full list can be obtained with ``gcloud compute zones list``.
+    network: str
+        The GCP VPC network/subnetwork to use.  The default is `default`.  If using firewall rules,
+        please ensure the follwing accesses are configured:
+            - egress 0.0.0.0/0 on all ports for downloading docker images and general data access
+            - ingress 10.0.0.0/8 on all ports for internal communication of workers
+            - ingress 0.0.0.0/0 on 8786-8787 for external accessibility of the dashboard/scheduler
+            - (optional) ingress 0.0.0.0./0 on 22 for ssh access
+    network_projectid: str
+        The project id of the GCP network. This defaults to the projectid. There may
+        be cases (i.e. Shared VPC) when network configurations from a different GCP project are used.
     machine_type: str
         The VM machine_type. You can get a full list with ``gcloud compute machine-types list``.
         The default is ``n1-standard-1`` which is 3.75GB RAM and 1 vCPU
@@ -390,6 +430,10 @@ class GCPCluster(VMCluster):
         For GPU instance types the Docker image much have NVIDIA drivers and ``dask-cuda`` installed.
 
         By default the ``daskdev/dask:latest`` image will be used.
+    docker_args: string (optional)
+        Extra command line arguments to pass to Docker.
+    extra_bootstrap: list[str] (optional)
+        Extra commands to be run during the bootstrap phase.
     ngpus: int (optional)
         The number of GPUs to atatch to the instance.
         Default is ``0``.
@@ -398,6 +442,11 @@ class GCPCluster(VMCluster):
         You can see a list of GPUs available in each zone with ``gcloud compute accelerator-types list``.
     filesystem_size: int (optional)
         The VM filesystem size in GB. Defaults to ``50``.
+    disk_type: str (optional)
+        Type of disk to use. Default is ``pd-standard``.
+        You can see a list of disks available in each zone with ``gcloud compute disk-types list``.
+    on_host_maintenance: str (optional)
+        The Host Maintenance GCP option.  Defaults to ``TERMINATE``.
     n_workers: int (optional)
         Number of workers to initialise the cluster with. Defaults to ``0``.
     bootstrap: bool (optional)
@@ -422,7 +471,11 @@ class GCPCluster(VMCluster):
     security : Security or bool (optional)
         Configures communication security in this cluster. Can be a security
         object, or True. If True, temporary self-signed credentials will
-        be created automatically.
+        be created automatically. Default is ``True``.
+    preemptible: bool (optional)
+        Whether to use preemptible instances for workers in this cluster. Defaults to ``False``.
+    debug: bool, optional
+        More information will be printed when constructing clusters to enable debugging.
 
     Examples
     --------
@@ -477,7 +530,7 @@ class GCPCluster(VMCluster):
     Source Image: projects/ubuntu-os-cloud/global/images/ubuntu-minimal-1804-bionic-v20201014
     Docker Image: daskdev/dask:latest
     Machine Type: n1-standard-1
-    Filesytsem Size: 50
+    Filesystem Size: 50
     N-GPU Type:
     Zone: us-east1-c
     Creating scheduler instance
@@ -500,14 +553,20 @@ class GCPCluster(VMCluster):
         self,
         projectid=None,
         zone=None,
+        network=None,
+        network_projectid=None,
         machine_type=None,
+        on_host_maintenance=None,
         source_image=None,
         docker_image=None,
         ngpus=None,
         gpu_type=None,
         filesystem_size=None,
+        disk_type=None,
         auto_shutdown=None,
         bootstrap=True,
+        preemptible=None,
+        debug=False,
         **kwargs,
     ):
 
@@ -526,6 +585,7 @@ class GCPCluster(VMCluster):
         )
         self.machine_type = machine_type or self.config.get("machine_type")
         self.gpu_instance = "gpu" in self.machine_type or bool(ngpus)
+        self.debug = debug
         self.options = {
             "cluster": self,
             "config": self.config,
@@ -533,17 +593,27 @@ class GCPCluster(VMCluster):
             "source_image": source_image or self.config.get("source_image"),
             "docker_image": docker_image or self.config.get("docker_image"),
             "filesystem_size": filesystem_size or self.config.get("filesystem_size"),
+            "disk_type": disk_type or self.config.get("disk_type"),
+            "on_host_maintenance": on_host_maintenance
+            or self.config.get("on_host_maintenance"),
             "zone": zone or self.config.get("zone"),
             "machine_type": self.machine_type,
             "ngpus": ngpus or self.config.get("ngpus"),
+            "network": network or self.config.get("network"),
+            "network_projectid": network_projectid
+            or self.config.get("network_projectid"),
             "gpu_type": gpu_type or self.config.get("gpu_type"),
             "gpu_instance": self.gpu_instance,
             "bootstrap": self.bootstrap,
+            "auto_shutdown": self.auto_shutdown,
+            "preemptible": preemptible
+            if preemptible is not None
+            else self.config.get("preemptible"),
         }
         self.scheduler_options = {**self.options}
         self.worker_options = {**self.options}
 
-        super().__init__(**kwargs)
+        super().__init__(debug=debug, **kwargs)
 
 
 class GCPCompute:
@@ -553,8 +623,14 @@ class GCPCompute:
         self._compute = self.refresh_client()
 
     def refresh_client(self):
+
         if os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", False):
-            return googleapiclient.discovery.build("compute", "v1")
+            import google.oauth2.service_account  # google-auth
+
+            creds = google.oauth2.service_account.Credentials.from_service_account_file(
+                os.environ["GOOGLE_APPLICATION_CREDENTIALS"],
+                scopes=["https://www.googleapis.com/auth/cloud-platform"],
+            )
         else:
             import google.auth.credentials  # google-auth
 
@@ -570,7 +646,9 @@ class GCPCompute:
                     # take first row
                     f_.write(creds_rows[0][1])
                 creds, _ = google.auth.load_credentials_from_file(filename=f)
-            return googleapiclient.discovery.build("compute", "v1", credentials=creds)
+        return googleapiclient.discovery.build(
+            "compute", "v1", credentials=creds, requestBuilder=build_request(creds)
+        )
 
     def instances(self):
         try:

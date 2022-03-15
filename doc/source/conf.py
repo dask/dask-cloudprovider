@@ -98,10 +98,8 @@ todo_include_todos = False
 # a list of builtin themes.
 #
 # html_theme = 'alabaster'
-import dask_sphinx_theme
 
 html_theme = "dask_sphinx_theme"
-html_theme_path = [dask_sphinx_theme.get_html_theme_path()]
 
 # Theme options are theme-specific and customize the look and feel of a theme
 # further.  For a list of options available for each theme, see the
@@ -119,12 +117,12 @@ html_static_path = ["_static"]
 #
 # This is required for the alabaster theme
 # refs: http://alabaster.readthedocs.io/en/latest/installation.html#sidebars
-html_sidebars = {
-    "**": [
-        "relations.html",  # needs 'show_related': True theme option to display
-        "searchbox.html",
-    ]
-}
+# html_sidebars = {
+#     "**": [
+#         "relations.html",  # needs 'show_related': True theme option to display
+#         "searchbox.html",
+#     ]
+# }
 
 
 # -- Options for HTMLHelp output ------------------------------------------
@@ -191,5 +189,9 @@ texinfo_documents = [
 ]
 
 
-# Example configuration for intersphinx: refer to the Python standard library.
-intersphinx_mapping = {"https://docs.python.org/": None}
+intersphinx_mapping = {
+    "python": ("https://docs.python.org/3", None),
+    "dask": ("https://docs.dask.org/en/latest/", None),
+    "distributed": ("https://distributed.dask.org/en/latest/", None),
+    "dask_kubernetes": ("https://kubernetes.dask.org/en/latest/", None),
+}

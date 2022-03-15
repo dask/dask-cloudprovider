@@ -23,11 +23,11 @@ def skip_without_credentials(func):
         """
         )(func)
 
-    rg = dask.config.get("cloudprovider.azure.azurevm.resource_group", None)
+    rg = dask.config.get("cloudprovider.azure.resource_group", None)
     vnet = dask.config.get("cloudprovider.azure.azurevm.vnet", None)
     security_group = dask.config.get("cloudprovider.azure.azurevm.security_group", None)
     location = dask.config.get("cloudprovider.azure.location", None)
-    if rg is None or vnet is None or security_group or location is None:
+    if rg is None or vnet is None or security_group is None or location is None:
         return pytest.mark.skip(
             reason="""
         You must configure your Azure resource group and vnet to run this test.
@@ -48,6 +48,7 @@ async def get_config():
 
 @pytest.mark.asyncio
 @skip_without_credentials
+@pytest.mark.external
 async def test_init():
     cluster = AzureVMCluster(asynchronous=True)
     assert cluster.status == Status.created
@@ -56,13 +57,14 @@ async def test_init():
 @pytest.mark.asyncio
 @pytest.mark.timeout(1200)
 @skip_without_credentials
+@pytest.mark.external
 async def test_create_cluster():
     async with AzureVMCluster(asynchronous=True) as cluster:
         assert cluster.status == Status.running
 
-        cluster.scale(1)
+        cluster.scale(2)
         await cluster
-        assert len(cluster.workers) == 1
+        assert len(cluster.workers) == 2
 
         async with Client(cluster, asynchronous=True) as client:
 
@@ -75,6 +77,7 @@ async def test_create_cluster():
 @pytest.mark.asyncio
 @pytest.mark.timeout(1200)
 @skip_without_credentials
+@pytest.mark.external
 async def test_create_cluster_sync():
 
     with AzureVMCluster() as cluster:
@@ -92,6 +95,7 @@ async def test_create_cluster_sync():
 @pytest.mark.asyncio
 @pytest.mark.timeout(1200)
 @skip_without_credentials
+@pytest.mark.external
 async def test_create_rapids_cluster_sync():
 
     with AzureVMCluster(
@@ -114,3 +118,16 @@ async def test_create_rapids_cluster_sync():
             for w, res in results.items():
                 assert "total" in res["gpu"][0]["fb_memory_usage"].keys()
                 print(res)
+
+
+@pytest.mark.asyncio
+@skip_without_credentials
+async def test_render_cloud_init():
+    cloud_init = AzureVMCluster.get_cloud_init(docker_args="--privileged")
+    assert " --privileged " in cloud_init
+
+    cloud_init = AzureVMCluster.get_cloud_init(
+        extra_bootstrap=["echo 'hello world'", "echo 'foo bar'"]
+    )
+    assert "- echo 'hello world'" in cloud_init
+    assert "- echo 'foo bar'" in cloud_init

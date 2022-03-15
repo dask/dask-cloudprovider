@@ -26,7 +26,7 @@ So, for example, code like this will result in an error
 
 .. code-block:: python
 
-    from dask_cloudprovider import FargateCluster
+    from dask_cloudprovider.aws import FargateCluster
     cluster = FargateCluster(
         image="daskdev/dask:latest",
         worker_cpu=256,
@@ -47,3 +47,35 @@ This is because ECS and Fargate task definitions with ``CPU=256`` cannot have as
 
 The AWS-accepted set of combinations is documented at
 https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-cpu-memory-error.html.
+
+Requested CPU Configuration Above Limit
+---------------------------------------
+When creating a ``FargateCluster`` or or ``ECSCluster``, or adding additional workers, you may receive an error response with
+"The requested CPU configuration is above your limit". This means that the scheduler and workers requested and any other
+EC2 resources you have running in that region use up more than your current service quota
+`limit for vCPUs <https://aws.amazon.com/ec2/faqs/#EC2_On-Demand_Instance_limits>`_.
+
+You can adjust the scheduler and/or worker CPUs with the ``scheduler_cpu`` and ``worker_cpu``
+`arguments <https://cloudprovider.dask.org/en/latest/aws.html#elastic-container-service-ecs>`_. See the "Invalid CPU or Memory"
+section in this document for more information.
+
+However, to get the desired cluster configuration you'll need to request a service limit quota increase.
+
+Go to ``https://<region>.aws.amazon.com/servicequotas/home/services/ec2/quotas`` and
+`request an increase <https://docs.aws.amazon.com/servicequotas/latest/userguide/request-quota-increase.html>`_ for
+"Running On-Demand Standard (A, C, D, H, I, M, R, T, Z) instances".
+
+Pulling private Docker images
+-----------------------------------
+
+For cluster managers like ``EC2Cluster``, ``AzureVMCluster`` and ``GCPCluster`` Docker images will be pulled onto VMs created on the cloud of your choice.
+
+If you need to pull a private Docker images which requires authentication each VM will need to be configured with credentials. These cluster managers accept
+and ``extra_bootstrap`` argument where you can provide additional bash commands to be run during startup. This is a good place to log into your Docker registry.
+
+.. code-block:: python
+
+    from dask_cloudprovider.azure import AzureVMCluster
+    cluster = AzureVMCluster(...
+                             docker_image="my_private_image:latest",
+                             extra_bootstrap=["docker login -u 'username' -p 'password'"])

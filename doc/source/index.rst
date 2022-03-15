@@ -67,7 +67,7 @@ this code.
     digitalocean.rst
     gcp.rst
     azure.rst
-    azureml.rst
+    hetzner.rst
 
 .. toctree::
     :maxdepth: 2
@@ -75,6 +75,7 @@ this code.
     :caption: Advanced
 
     troubleshooting.rst
+    security.rst
     gpus.rst
     packer.rst
 
@@ -83,4 +84,5 @@ this code.
     :hidden:
     :caption: Developer
 
+    testing.rst
     releasing.rst

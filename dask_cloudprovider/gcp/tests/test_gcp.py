@@ -56,24 +56,27 @@ async def test_init():
 @pytest.mark.asyncio
 async def test_get_cloud_init():
     skip_without_credentials()
-
-    cloud_init = GCPCluster.get_cloud_init()
+    cloud_init = GCPCluster.get_cloud_init(security=True, docker_args="--privileged")
     assert "dask-scheduler" in cloud_init
     assert "# Bootstrap" in cloud_init
+    assert " --privileged " in cloud_init
 
 
 @pytest.mark.asyncio
 @pytest.mark.timeout(1200)
+@pytest.mark.external
 async def test_create_cluster():
     skip_without_credentials()
 
-    async with GCPCluster(asynchronous=True, env_vars={"FOO": "bar"}) as cluster:
+    async with GCPCluster(
+        asynchronous=True, env_vars={"FOO": "bar"}, security=True
+    ) as cluster:
 
         assert cluster.status == Status.running
 
-        cluster.scale(1)
+        cluster.scale(2)
         await cluster
-        assert len(cluster.workers) == 1
+        assert len(cluster.workers) == 2
 
         async with Client(cluster, asynchronous=True) as client:
 
@@ -91,6 +94,7 @@ async def test_create_cluster():
 
 @pytest.mark.asyncio
 @pytest.mark.timeout(1200)
+@pytest.mark.external
 async def test_create_cluster_sync():
     skip_without_credentials()
 
@@ -105,6 +109,7 @@ async def test_create_cluster_sync():
 
 @pytest.mark.asyncio
 @pytest.mark.timeout(1200)
+@pytest.mark.external
 async def test_create_rapids_cluster():
     skip_without_credentials()
 
@@ -120,7 +125,7 @@ async def test_create_rapids_cluster():
         worker_options={"rmm_pool_size": "15GB"},
         asynchronous=True,
         auto_shutdown=True,
-        boostrap=False,
+        bootstrap=False,
     ) as cluster:
 
         assert cluster.status == Status.running
@@ -147,10 +152,12 @@ async def test_create_rapids_cluster():
 
 
 @pytest.mark.timeout(1200)
+@pytest.mark.external
 def test_create_rapids_cluster_sync():
     skip_without_credentials()
     cluster = GCPCluster(
-        source_image="projects/nv-ai-infra/global/images/ngc-docker-11-20200916",
+        source_image="projects/nv-ai-infra/global/images/packer-1607527229",
+        network="dask-gcp-network-test",
         zone="us-east1-c",
         machine_type="n1-standard-1",
         filesystem_size=50,
@@ -160,7 +167,7 @@ def test_create_rapids_cluster_sync():
         worker_class="dask_cuda.CUDAWorker",
         worker_options={"rmm_pool_size": "15GB"},
         asynchronous=False,
-        boostrap=False,
+        bootstrap=False,
     )
 
     cluster.scale(1)
@@ -178,5 +185,4 @@ def test_create_rapids_cluster_sync():
     for w, res in results.items():
         assert "total" in res["gpu"][0]["fb_memory_usage"].keys()
         print(res)
-
     cluster.close()

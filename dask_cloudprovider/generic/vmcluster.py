@@ -9,8 +9,9 @@ import dask.config
 from distributed.core import Status
 from distributed.worker import Worker as _Worker
 from distributed.scheduler import Scheduler as _Scheduler
+from distributed.security import Security
 from distributed.deploy.spec import SpecCluster, ProcessInterface
-from distributed.utils import warn_on_duration, serialize_for_cli, cli_keywords
+from distributed.utils import warn_on_duration, cli_keywords
 
 from dask_cloudprovider.utils.socket import is_socket_open
 
@@ -18,7 +19,7 @@ from dask_cloudprovider.utils.socket import is_socket_open
 class VMInterface(ProcessInterface):
     """A superclass for VM Schedulers, Workers and Nannies."""
 
-    def __init__(self, **kwargs):
+    def __init__(self, docker_args: str = "", extra_bootstrap: list = None, **kwargs):
         super().__init__()
         self.name = None
         self.command = None
@@ -27,8 +28,11 @@ class VMInterface(ProcessInterface):
         self.gpu_instance = None
         self.bootstrap = None
         self.docker_image = "daskdev/dask:latest"
+        self.docker_args = docker_args
+        self.extra_bootstrap = extra_bootstrap
+        self.auto_shutdown = True
         self.set_env = 'env DASK_INTERNAL_INHERIT_CONFIG="{}"'.format(
-            serialize_for_cli(dask.config.global_config)
+            dask.config.serialize(dask.config.global_config)
         )
         self.kwargs = kwargs
 
@@ -42,7 +46,7 @@ class VMInterface(ProcessInterface):
         _, address = self.address.split("://")
         ip, port = address.split(":")
 
-        self.cluster._log("Waiting for scheduler to run")
+        self.cluster._log(f"Waiting for scheduler to run at {ip}:{port}")
         while not is_socket_open(ip, port):
             await asyncio.sleep(0.1)
         self.cluster._log("Scheduler is running")
@@ -81,7 +85,7 @@ class SchedulerMixin(object):
     async def start(self):
         self.cluster._log("Creating scheduler instance")
         ip = await self.create_vm()
-        self.address = f"tcp://{ip}:8786"
+        self.address = f"{self.cluster.protocol}://{ip}:8786"
         await self.wait_for_scheduler()
         await super().start()
 
@@ -185,20 +189,27 @@ class VMCluster(SpecCluster):
         For GPU instance types the Docker image much have NVIDIA drivers and ``dask-cuda`` installed.
 
         By default the ``daskdev/dask:latest`` image will be used.
+    docker_args: string (optional)
+        Extra command line arguments to pass to Docker.
+    extra_bootstrap: list[str] (optional)
+        Extra commands to be run during the bootstrap phase.
     silence_logs: bool
         Whether or not we should silence logging when setting up the cluster.
     asynchronous: bool
         If this is intended to be used directly within an event loop with
         async/await
-    security : Security or bool, optional
+    security: Security or bool, optional
         Configures communication security in this cluster. Can be a security
         object, or True. If True, temporary self-signed credentials will
-        be created automatically.
+        be created automatically. Default is ``True``.
+    debug: bool, optional
+        More information will be printed when constructing clusters to enable debugging.
 
     """
 
     scheduler_class = None
     worker_class = None
+    options = {}
     scheduler_options = {}
     worker_options = {}
     docker_image = None
@@ -214,7 +225,12 @@ class VMCluster(SpecCluster):
         worker_options: dict = {},
         scheduler_options: dict = {},
         docker_image="daskdev/dask:latest",
+        docker_args: str = "",
+        extra_bootstrap: list = None,
         env_vars: dict = {},
+        security: bool = True,
+        protocol: str = None,
+        debug: bool = False,
         **kwargs,
     ):
         if self.scheduler_class is None or self.worker_class is None:
@@ -222,17 +238,75 @@ class VMCluster(SpecCluster):
                 "VMCluster is not intended to be used directly. See docstring for more info."
             )
         self._n_workers = n_workers
+
+        if not security:
+            self.security = None
+        elif security is True:
+            # True indicates self-signed temporary credentials should be used
+            self.security = Security.temporary()
+        elif not isinstance(security, Security):
+            raise TypeError("security must be a Security object")
+        else:
+            self.security = security
+
+        if protocol is None:
+            if self.security and self.security.require_encryption:
+                self.protocol = "tls"
+            else:
+                self.protocol = "tcp"
+        else:
+            self.protocol = protocol
+
+        self.debug = debug
+
+        if self.security and self.security.require_encryption:
+            dask.config.set(
+                {
+                    "distributed.comm.default-scheme": self.protocol,
+                    "distributed.comm.require-encryption": True,
+                    "distributed.comm.tls.ca-file": self.security.tls_ca_file,
+                    "distributed.comm.tls.scheduler.key": self.security.tls_scheduler_key,
+                    "distributed.comm.tls.scheduler.cert": self.security.tls_scheduler_cert,
+                    "distributed.comm.tls.worker.key": self.security.tls_worker_key,
+                    "distributed.comm.tls.worker.cert": self.security.tls_worker_cert,
+                    "distributed.comm.tls.client.key": self.security.tls_client_key,
+                    "distributed.comm.tls.client.cert": self.security.tls_client_cert,
+                }
+            )
+
         image = self.scheduler_options.get("docker_image", False) or docker_image
+        self.options["docker_image"] = image
         self.scheduler_options["docker_image"] = image
         self.scheduler_options["env_vars"] = env_vars
+        self.scheduler_options["protocol"] = protocol
+        self.scheduler_options["scheduler_options"] = scheduler_options
         self.worker_options["env_vars"] = env_vars
+        self.options["docker_args"] = docker_args
+        self.options["extra_bootstrap"] = extra_bootstrap
+        self.scheduler_options["docker_args"] = docker_args
+        self.worker_options["docker_args"] = docker_args
         self.worker_options["docker_image"] = image
         self.worker_options["worker_class"] = worker_class
+        self.worker_options["protocol"] = protocol
         self.worker_options["worker_options"] = worker_options
-        self.scheduler_options["scheduler_options"] = scheduler_options
         self.uuid = str(uuid.uuid4())[:8]
 
-        super().__init__(**kwargs)
+        super().__init__(**kwargs, security=self.security)
+
+    async def call_async(self, f, *args, **kwargs):
+        """Run a blocking function in a thread as a coroutine.
+
+        This can only be used to make IO-bound operations non-blocking due to the GIL.
+
+        As of Python 3.9 this can be replaced with :func:`asyncio.to_thread`.
+        Once 3.9 is our minimum supported version this can be removed/replaced.
+
+        """
+        [done], _ = await asyncio.wait(
+            fs={self.loop.run_in_executor(None, lambda: f(*args, **kwargs))},
+            return_when=asyncio.ALL_COMPLETED,
+        )
+        return done.result()
 
     async def _start(
         self,
@@ -249,7 +323,9 @@ class VMCluster(SpecCluster):
             "options": self.scheduler_options,
         }
         self.new_spec = {"cls": self.worker_class, "options": self.worker_options}
-        self.worker_spec = {i: self.new_spec for i in range(self._n_workers)}
+        self.worker_spec = {
+            self._new_worker_name(i): self.new_spec for i in range(self._n_workers)
+        }
 
         with warn_on_duration(
             "10s",
@@ -259,11 +335,27 @@ class VMCluster(SpecCluster):
         ):
             await super()._start()
 
+    def render_process_cloud_init(self, process):
+        return self.render_cloud_init(
+            image=process.docker_image,
+            command=process.command,
+            docker_args=process.docker_args,
+            extra_bootstrap=process.extra_bootstrap,
+            gpu_instance=process.gpu_instance,
+            bootstrap=process.bootstrap,
+            auto_shutdown=process.auto_shutdown,
+            env_vars=process.env_vars,
+        )
+
     def render_cloud_init(self, *args, **kwargs):
         loader = FileSystemLoader([os.path.dirname(os.path.abspath(__file__))])
         environment = Environment(loader=loader)
         template = environment.get_template("cloud-init.yaml.j2")
-        return template.render(**kwargs)
+        cloud_init = template.render(**kwargs)
+        if self.debug:
+            print("\nCloud init\n==========\n\n")
+            print(cloud_init)
+        return cloud_init
 
     @classmethod
     def get_cloud_init(cls, *args, **kwargs):
@@ -272,6 +364,8 @@ class VMCluster(SpecCluster):
         return cluster.render_cloud_init(
             image=cluster.options["docker_image"],
             command="dask-scheduler --version",
+            docker_args=cluster.options["docker_args"],
+            extra_bootstrap=cluster.options["extra_bootstrap"],
             gpu_instance=cluster.gpu_instance,
             bootstrap=cluster.bootstrap,
             auto_shutdown=cluster.auto_shutdown,

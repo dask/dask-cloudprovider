@@ -98,3 +98,9 @@ AzureVM
 
 .. autoclass:: AzureVMCluster
    :members:
+
+Azure Spot Instance Plugin
+--------------------------
+
+.. autoclass:: AzurePreemptibleWorkerPlugin
+   :members:

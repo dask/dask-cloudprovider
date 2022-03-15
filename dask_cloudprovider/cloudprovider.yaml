@@ -36,6 +36,7 @@ cloudprovider:
 
   ec2:
     region: null # AWS region to create cluster. Defaults to environment or account default region.
+    availability_zone: null # The availability zone to start you clusters. By default AWS will select the AZ with most free capacity.
     bootstrap: true # It is assumed that the AMI does not have Docker and needs bootstrapping. Set this to false if using a custom AMI with Docker already installed.
     auto_shutdown: true # Shutdown instances automatically if the scheduler or worker services time out.
     # worker_command: "dask-worker" # The command for workers to run. If the instance_type is a GPU instance dask-cuda-worker will be used.
@@ -54,26 +55,12 @@ cloudprovider:
   azure:
     location: null # The Azure location to launch your cluster
     resource_group: null # The Azure resource group for the cluster
-    azureml:
-      experiment_name: "dask-cloudprovider" # default name of the Experiment to submit
-      initial_node_count: 1 # Initial node count
-      jupyter: False # by default start the Jupyter lab instance on the headnode
-      jupyter_port: 9000 # default Jupyter lab port on the headnode
-      dashboard_port: 9001 # default Dask dashboard port on the headnode
-      scheduler_port: 9002 # default for the scheduler port if using from outside of cluster VNET
-      scheduler_idle_timeout: 1200 # default timeout for dask-scheduler process to shutdown if idle (in seconds)
-      worker_death_timeout: 30 # default timeout for dask-worker process upon losing scheduler
-      additional_ports: [] # list of tuples of additional ports to map/forward
-      admin_username: "" # username to log in to the AzureML Training Cluster for 'local' runs
-      admin_ssh_key: "" # password to log in to the AzureML Training Cluster for 'local' runs
-      telemetry_opt_out: False # by default we log the version of the AzureMLCluster being used, set to True to opt-out
-      datastores: [] # default list of datastores to mount
     azurevm:
-      resource_group: null # Azure resource group
       vnet: null # Azure Virtual Network to launch VMs in
       security_group: null # Network security group to allow 8786 and 8787
       public_ingress: true # Assign a public IP address to the scheduler
       vm_size: "Standard_DS1_v2" # Azure VM size to use for scheduler and workers
+      disk_size: 50  # Specifies the size of the VM host OS disk in gigabytes. This value cannot be larger than `1023`.
       scheduler_vm_size: null # Set a different VM size for the scheduler. Will use vm_size if not set
       docker_image: "daskdev/dask:latest" # docker image to use
       vm_image: # OS image to use for the virtual machines
@@ -83,6 +70,10 @@ cloudprovider:
         version: "latest"
       bootstrap: true # It is assumed that the VHD does not have Docker and needs bootstrapping. Set this to false if using a custom VHD with Docker already installed.
       auto_shutdown: true # Shutdown instances automatically if the scheduler or worker services time out.
+      marketplace_plan:  null # This needs to be passed in if the user wants to use a Marketplace VM with a plan.
+        # name: "ngc-base-version-21-02-2"
+        # publisher: "nvidia"
+        # product: "ngc_azure_17_11"
 
   digitalocean:
     token: null # API token for interacting with the Digital Ocean API
@@ -92,12 +83,24 @@ cloudprovider:
 
   gcp:
     source_image: "projects/ubuntu-os-cloud/global/images/ubuntu-minimal-1804-bionic-v20201014" # the gcp image to use for all instances
-    zone: "us-east1-c" # the zone of of where to launch the instances
+    zone: "us-east1-c" # the zone of where to launch the instances
+    network: "default" # the network/subnetwork in GCP to use
+    network_projectid: null # GCP project id where the network exists
     projectid: "" # name of the google cloud project
+    on_host_maintenance: "TERMINATE"
     machine_type: "n1-standard-1" # size of the machine type to use
     filesystem_size: 50 # amount in GBs of hard drive space to allocate
     ngpus: "" # number of GPUs to use
     gpu_type: "" # type of gpus to use: nvidia-tesla-k80, nvidia-tesla-p100, nvidia-tesla-t4
+    disk_type: "pd-standard" # type of disk to use: pd-standard, pd-ssd
     docker_image: "daskdev/dask:latest" # docker image to use
     auto_shutdown: true # Shutdown instances automatically if the scheduler or worker services time out.
     public_ingress: true # configure the scheduler to be externally accessible.  This assumes firefwall rules for 8787 and 8786
+
+  hetzner:
+    token: null # API token for interacting with the Hetzner cloud API
+    location: "fsn1" # Location to launch vServer in
+    server_type: "cx11" # vServer server type to launch, default is 2GB RAM, 1 vCPU
+    image: "ubuntu-20.04" # Operating System image to use
+    docker_image: "daskdev/dask:latest" # docker image to use
+    bootstrap: true # It is assumed that the OS image does not have Docker and needs bootstrapping. Set this to false if using a custom image with Docker already installed.

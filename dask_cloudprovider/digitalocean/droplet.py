@@ -52,28 +52,22 @@ class Droplet(VMInterface):
             image=self.image,
             size_slug=self.size,
             backups=False,
-            user_data=self.cluster.render_cloud_init(
-                image=self.docker_image,
-                command=self.command,
-                gpu_instance=self.gpu_instance,
-                bootstrap=self.bootstrap,
-                env_vars=self.env_vars,
-            ),
+            user_data=self.cluster.render_process_cloud_init(self),
         )
-        self.droplet.create()
+        await self.cluster.call_async(self.droplet.create)
         for action in self.droplet.get_actions():
             while action.status != "completed":
                 action.load()
                 await asyncio.sleep(0.1)
         while self.droplet.ip_address is None:
-            self.droplet.load()
+            await self.cluster.call_async(self.droplet.load)
             await asyncio.sleep(0.1)
         self.cluster._log(f"Created droplet {self.name}")
 
         return self.droplet.ip_address
 
     async def destroy_vm(self):
-        self.droplet.destroy()
+        await self.cluster.call_async(self.droplet.destroy)
         self.cluster._log(f"Terminated droplet {self.name}")
 
 
@@ -129,6 +123,10 @@ class DropletCluster(VMCluster):
         For GPU instance types the Docker image much have NVIDIA drivers and ``dask-cuda`` installed.
 
         By default the ``daskdev/dask:latest`` image will be used.
+    docker_args: string (optional)
+        Extra command line arguments to pass to Docker.
+    extra_bootstrap: list[str] (optional)
+        Extra commands to be run during the bootstrap phase.
     env_vars: dict (optional)
         Environment variables to be passed to the worker.
     silence_logs: bool
@@ -139,7 +137,9 @@ class DropletCluster(VMCluster):
     security : Security or bool, optional
         Configures communication security in this cluster. Can be a security
         object, or True. If True, temporary self-signed credentials will
-        be created automatically.
+        be created automatically. Default is ``True``.
+    debug: bool, optional
+        More information will be printed when constructing clusters to enable debugging.
 
     Examples
     --------
@@ -197,11 +197,13 @@ class DropletCluster(VMCluster):
         region: str = None,
         size: str = None,
         image: str = None,
+        debug: bool = False,
         **kwargs,
     ):
         self.config = dask.config.get("cloudprovider.digitalocean", {})
         self.scheduler_class = DropletScheduler
         self.worker_class = DropletWorker
+        self.debug = debug
         self.options = {
             "cluster": self,
             "config": self.config,
@@ -211,4 +213,4 @@ class DropletCluster(VMCluster):
         }
         self.scheduler_options = {**self.options}
         self.worker_options = {**self.options}
-        super().__init__(**kwargs)
+        super().__init__(debug=debug, **kwargs)

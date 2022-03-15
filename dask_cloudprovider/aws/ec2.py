@@ -1,4 +1,5 @@
 import asyncio
+import random
 
 import dask
 from dask_cloudprovider.generic.vmcluster import (
@@ -16,7 +17,7 @@ from dask_cloudprovider.aws.helper import (
 from dask_cloudprovider.utils.timeout import Timeout
 
 try:
-    import aiobotocore
+    from aiobotocore.session import get_session
     import botocore.exceptions
 except ImportError as e:
     msg = (
@@ -35,6 +36,7 @@ class EC2Instance(VMInterface):
         config,
         *args,
         region=None,
+        availability_zone=None,
         bootstrap=None,
         ami=None,
         docker_image=None,
@@ -54,6 +56,7 @@ class EC2Instance(VMInterface):
         self.cluster = cluster
         self.config = config
         self.region = region
+        self.availability_zone = availability_zone
         self.bootstrap = bootstrap
         self.ami = ami
         self.docker_image = docker_image or self.config.get("docker_image")
@@ -108,13 +111,7 @@ class EC2Instance(VMInterface):
                 "MaxCount": 1,
                 "MinCount": 1,
                 "Monitoring": {"Enabled": False},
-                "UserData": self.cluster.render_cloud_init(
-                    image=self.docker_image,
-                    command=self.command,
-                    gpu_instance=self.gpu_instance,
-                    bootstrap=self.bootstrap,
-                    env_vars=self.env_vars,
-                ),
+                "UserData": self.cluster.render_process_cloud_init(self),
                 "InstanceInitiatedShutdownBehavior": "terminate",
                 "NetworkInterfaces": [
                     {
@@ -133,6 +130,11 @@ class EC2Instance(VMInterface):
 
             if self.iam_instance_profile:
                 vm_kwargs["IamInstanceProfile"] = self.iam_instance_profile
+
+            if self.availability_zone:
+                if isinstance(self.availability_zone, list):
+                    self.availability_zone = random.choice(self.availability_zone)
+                vm_kwargs["Placement"] = {"AvailabilityZone": self.availability_zone}
 
             response = await client.run_instances(**vm_kwargs)
             [self.instance] = response["Instances"]
@@ -206,7 +208,11 @@ class EC2Cluster(VMCluster):
     Parameters
     ----------
     region: string (optional)
-        The region to start you clusters. By default this will be detected from your config.
+        The region to start your clusters. By default this will be detected from your config.
+    availability_zone: string or List(string) (optional)
+        The availability zone to start your clusters. By default AWS will select the AZ with most free capacity.
+        If you specify more than one then scheduler and worker VMs will be randomly assigned to one of your
+        chosen AZs.
     bootstrap: bool (optional)
         It is assumed that the ``ami`` will not have Docker installed (or the NVIDIA drivers for GPU instances).
         If ``bootstrap`` is ``True`` these dependencies will be installed on instance start. If you are using
@@ -279,6 +285,8 @@ class EC2Cluster(VMCluster):
         For GPU instance types the Docker image much have NVIDIA drivers and ``dask-cuda`` installed.
 
         By default the ``daskdev/dask:latest`` image will be used.
+    docker_args: string (optional)
+        Extra command line arguments to pass to Docker.
     env_vars: dict (optional)
         Environment variables to be passed to the worker.
     silence_logs: bool
@@ -289,7 +297,9 @@ class EC2Cluster(VMCluster):
     security : Security or bool, optional
         Configures communication security in this cluster. Can be a security
         object, or True. If True, temporary self-signed credentials will
-        be created automatically.
+        be created automatically. Default is ``True``.
+    debug: bool, optional
+        More information will be printed when constructing clusters to enable debugging.
 
     Notes
     -----
@@ -322,7 +332,7 @@ class EC2Cluster(VMCluster):
     ...     credentials = parser.items('default')
     ...     all_credentials = {key.upper(): value for key, value in [*config, *credentials]}
     ...     with contextlib.suppress(KeyError):
-    ...     all_credentials["AWS_REGION"] = all_credentials.pop("REGION")
+    ...         all_credentials["AWS_REGION"] = all_credentials.pop("REGION")
     ...     return all_credentials
     >>> cluster = EC2Cluster(env_vars=get_aws_credentials())
 
@@ -382,6 +392,7 @@ class EC2Cluster(VMCluster):
     def __init__(
         self,
         region=None,
+        availability_zone=None,
         bootstrap=None,
         auto_shutdown=None,
         ami=None,
@@ -393,13 +404,19 @@ class EC2Cluster(VMCluster):
         key_name=None,
         iam_instance_profile=None,
         docker_image=None,
+        debug=False,
         **kwargs,
     ):
-        self.boto_session = aiobotocore.get_session()
+        self.boto_session = get_session()
         self.config = dask.config.get("cloudprovider.ec2", {})
         self.scheduler_class = EC2Scheduler
         self.worker_class = EC2Worker
         self.region = region if region is not None else self.config.get("region")
+        self.availability_zone = (
+            availability_zone
+            if availability_zone is not None
+            else self.config.get("availability_zone")
+        )
         self.bootstrap = (
             bootstrap if bootstrap is not None else self.config.get("bootstrap")
         )
@@ -417,7 +434,7 @@ class EC2Cluster(VMCluster):
         self.gpu_instance = self.instance_type.startswith(("p", "g"))
         self.vpc = vpc if vpc is not None else self.config.get("vpc")
         self.subnet_id = (
-            subnet_id if subnet_id is None else self.config.get("subnet_id")
+            subnet_id if subnet_id is not None else self.config.get("subnet_id")
         )
         self.security_groups = (
             security_groups
@@ -438,10 +455,12 @@ class EC2Cluster(VMCluster):
             if iam_instance_profile is not None
             else self.config.get("iam_instance_profile")
         )
+        self.debug = debug
         self.options = {
             "cluster": self,
             "config": self.config,
             "region": self.region,
+            "availability_zone": self.availability_zone,
             "bootstrap": self.bootstrap,
             "ami": self.ami,
             "docker_image": docker_image or self.config.get("docker_image"),
@@ -456,4 +475,4 @@ class EC2Cluster(VMCluster):
         }
         self.scheduler_options = {**self.options}
         self.worker_options = {**self.options}
-        super().__init__(**kwargs)
+        super().__init__(debug=debug, **kwargs)

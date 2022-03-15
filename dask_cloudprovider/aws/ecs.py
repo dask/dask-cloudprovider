@@ -3,7 +3,7 @@ import logging
 import uuid
 import warnings
 import weakref
-from typing import List
+from typing import List, Optional
 
 import dask
 
@@ -24,7 +24,7 @@ from distributed.core import Status
 
 try:
     from botocore.exceptions import ClientError
-    import aiobotocore
+    from aiobotocore.session import get_session
 except ImportError as e:
     msg = (
         "Dask Cloud Provider AWS requirements are not installed.\n\n"
@@ -74,7 +74,7 @@ class Task:
         log group when launching this task.
 
     fargate: bool
-        Whether or not to launch with the Fargate launch type.
+        Whether or not to launch on Fargate.
 
     environment: dict
         Environment variables to set when launching the task.
@@ -96,6 +96,12 @@ class Task:
     fargate_use_private_ip: bool (optional)
         Whether to use a private IP (if True) or public IP (if False) with Fargate.
         Defaults to False, i.e. public IP.
+
+    fargate_capacity_provider: str (optional)
+        If cluster is launched on Fargate with `fargate_spot=True`, use this capacity provider
+        (should be either `FARGATE` or `FARGATE_SPOT`).
+        If not set, `launchType=FARGATE` will be used.
+        Defaults to None.
 
     task_kwargs: dict (optional)
         Additional keyword arguments for the ECS task.
@@ -125,6 +131,7 @@ class Task:
         name=None,
         platform_version=None,
         fargate_use_private_ip=False,
+        fargate_capacity_provider=None,
         task_kwargs=None,
         **kwargs
     ):
@@ -152,6 +159,7 @@ class Task:
         self._find_address_timeout = find_address_timeout
         self.platform_version = platform_version
         self._fargate_use_private_ip = fargate_use_private_ip
+        self._fargate_capacity_provider = fargate_capacity_provider
         self.kwargs = kwargs
         self.task_kwargs = task_kwargs
         self.status = Status.created
@@ -181,11 +189,22 @@ class Task:
 
     async def _update_task(self):
         async with self._client("ecs") as ecs:
-            [self.task] = (
-                await ecs.describe_tasks(
-                    cluster=self.cluster_arn, tasks=[self.task_arn]
-                )
-            )["tasks"]
+            wait_duration = 1
+            while True:
+                try:
+                    [self.task] = (
+                        await ecs.describe_tasks(
+                            cluster=self.cluster_arn, tasks=[self.task_arn]
+                        )
+                    )["tasks"]
+                except ClientError as e:
+                    if e.response["Error"]["Code"] == "ThrottlingException":
+                        wait_duration = min(wait_duration * 2, 20)
+                    else:
+                        raise
+                else:
+                    break
+                await asyncio.sleep(wait_duration)
 
     async def _set_address_from_logs(self):
         timeout = Timeout(
@@ -244,7 +263,6 @@ class Task:
                             ]
                         },
                         "count": 1,
-                        "launchType": "FARGATE" if self.fargate else "EC2",
                         "networkConfiguration": {
                             "awsvpcConfiguration": {
                                 "subnets": self._vpc_subnets,
@@ -256,6 +274,18 @@ class Task:
                         },
                     }
                 )
+
+                # Set launchType to FARGATE only if self.fargate. Otherwise, don't set this
+                # so that the default capacity provider of the ECS cluster or an alternate
+                # capacity provider can be specified. (dask/dask-cloudprovider#261)
+                if self.fargate:
+                    # Use launchType only if capacity provider is not specified
+                    if not self._fargate_capacity_provider:
+                        kwargs["launchType"] = "FARGATE"
+                    else:
+                        kwargs["capacityProviderStrategy"] = [
+                            {"capacityProvider": self._fargate_capacity_provider}
+                        ]
 
                 async with self._client("ecs") as ecs:
                     response = await ecs.run_task(**kwargs)
@@ -270,17 +300,8 @@ class Task:
                 await asyncio.sleep(1)
 
         self.task_arn = self.task["taskArn"]
-        wait_duration = 1
         while self.task["lastStatus"] in ["PENDING", "PROVISIONING"]:
-            try:
-                await self._update_task()
-                wait_duration = 1
-            except ClientError as e:
-                if e.response["Error"]["Code"] == "ThrottlingException":
-                    wait_duration = wait_duration * 2
-                else:
-                    raise
-            await asyncio.sleep(min(wait_duration, 20))
+            await self._update_task()
         if not await self._task_is_running():
             raise RuntimeError("%s failed to start" % type(self).__name__)
         [eni] = [
@@ -402,6 +423,7 @@ class Worker(Task):
         cpu: int,
         mem: int,
         gpu: int,
+        nthreads: Optional[int],
         extra_args: List[str],
         **kwargs
     ):
@@ -411,6 +433,7 @@ class Worker(Task):
         self._cpu = cpu
         self._mem = mem
         self._gpu = gpu
+        self._nthreads = nthreads
         self._overrides = {
             "command": [
                 "dask-cuda-worker" if self._gpu else "dask-worker",
@@ -418,7 +441,11 @@ class Worker(Task):
                 "--name",
                 str(self.name),
                 "--nthreads",
-                "{}".format(max(int(self._cpu / 1024), 1)),
+                "{}".format(
+                    max(int(self._cpu / 1024), 1)
+                    if nthreads is None
+                    else self._nthreads
+                ),
                 "--memory-limit",
                 "{}GB".format(int(self._mem / 1024)),
                 "--death-timeout",
@@ -446,6 +473,13 @@ class ECSCluster(SpecCluster):
         Select whether or not to use fargate for the workers.
 
         Defaults to ``False``. You must provide an existing cluster.
+    fargate_spot: bool (optional)
+        Select whether or not to run cluster using Fargate Spot with workers running on spot capacity.
+        If `fargate_scheduler=True` and `fargate_workers=True`, this will make sure worker tasks will use
+        `fargate_capacity_provider=FARGATE_SPOT` and scheduler task will use
+        `fargate_capacity_provider=FARGATE` capacity providers.
+
+        Defaults to ``False``. You must provide an existing cluster.
     image: str (optional)
         The docker image to use for the scheduler and worker tasks.
 
@@ -470,11 +504,19 @@ class ECSCluster(SpecCluster):
         Defaults to `None`, no extra command line arguments.
     scheduler_task_kwargs: dict (optional)
         Additional keyword arguments for the scheduler ECS task.
+    scheduler_address: str (optional)
+        If passed, no scheduler task will be started, and instead the workers will connect to the passed address.
+
+        Defaults to `None`, a scheduler task will start.
     worker_cpu: int (optional)
         The amount of CPU to request for worker tasks in milli-cpu (1/1024).
 
         Defaults to ``4096`` (four vCPUs).
         See the `troubleshooting guide`_ for information on the valid values for this argument.
+    worker_nthreads: int (optional)
+        The number of threads to use in each worker.
+
+        Defaults to 1 per vCPU.
     worker_mem: int (optional)
         The amount of memory to request for worker tasks in MB.
 
@@ -499,6 +541,14 @@ class ECSCluster(SpecCluster):
         Number of workers to start on cluster creation.
 
         Defaults to ``None``.
+    workers_name_start: int
+        Name workers from here on.
+
+        Defaults to `0`.
+    workers_name_step: int
+        Name workers by adding multiples of `workers_name_step` to `workers_name_start`.
+
+        Default to `1`.
     cluster_arn: str (optional if fargate is true)
         The ARN of an existing ECS cluster to use for launching tasks.
 
@@ -648,18 +698,23 @@ class ECSCluster(SpecCluster):
         self,
         fargate_scheduler=False,
         fargate_workers=False,
+        fargate_spot=False,
         image=None,
         scheduler_cpu=None,
         scheduler_mem=None,
         scheduler_timeout=None,
         scheduler_extra_args=None,
         scheduler_task_kwargs=None,
+        scheduler_address=None,
         worker_cpu=None,
+        worker_nthreads=None,
         worker_mem=None,
         worker_gpu=None,
         worker_extra_args=None,
         worker_task_kwargs=None,
         n_workers=None,
+        workers_name_start=0,
+        workers_name_step=1,
         cluster_arn=None,
         cluster_name_template=None,
         execution_role_arn=None,
@@ -687,18 +742,23 @@ class ECSCluster(SpecCluster):
     ):
         self._fargate_scheduler = fargate_scheduler
         self._fargate_workers = fargate_workers
+        self._fargate_spot = fargate_spot
         self.image = image
         self._scheduler_cpu = scheduler_cpu
         self._scheduler_mem = scheduler_mem
         self._scheduler_timeout = scheduler_timeout
         self._scheduler_extra_args = scheduler_extra_args
         self._scheduler_task_kwargs = scheduler_task_kwargs
+        self._scheduler_address = scheduler_address
         self._worker_cpu = worker_cpu
+        self._worker_nthreads = worker_nthreads
         self._worker_mem = worker_mem
         self._worker_gpu = worker_gpu
         self._worker_extra_args = worker_extra_args
         self._worker_task_kwargs = worker_task_kwargs
         self._n_workers = n_workers
+        self._workers_name_start = workers_name_start
+        self._workers_name_step = workers_name_step
         self.cluster_arn = cluster_arn
         self.cluster_name = None
         self._cluster_name_template = cluster_name_template
@@ -724,7 +784,7 @@ class ECSCluster(SpecCluster):
         self._region_name = region_name
         self._platform_version = platform_version
         self._lock = asyncio.Lock()
-        self.session = aiobotocore.get_session()
+        self.session = get_session()
         super().__init__(**kwargs)
 
     def _client(self, name: str):
@@ -751,12 +811,18 @@ class ECSCluster(SpecCluster):
         if self._skip_cleanup is None:
             self._skip_cleanup = self.config.get("skip_cleanup")
         if not self._skip_cleanup:
-            await _cleanup_stale_resources()
+            await _cleanup_stale_resources(
+                aws_access_key_id=self.config.get("aws_access_key_id"),
+                aws_secret_access_key=self.config.get("aws_secret_access_key"),
+                region_name=self.config.get("region_name"),
+            )
 
         if self._fargate_scheduler is None:
             self._fargate_scheduler = self.config.get("fargate_scheduler")
         if self._fargate_workers is None:
             self._fargate_workers = self.config.get("fargate_workers")
+        if self._fargate_spot is None:
+            self._fargate_spot = self.config.get("fargate_spot")
 
         if self._tags is None:
             self._tags = self.config.get("tags")
@@ -795,6 +861,9 @@ class ECSCluster(SpecCluster):
 
         if self._worker_cpu is None:
             self._worker_cpu = self.config.get("worker_cpu")
+
+        if self._worker_nthreads is None:
+            self._worker_nthreads = self.config.get("worker_nthreads")
 
         if self._worker_mem is None:
             self._worker_mem = self.config.get("worker_mem")
@@ -898,13 +967,16 @@ class ECSCluster(SpecCluster):
         scheduler_options = {
             "task_definition_arn": self.scheduler_task_definition_arn,
             "fargate": self._fargate_scheduler,
+            "fargate_capacity_provider": "FARGATE" if self._fargate_spot else None,
             "task_kwargs": self._scheduler_task_kwargs,
             **options,
         }
         worker_options = {
             "task_definition_arn": self.worker_task_definition_arn,
             "fargate": self._fargate_workers,
+            "fargate_capacity_provider": "FARGATE_SPOT" if self._fargate_spot else None,
             "cpu": self._worker_cpu,
+            "nthreads": self._worker_nthreads,
             "mem": self._worker_mem,
             "gpu": self._worker_gpu,
             "extra_args": self._worker_extra_args,
@@ -914,7 +986,17 @@ class ECSCluster(SpecCluster):
 
         self.scheduler_spec = {"cls": Scheduler, "options": scheduler_options}
         self.new_spec = {"cls": Worker, "options": worker_options}
-        self.worker_spec = {i: self.new_spec for i in range(self._n_workers)}
+        self.worker_spec = {}
+        for _ in range(self._n_workers):
+            self.worker_spec.update(self.new_worker_spec())
+
+        if self._scheduler_address is not None:
+
+            class SchedulerAddress(object):
+                def __init__(self_):
+                    self_.address = self._scheduler_address
+
+            self.scheduler = SchedulerAddress()
 
         with warn_on_duration(
             "10s",
@@ -923,6 +1005,10 @@ class ECSCluster(SpecCluster):
             "Hang tight! ",
         ):
             await super()._start()
+
+    def _new_worker_name(self, worker_number):
+        """Returns new worker name."""
+        return self._workers_name_start + self._workers_name_step * worker_number
 
     @property
     def tags(self):
@@ -1168,7 +1254,11 @@ class ECSCluster(SpecCluster):
                         "command": [
                             "dask-cuda-worker" if self._worker_gpu else "dask-worker",
                             "--nthreads",
-                            "{}".format(max(int(self._worker_cpu / 1024), 1)),
+                            "{}".format(
+                                max(int(self._worker_cpu / 1024), 1)
+                                if self._worker_nthreads is None
+                                else self._worker_nthreads
+                            ),
                             "--memory-limit",
                             "{}MB".format(int(self._worker_mem)),
                             "--death-timeout",
@@ -1259,6 +1349,12 @@ class FargateCluster(ECSCluster):
     >>> from dask_cloudprovider.aws import FargateCluster
     >>> cluster = FargateCluster(image="<hub-user>/<repo-name>[:<tag>]")
 
+    To run cluster with workers using Fargate Spot
+    (<https://aws.amazon.com/blogs/aws/aws-fargate-spot-now-generally-available/>) set ``fargate_spot=True``
+
+    >>> from dask_cloudprovider.aws import FargateCluster
+    >>> cluster = FargateCluster(fargate_spot=True)
+
     One strategy to ensure that package versions match between your custom environment and the Docker container is to
     create your environment from an ``environment.yml`` file, export the exact package list for that environment using
     ``conda list --export > package-list.txt``, and then use the pinned package versions contained in
@@ -1287,6 +1383,7 @@ class FargateCluster(ECSCluster):
                         "ec2:CreateSecurityGroup",
                         "ec2:CreateTags",
                         "ec2:DescribeNetworkInterfaces",
+                        "ec2:DescribeSecurityGroups",
                         "ec2:DescribeSubnets",
                         "ec2:DescribeVpcs",
                         "ec2:DeleteSecurityGroup",
@@ -1307,10 +1404,14 @@ class FargateCluster(ECSCluster):
                         "iam:TagRole",
                         "iam:PassRole",
                         "iam:DeleteRole",
+                        "iam:ListRoles",
                         "iam:ListRoleTags",
                         "iam:ListAttachedRolePolicies",
                         "iam:DetachRolePolicy",
-                        "logs:DescribeLogGroups"
+                        "logs:DescribeLogGroups",
+                        "logs:GetLogEvents",
+                        "logs:CreateLogGroup",
+                        "logs:PutRetentionPolicy"
                     ],
                     "Effect": "Allow",
                     "Resource": [
@@ -1331,6 +1432,7 @@ class FargateCluster(ECSCluster):
                     "Action": [
                         "ec2:CreateTags",
                         "ec2:DescribeNetworkInterfaces",
+                        "ec2:DescribeSecurityGroups",
                         "ec2:DescribeSubnets",
                         "ec2:DescribeVpcs",
                         "ecs:DescribeTasks",
@@ -1343,8 +1445,10 @@ class FargateCluster(ECSCluster):
                         "ecs:ListTaskDefinitions",
                         "ecs:DescribeTaskDefinition",
                         "ecs:DeregisterTaskDefinition",
+                        "iam:ListRoles",
                         "iam:ListRoleTags",
-                        "logs:DescribeLogGroups"
+                        "logs:DescribeLogGroups",
+                        "logs:GetLogEvents"
                     ],
                     "Effect": "Allow",
                     "Resource": [
@@ -1362,7 +1466,7 @@ class FargateCluster(ECSCluster):
         super().__init__(fargate_scheduler=True, fargate_workers=True, **kwargs)
 
 
-async def _cleanup_stale_resources():
+async def _cleanup_stale_resources(**kwargs):
     """Clean up any stale resources which are tagged with 'createdBy': 'dask-cloudprovider'.
 
     This function will scan through AWS looking for resources that were created
@@ -1377,8 +1481,8 @@ async def _cleanup_stale_resources():
 
     """
     # Clean up clusters (clusters with no running tasks)
-    session = aiobotocore.get_session()
-    async with session.create_client("ecs") as ecs:
+    session = get_session()
+    async with session.create_client("ecs", **kwargs) as ecs:
         active_clusters = []
         clusters_to_delete = []
         async for page in ecs.get_paginator("list_clusters").paginate():
@@ -1388,8 +1492,13 @@ async def _cleanup_stale_resources():
                 )
             )["clusters"]
             for cluster in clusters:
-                if DEFAULT_TAGS.items() <= aws_to_dict(cluster["tags"]).items():
-                    if cluster["runningTasksCount"] == 0:
+                if set(DEFAULT_TAGS.items()) <= set(
+                    aws_to_dict(cluster["tags"]).items()
+                ):
+                    if (
+                        cluster["runningTasksCount"] == 0
+                        and cluster["pendingTasksCount"] == 0
+                    ):
                         clusters_to_delete.append(cluster["clusterArn"])
                     else:
                         active_clusters.append(cluster["clusterName"])
@@ -1407,16 +1516,19 @@ async def _cleanup_stale_resources():
                 task_definition_cluster = aws_to_dict(task_definition["tags"]).get(
                     "cluster"
                 )
-                if (
-                    task_definition_cluster is None
-                    or task_definition_cluster not in active_clusters
+                if set(DEFAULT_TAGS.items()) <= set(
+                    aws_to_dict(task_definition["tags"]).items()
                 ):
-                    await ecs.deregister_task_definition(
-                        taskDefinition=task_definition_arn
-                    )
+                    if (
+                        task_definition_cluster is None
+                        or task_definition_cluster not in active_clusters
+                    ):
+                        await ecs.deregister_task_definition(
+                            taskDefinition=task_definition_arn
+                        )
 
     # Clean up security groups (with no active clusters)
-    async with session.create_client("ec2") as ec2:
+    async with session.create_client("ec2", **kwargs) as ec2:
         async for page in ec2.get_paginator("describe_security_groups").paginate(
             Filters=[{"Name": "tag:createdBy", "Values": ["dask-cloudprovider"]}]
         ):
@@ -1428,13 +1540,13 @@ async def _cleanup_stale_resources():
                     )
 
     # Clean up roles (with no active clusters)
-    async with session.create_client("iam") as iam:
+    async with session.create_client("iam", **kwargs) as iam:
         async for page in iam.get_paginator("list_roles").paginate():
             for role in page["Roles"]:
                 role["Tags"] = (
                     await iam.list_role_tags(RoleName=role["RoleName"])
                 ).get("Tags")
-                if DEFAULT_TAGS.items() <= aws_to_dict(role["Tags"]).items():
+                if set(DEFAULT_TAGS.items()) <= set(aws_to_dict(role["Tags"]).items()):
                     role_cluster = aws_to_dict(role["Tags"]).get("cluster")
                     if role_cluster is None or role_cluster not in active_clusters:
                         attached_policies = (
