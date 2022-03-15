@@ -10,7 +10,7 @@ extras_require = {
     "azure": [
         "azure-mgmt-compute>=18.0.0,<19",
         "azure-mgmt-network>=16.0.0,<17",
-        "azure-cli-core>=2.15.1,<3",
+        "azure-cli-core>=2.15.1,<2.21.0",
         "msrestazure",
         "azure-identity",
     ],
