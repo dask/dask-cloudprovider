@@ -3,9 +3,11 @@ channels:
   - defaults
   - conda-forge
 dependencies:
-  - python=3.7
+  - python=3.9
   - nomkl
   - pip
+  # Dask
+  - dask
   # testing / CI
   - flake8
   - ipywidgets
