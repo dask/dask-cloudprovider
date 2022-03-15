@@ -1495,7 +1495,10 @@ async def _cleanup_stale_resources(**kwargs):
                 if set(DEFAULT_TAGS.items()) <= set(
                     aws_to_dict(cluster["tags"]).items()
                 ):
-                    if cluster["runningTasksCount"] == 0:
+                    if (
+                        cluster["runningTasksCount"] == 0
+                        and cluster["pendingTasksCount"] == 0
+                    ):
                         clusters_to_delete.append(cluster["clusterArn"])
                     else:
                         active_clusters.append(cluster["clusterName"])
