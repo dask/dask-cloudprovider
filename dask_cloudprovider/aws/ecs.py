@@ -807,14 +807,23 @@ class ECSCluster(SpecCluster):
 
         self.config = dask.config.get("cloudprovider.ecs", {})
 
+        if self._region_name is None:
+            self._region_name = self.config.get("region_name")
+
+        if self._aws_access_key_id is None:
+            self._aws_access_key_id = self.config.get("aws_access_key_id")
+
+        if self._aws_secret_access_key is None:
+            self._aws_secret_access_key = self.config.get("aws_secret_access_key")
+
         # Cleanup any stale resources before we start
         if self._skip_cleanup is None:
             self._skip_cleanup = self.config.get("skip_cleanup")
         if not self._skip_cleanup:
             await _cleanup_stale_resources(
-                aws_access_key_id=self.config.get("aws_access_key_id"),
-                aws_secret_access_key=self.config.get("aws_secret_access_key"),
-                region_name=self.config.get("region_name"),
+                aws_access_key_id=self._aws_access_key_id,
+                aws_secret_access_key=self._aws_secret_access_key,
+                region_name=self._region_name,
             )
 
         if self._fargate_scheduler is None:
