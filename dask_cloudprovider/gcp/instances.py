@@ -62,6 +62,7 @@ class GCPInstance(VMInterface):
         ngpus=None,
         gpu_type=None,
         bootstrap=None,
+        extra_bootstrap=None,
         gpu_instance=None,
         auto_shutdown=None,
         preemptible=False,
@@ -94,6 +95,7 @@ class GCPInstance(VMInterface):
         self.gpu_type = gpu_type or self.config.get("gpu_type")
         self.gpu_instance = gpu_instance
         self.bootstrap = bootstrap
+        self.extra_bootstrap = extra_bootstrap
         self.auto_shutdown = auto_shutdown
         self.preemptible = preemptible
 

@@ -30,6 +30,7 @@ class Droplet(VMInterface):
         image: str = None,
         docker_image=None,
         env_vars=None,
+        extra_bootstrap=None,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
@@ -41,6 +42,7 @@ class Droplet(VMInterface):
         self.image = image
         self.gpu_instance = False
         self.bootstrap = True
+        self.extra_bootstrap = extra_bootstrap
         self.docker_image = docker_image
         self.env_vars = env_vars
 

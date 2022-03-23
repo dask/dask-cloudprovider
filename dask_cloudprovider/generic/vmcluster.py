@@ -280,6 +280,7 @@ class VMCluster(SpecCluster):
         self.scheduler_options["env_vars"] = env_vars
         self.scheduler_options["protocol"] = protocol
         self.scheduler_options["scheduler_options"] = scheduler_options
+        self.scheduler_options["extra_bootstrap"] = extra_bootstrap
         self.worker_options["env_vars"] = env_vars
         self.options["docker_args"] = docker_args
         self.options["extra_bootstrap"] = extra_bootstrap
@@ -289,6 +290,7 @@ class VMCluster(SpecCluster):
         self.worker_options["worker_class"] = worker_class
         self.worker_options["protocol"] = protocol
         self.worker_options["worker_options"] = worker_options
+        self.worker_options["extra_bootstrap"] = extra_bootstrap
         self.uuid = str(uuid.uuid4())[:8]
 
         super().__init__(**kwargs, security=self.security)

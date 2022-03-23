@@ -44,6 +44,7 @@ class AzureVM(VMInterface):
         docker_image: str = None,
         env_vars: dict = {},
         bootstrap: bool = None,
+        extra_bootstrap=None,
         auto_shutdown: bool = None,
         marketplace_plan: dict = {},
         **kwargs,
@@ -55,6 +56,7 @@ class AzureVM(VMInterface):
         self.location = location
         self.gpu_instance = gpu_instance
         self.bootstrap = bootstrap
+        self.extra_bootstrap = extra_bootstrap
         self.admin_username = "dask"
         self.admin_password = str(uuid.uuid4())[:32]
         self.security_group = security_group
