@@ -38,6 +38,7 @@ class EC2Instance(VMInterface):
         region=None,
         availability_zone=None,
         bootstrap=None,
+        extra_bootstrap=None,
         ami=None,
         docker_image=None,
         env_vars=None,
@@ -58,6 +59,7 @@ class EC2Instance(VMInterface):
         self.region = region
         self.availability_zone = availability_zone
         self.bootstrap = bootstrap
+        self.extra_bootstrap = extra_bootstrap
         self.ami = ami
         self.docker_image = docker_image or self.config.get("docker_image")
         self.env_vars = env_vars

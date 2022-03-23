@@ -30,6 +30,7 @@ class VServer(VMInterface):
         config,
         env_vars: dict = None,
         bootstrap=None,
+        extra_bootstrap=None,
         docker_image: str = None,
         image: str = None,
         location: str = None,
@@ -42,6 +43,7 @@ class VServer(VMInterface):
         self.config = config
         self.location = location
         self.bootstrap = bootstrap
+        self.extra_bootstrap = extra_bootstrap
         self.env_vars = env_vars
         self.client = hcloud.Client(self.config.get("token"))
         self.server_type = ServerType(server_type)
