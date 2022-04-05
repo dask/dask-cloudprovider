@@ -308,18 +308,19 @@ class GCPScheduler(SchedulerMixin, GCPInstance):
             # scheduler must be publicly available, and firewall
             # needs to be in place to allow access to 8786 on
             # the external IP
-            self.address = f"{self.cluster.protocol}://{self.external_ip}:8786"
+            self.address = f"{self.cluster.protocol}://{self.external_ip}:{self.port}"
         else:
             # if the client is running inside GCE environment
             # it's better to use internal IP, which doesn't
             # require firewall setup
-            self.address = f"{self.cluster.protocol}://{self.internal_ip}:8786"
+            self.address = f"{self.cluster.protocol}://{self.internal_ip}:{self.port}"
         await self.wait_for_scheduler()
 
         # need to reserve internal IP for workers
         # gcp docker containers can't see resolve ip address
         self.cluster.scheduler_internal_ip = self.internal_ip
         self.cluster.scheduler_external_ip = self.external_ip
+        self.cluster.scheduler_port = self.port
 
 
 class GCPWorker(GCPInstance):
@@ -338,7 +339,7 @@ class GCPWorker(GCPInstance):
         self.worker_class = worker_class
         self.name = f"dask-{self.cluster.uuid}-worker-{str(uuid.uuid4())[:8]}"
         internal_scheduler = (
-            f"{self.cluster.protocol}://{self.cluster.scheduler_internal_ip}:8786"
+            f"{self.cluster.protocol}://{self.cluster.scheduler_internal_ip}:{self.cluster.scheduler_port}"
         )
         self.command = " ".join(
             [
