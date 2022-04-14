@@ -72,6 +72,7 @@ class SchedulerMixin(object):
     ):
         super().__init__(*args, **kwargs)
         self.name = f"dask-{self.cluster.uuid}-scheduler"
+        self.port = scheduler_options.get("port", 8786)
         self.command = " ".join(
             [
                 self.set_env,
@@ -85,7 +86,7 @@ class SchedulerMixin(object):
     async def start(self):
         self.cluster._log("Creating scheduler instance")
         ip = await self.create_vm()
-        self.address = f"{self.cluster.protocol}://{ip}:8786"
+        self.address = f"{self.cluster.protocol}://{ip}:{self.port}"
         await self.wait_for_scheduler()
         await super().start()
 
