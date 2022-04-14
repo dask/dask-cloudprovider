@@ -616,6 +616,9 @@ class GCPCluster(VMCluster):
         self.scheduler_options = {**self.options}
         self.worker_options = {**self.options}
 
+        if "extra_bootstrap" not in kwargs:
+            kwargs["extra_bootstrap"] = self.config.get("extra_bootstrap")
+
         super().__init__(debug=debug, **kwargs)
 
 
