@@ -338,9 +338,12 @@ class GCPWorker(GCPInstance):
         self.scheduler = scheduler
         self.worker_class = worker_class
         self.name = f"dask-{self.cluster.uuid}-worker-{str(uuid.uuid4())[:8]}"
-        internal_scheduler = (
-            f"{self.cluster.protocol}://{self.cluster.scheduler_internal_ip}:{self.cluster.scheduler_port}"
+        proto, ip, port = (
+            self.cluster.protocol,
+            self.cluster.scheduler_internal_ip,
+            self.cluster.scheduler_port,
         )
+        internal_scheduler = f"{proto}://{ip}:{port}"
         self.command = " ".join(
             [
                 self.set_env,
