@@ -1037,9 +1037,9 @@ class ECSCluster(SpecCluster):
         self.cluster_name = self.cluster_name.format(uuid=str(uuid.uuid4())[:10])
         async with self._client("ecs") as ecs:
             response = await ecs.create_cluster(
-                clusterName=self.cluster_name, 
+                clusterName=self.cluster_name,
                 tags=dict_to_aws(self.tags),
-                capacityProviders=['FARGATE', 'FARGATE_SPOT'],
+                capacityProviders=["FARGATE", "FARGATE_SPOT"],
             )
         weakref.finalize(self, self.sync, self._delete_cluster)
         return response["cluster"]["clusterArn"]
