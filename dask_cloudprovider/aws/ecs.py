@@ -1039,7 +1039,7 @@ class ECSCluster(SpecCluster):
             response = await ecs.create_cluster(
                 clusterName=self.cluster_name, 
                 tags=dict_to_aws(self.tags),
-                capacityProviders=['FARGATE', 'FARGATE_SPOT']
+                capacityProviders=['FARGATE', 'FARGATE_SPOT'],
             )
         weakref.finalize(self, self.sync, self._delete_cluster)
         return response["cluster"]["clusterArn"]
