@@ -494,6 +494,9 @@ class AzureVMCluster(VMCluster):
         self.security_group = self.config.get(
             "azurevm.security_group", override_with=security_group
         )
+        self.docker_image = self.config.get(
+            "azurevm.docker_image", override_with=docker_image
+        )
         if self.security_group is None:
             raise ConfigError(
                 "You must configure a security group which allows traffic on 8786 and 8787"

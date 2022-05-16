@@ -127,7 +127,9 @@ async def test_render_cloud_init():
     assert " --privileged " in cloud_init
 
     cloud_init = AzureVMCluster.get_cloud_init(
-        extra_bootstrap=["echo 'hello world'", "echo 'foo bar'"]
+        docker_image="foo/bar:baz",
+        extra_bootstrap=["echo 'hello world'", "echo 'foo bar'"],
     )
+    assert "foo/bar:baz" in cloud_init
     assert "- echo 'hello world'" in cloud_init
     assert "- echo 'foo bar'" in cloud_init
