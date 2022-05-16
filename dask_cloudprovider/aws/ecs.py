@@ -1005,6 +1005,12 @@ class ECSCluster(SpecCluster):
                 def __init__(self_):
                     self_.address = self._scheduler_address
 
+                def __await__(self):
+                    async def _():
+                        return self
+
+                    return _().__await__()
+
             self.scheduler = SchedulerAddress()
 
         with warn_on_duration(
