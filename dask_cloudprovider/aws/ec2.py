@@ -13,6 +13,7 @@ from dask_cloudprovider.aws.helper import (
     get_default_vpc,
     get_vpc_subnets,
     get_security_group,
+    dict_to_aws
 )
 from dask_cloudprovider.utils.timeout import Timeout
 
@@ -27,6 +28,10 @@ except ImportError as e:
         '  pip install "dask-cloudprovider[aws]" --upgrade       # or python -m pip install'
     )
     raise ImportError(msg) from e
+
+DEFAULT_INSTANCE_TAGS = {
+    "createdBy": "dask-cloudprovider"
+}  # tags to apply to all created instances
 
 
 class EC2Instance(VMInterface):
@@ -302,6 +307,10 @@ class EC2Cluster(VMCluster):
         be created automatically. Default is ``True``.
     debug: bool, optional
         More information will be printed when constructing clusters to enable debugging.
+    instance_tags: dict, optional
+        Tags to be applied to all EC2 instances upon creation
+
+        By default, includes "createdBy": "dask-cloudprovider"
 
     Notes
     -----
@@ -407,6 +416,7 @@ class EC2Cluster(VMCluster):
         iam_instance_profile=None,
         docker_image=None,
         debug=False,
+        instance_tags=None,
         **kwargs,
     ):
         self.boto_session = get_session()
@@ -458,6 +468,7 @@ class EC2Cluster(VMCluster):
             else self.config.get("iam_instance_profile")
         )
         self.debug = debug
+        self._instance_tags = instance_tags
         self.options = {
             "cluster": self,
             "config": self.config,
@@ -478,3 +489,7 @@ class EC2Cluster(VMCluster):
         self.scheduler_options = {**self.options}
         self.worker_options = {**self.options}
         super().__init__(debug=debug, **kwargs)
+
+    @property
+    def instance_tags(self):
+        return {**self._instance_tags, **DEFAULT_INSTANCE_TAGS}
