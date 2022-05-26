@@ -56,6 +56,7 @@ class EC2Instance(VMInterface):
         key_name=None,
         iam_instance_profile=None,
         instance_tags: dict,
+        volume_tags: dict,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
@@ -78,6 +79,7 @@ class EC2Instance(VMInterface):
         self.key_name = key_name
         self.iam_instance_profile = iam_instance_profile
         self.instance_tags = instance_tags
+        self.volume_tags = volume_tags
 
     async def create_vm(self):
         """
@@ -135,7 +137,11 @@ class EC2Instance(VMInterface):
                 "TagSpecifications": [
                     {
                         "ResourceType": "instance",
-                        "Tags": dict_to_aws(self.instance_tags)
+                        "Tags": dict_to_aws(self.instance_tags, upper=True)
+                    },
+                    {
+                        "ResourceType": "volume",
+                        "Tags": dict_to_aws(self.instance_tags, upper=True)
                     }
                 ]
             }
@@ -316,9 +322,11 @@ class EC2Cluster(VMCluster):
     debug: bool, optional
         More information will be printed when constructing clusters to enable debugging.
     instance_tags: dict, optional
-        Tags to be applied to all EC2 instances upon creation
-
-        By default, includes "createdBy": "dask-cloudprovider"
+        Tags to be applied to all EC2 instances upon creation. By default, includes
+        "createdBy": "dask-cloudprovider"
+    volume_tags: dict, optional
+        Tags to be applied to all EC2 volumes upon creation. By default, includes
+        "createdBy": "dask-cloudprovider"
 
     Notes
     -----
@@ -425,6 +433,7 @@ class EC2Cluster(VMCluster):
         docker_image=None,
         debug=False,
         instance_tags=None,
+        volume_tags=None,
         **kwargs,
     ):
         self.boto_session = get_session()
@@ -476,7 +485,13 @@ class EC2Cluster(VMCluster):
             else self.config.get("iam_instance_profile")
         )
         self.debug = debug
+
+        instance_tags = instance_tags if instance_tags is not None else {}
         self.instance_tags = {**instance_tags, **DEFAULT_INSTANCE_TAGS}
+
+        volume_tags = volume_tags if volume_tags is not None else {}
+        self.volume_tags = {**volume_tags, **DEFAULT_INSTANCE_TAGS}
+
         self.options = {
             "cluster": self,
             "config": self.config,
@@ -493,7 +508,8 @@ class EC2Cluster(VMCluster):
             "filesystem_size": self.filesystem_size,
             "key_name": self.key_name,
             "iam_instance_profile": self.iam_instance_profile,
-            "instance_tags": self.instance_tags
+            "instance_tags": self.instance_tags,
+            "volume_tags": self.volume_tags,
         }
         self.scheduler_options = {**self.options}
         self.worker_options = {**self.options}
