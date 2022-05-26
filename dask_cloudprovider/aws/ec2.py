@@ -141,7 +141,7 @@ class EC2Instance(VMInterface):
                     },
                     {
                         "ResourceType": "volume",
-                        "Tags": dict_to_aws(self.instance_tags, upper=True)
+                        "Tags": dict_to_aws(self.volume_tags, upper=True)
                     }
                 ]
             }
@@ -325,7 +325,7 @@ class EC2Cluster(VMCluster):
         Tags to be applied to all EC2 instances upon creation. By default, includes
         "createdBy": "dask-cloudprovider"
     volume_tags: dict, optional
-        Tags to be applied to all EC2 volumes upon creation. By default, includes
+        Tags to be applied to all EBS volumes upon creation. By default, includes
         "createdBy": "dask-cloudprovider"
 
     Notes
