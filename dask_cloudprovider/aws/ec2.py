@@ -142,7 +142,7 @@ class EC2Instance(VMInterface):
                     {
                         "ResourceType": "volume",
                         "Tags": dict_to_aws(self.volume_tags, upper=True),
-                    }
+                    },
                 ]
             }
 
