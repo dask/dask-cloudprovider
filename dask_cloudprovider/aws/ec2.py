@@ -55,8 +55,8 @@ class EC2Instance(VMInterface):
         filesystem_size=None,
         key_name=None,
         iam_instance_profile=None,
-        instance_tags: dict,
-        volume_tags: dict,
+        instance_tags: None,
+        volume_tags: None,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
@@ -487,10 +487,10 @@ class EC2Cluster(VMCluster):
         self.debug = debug
 
         instance_tags = instance_tags if instance_tags is not None else {}
-        self.instance_tags = {**instance_tags, **DEFAULT_TAGS}
+        self.instance_tags = {**instance_tags, **self.config.get("instance_tags")}
 
         volume_tags = volume_tags if volume_tags is not None else {}
-        self.volume_tags = {**volume_tags, **DEFAULT_TAGS}
+        self.volume_tags = {**volume_tags, **self.config.get("volume_tags")}
 
         self.options = {
             "cluster": self,
