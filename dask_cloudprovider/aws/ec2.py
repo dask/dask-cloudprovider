@@ -29,7 +29,7 @@ except ImportError as e:
     )
     raise ImportError(msg) from e
 
-DEFAULT_INSTANCE_TAGS = {
+DEFAULT_TAGS = {
     "createdBy": "dask-cloudprovider"
 }  # tags to apply to all created instances
 
@@ -487,10 +487,10 @@ class EC2Cluster(VMCluster):
         self.debug = debug
 
         instance_tags = instance_tags if instance_tags is not None else {}
-        self.instance_tags = {**instance_tags, **DEFAULT_INSTANCE_TAGS}
+        self.instance_tags = {**instance_tags, **DEFAULT_TAGS}
 
         volume_tags = volume_tags if volume_tags is not None else {}
-        self.volume_tags = {**volume_tags, **DEFAULT_INSTANCE_TAGS}
+        self.volume_tags = {**volume_tags, **DEFAULT_TAGS}
 
         self.options = {
             "cluster": self,
