@@ -13,7 +13,7 @@ from dask_cloudprovider.aws.helper import (
     get_default_vpc,
     get_vpc_subnets,
     get_security_group,
-    dict_to_aws
+    dict_to_aws,
 )
 from dask_cloudprovider.utils.timeout import Timeout
 
@@ -137,11 +137,11 @@ class EC2Instance(VMInterface):
                 "TagSpecifications": [
                     {
                         "ResourceType": "instance",
-                        "Tags": dict_to_aws(self.instance_tags, upper=True)
+                        "Tags": dict_to_aws(self.instance_tags, upper=True),
                     },
                     {
                         "ResourceType": "volume",
-                        "Tags": dict_to_aws(self.volume_tags, upper=True)
+                        "Tags": dict_to_aws(self.volume_tags, upper=True),
                     }
                 ]
             }
