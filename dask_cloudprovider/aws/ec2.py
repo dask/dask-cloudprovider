@@ -29,10 +29,6 @@ except ImportError as e:
     )
     raise ImportError(msg) from e
 
-DEFAULT_TAGS = {
-    "createdBy": "dask-cloudprovider"
-}  # tags to apply to all created instances
-
 
 class EC2Instance(VMInterface):
     def __init__(
