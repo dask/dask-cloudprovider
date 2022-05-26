@@ -55,6 +55,7 @@ class EC2Instance(VMInterface):
         filesystem_size=None,
         key_name=None,
         iam_instance_profile=None,
+        instance_tags: dict,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
@@ -76,6 +77,7 @@ class EC2Instance(VMInterface):
         self.filesystem_size = filesystem_size
         self.key_name = key_name
         self.iam_instance_profile = iam_instance_profile
+        self.instance_tags = instance_tags
 
     async def create_vm(self):
         """
@@ -130,6 +132,12 @@ class EC2Instance(VMInterface):
                         "SubnetId": self.subnet_id,
                     }
                 ],
+                "TagSpecifications": [
+                    {
+                        "ResourceType": "instance",
+                        "Tags": dict_to_aws(self.instance_tags)
+                    }
+                ]
             }
 
             if self.key_name:
@@ -468,7 +476,7 @@ class EC2Cluster(VMCluster):
             else self.config.get("iam_instance_profile")
         )
         self.debug = debug
-        self._instance_tags = instance_tags
+        self.instance_tags = {**instance_tags, **DEFAULT_INSTANCE_TAGS}
         self.options = {
             "cluster": self,
             "config": self.config,
@@ -485,11 +493,8 @@ class EC2Cluster(VMCluster):
             "filesystem_size": self.filesystem_size,
             "key_name": self.key_name,
             "iam_instance_profile": self.iam_instance_profile,
+            "instance_tags": self.instance_tags
         }
         self.scheduler_options = {**self.options}
         self.worker_options = {**self.options}
         super().__init__(debug=debug, **kwargs)
-
-    @property
-    def instance_tags(self):
-        return {**self._instance_tags, **DEFAULT_INSTANCE_TAGS}
