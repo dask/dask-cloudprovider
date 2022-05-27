@@ -124,7 +124,9 @@ class EC2Instance(VMInterface):
                 "InstanceInitiatedShutdownBehavior": "terminate",
                 "NetworkInterfaces": [
                     {
-                        "AssociatePublicIpAddress": False if self.use_private_ip else True,
+                        "AssociatePublicIpAddress": False
+                        if self.use_private_ip
+                        else True,
                         "DeleteOnTermination": True,
                         "Description": "private" if self.use_private_ip else "public",
                         "DeviceIndex": 0,
