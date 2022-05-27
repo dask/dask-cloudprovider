@@ -51,6 +51,10 @@ cloudprovider:
     iam_instance_profile: {} # Iam role to assign to instances
       # Arn: 'string'
       # Name: 'string'
+    instance_tags:
+      createdBy: dask-cloudprovider
+    volume_tags:
+      createdBy: dask-cloudprovider
 
   azure:
     location: null # The Azure location to launch your cluster

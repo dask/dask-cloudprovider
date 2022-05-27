@@ -13,6 +13,7 @@ from dask_cloudprovider.aws.helper import (
     get_default_vpc,
     get_vpc_subnets,
     get_security_group,
+    dict_to_aws,
 )
 from dask_cloudprovider.utils.timeout import Timeout
 
@@ -50,6 +51,8 @@ class EC2Instance(VMInterface):
         filesystem_size=None,
         key_name=None,
         iam_instance_profile=None,
+        instance_tags: None,
+        volume_tags: None,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
@@ -71,6 +74,8 @@ class EC2Instance(VMInterface):
         self.filesystem_size = filesystem_size
         self.key_name = key_name
         self.iam_instance_profile = iam_instance_profile
+        self.instance_tags = instance_tags
+        self.volume_tags = volume_tags
 
     async def create_vm(self):
         """
@@ -124,6 +129,16 @@ class EC2Instance(VMInterface):
                         "Groups": self.security_groups,
                         "SubnetId": self.subnet_id,
                     }
+                ],
+                "TagSpecifications": [
+                    {
+                        "ResourceType": "instance",
+                        "Tags": dict_to_aws(self.instance_tags, upper=True),
+                    },
+                    {
+                        "ResourceType": "volume",
+                        "Tags": dict_to_aws(self.volume_tags, upper=True),
+                    },
                 ],
             }
 
@@ -302,6 +317,12 @@ class EC2Cluster(VMCluster):
         be created automatically. Default is ``True``.
     debug: bool, optional
         More information will be printed when constructing clusters to enable debugging.
+    instance_tags: dict, optional
+        Tags to be applied to all EC2 instances upon creation. By default, includes
+        "createdBy": "dask-cloudprovider"
+    volume_tags: dict, optional
+        Tags to be applied to all EBS volumes upon creation. By default, includes
+        "createdBy": "dask-cloudprovider"
 
     Notes
     -----
@@ -407,6 +428,8 @@ class EC2Cluster(VMCluster):
         iam_instance_profile=None,
         docker_image=None,
         debug=False,
+        instance_tags=None,
+        volume_tags=None,
         **kwargs,
     ):
         self.boto_session = get_session()
@@ -458,6 +481,13 @@ class EC2Cluster(VMCluster):
             else self.config.get("iam_instance_profile")
         )
         self.debug = debug
+
+        instance_tags = instance_tags if instance_tags is not None else {}
+        self.instance_tags = {**instance_tags, **self.config.get("instance_tags")}
+
+        volume_tags = volume_tags if volume_tags is not None else {}
+        self.volume_tags = {**volume_tags, **self.config.get("volume_tags")}
+
         self.options = {
             "cluster": self,
             "config": self.config,
@@ -474,6 +504,8 @@ class EC2Cluster(VMCluster):
             "filesystem_size": self.filesystem_size,
             "key_name": self.key_name,
             "iam_instance_profile": self.iam_instance_profile,
+            "instance_tags": self.instance_tags,
+            "volume_tags": self.volume_tags,
         }
         self.scheduler_options = {**self.options}
         self.worker_options = {**self.options}
