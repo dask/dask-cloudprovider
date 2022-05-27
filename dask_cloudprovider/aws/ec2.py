@@ -53,6 +53,7 @@ class EC2Instance(VMInterface):
         iam_instance_profile=None,
         instance_tags: None,
         volume_tags: None,
+        use_private_ip: False,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
@@ -76,6 +77,7 @@ class EC2Instance(VMInterface):
         self.iam_instance_profile = iam_instance_profile
         self.instance_tags = instance_tags
         self.volume_tags = volume_tags
+        self.use_private_ip = use_private_ip
 
     async def create_vm(self):
         """
@@ -122,9 +124,9 @@ class EC2Instance(VMInterface):
                 "InstanceInitiatedShutdownBehavior": "terminate",
                 "NetworkInterfaces": [
                     {
-                        "AssociatePublicIpAddress": True,
+                        "AssociatePublicIpAddress": False if self.use_private_ip else True,
                         "DeleteOnTermination": True,
-                        "Description": "public",
+                        "Description": "private" if self.use_private_ip else "public",
                         "DeviceIndex": 0,
                         "Groups": self.security_groups,
                         "SubnetId": self.subnet_id,
@@ -166,13 +168,16 @@ class EC2Instance(VMInterface):
                 f"Created instance {self.instance['InstanceId']} as {self.name}"
             )
 
+            address_type = "Private" if self.use_private_ip else "Public"
+            ip_address_key = f"{address_type}IpAddress"
+
             timeout = Timeout(
                 300,
-                f"Failed Public IP for instance {self.instance['InstanceId']}",
+                f"Failed {address_type} IP for instance {self.instance['InstanceId']}",
             )
             while (
-                "PublicIpAddress" not in self.instance
-                or self.instance["PublicIpAddress"] is None
+                ip_address_key not in self.instance
+                or self.instance[ip_address_key] is None
             ) and timeout.run():
                 backoff = 0.1
                 await asyncio.sleep(
@@ -187,7 +192,7 @@ class EC2Instance(VMInterface):
                 except botocore.exceptions.ClientError as e:
                     timeout.set_exception(e)
                 backoff = backoff * 2
-            return self.instance["PublicIpAddress"]
+            return self.instance[ip_address_key]
 
     async def destroy_vm(self):
         async with self.cluster.boto_session.create_client(
@@ -323,6 +328,10 @@ class EC2Cluster(VMCluster):
     volume_tags: dict, optional
         Tags to be applied to all EBS volumes upon creation. By default, includes
         "createdBy": "dask-cloudprovider"
+    use_private_ip: bool (optional)
+        Whether to use a private IP (if True) or public IP (if False).
+
+        Default ``False``.
 
     Notes
     -----
@@ -430,6 +439,7 @@ class EC2Cluster(VMCluster):
         debug=False,
         instance_tags=None,
         volume_tags=None,
+        use_private_ip=False,
         **kwargs,
     ):
         self.boto_session = get_session()
@@ -488,6 +498,8 @@ class EC2Cluster(VMCluster):
         volume_tags = volume_tags if volume_tags is not None else {}
         self.volume_tags = {**volume_tags, **self.config.get("volume_tags")}
 
+        self._use_private_ip = use_private_ip
+
         self.options = {
             "cluster": self,
             "config": self.config,
@@ -506,6 +518,7 @@ class EC2Cluster(VMCluster):
             "iam_instance_profile": self.iam_instance_profile,
             "instance_tags": self.instance_tags,
             "volume_tags": self.volume_tags,
+            "use_private_ip": self._use_private_ip,
         }
         self.scheduler_options = {**self.options}
         self.worker_options = {**self.options}
