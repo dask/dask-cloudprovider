@@ -66,6 +66,7 @@ class GCPInstance(VMInterface):
         gpu_instance=None,
         auto_shutdown=None,
         preemptible=False,
+        instance_labels=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -98,6 +99,10 @@ class GCPInstance(VMInterface):
         self.extra_bootstrap = extra_bootstrap
         self.auto_shutdown = auto_shutdown
         self.preemptible = preemptible
+
+        _instance_labels = self.config.get("instance_labels")
+        _instance_labels.update(instance_labels)
+        self.instance_labels = _instance_labels
 
         self.general_zone = "-".join(self.zone.split("-")[:2])  # us-east1-c -> us-east1
 
@@ -159,7 +164,7 @@ class GCPInstance(VMInterface):
                     {"key": "user-data", "value": self.cloud_init},
                 ]
             },
-            "labels": {"container-vm": "dask-cloudprovider"},
+            "labels": self.instance_labels,
             "scheduling": {
                 "preemptible": ("true" if self.preemptible else "false"),
                 "onHostMaintenance": self.on_host_maintenance.upper(),
@@ -482,6 +487,8 @@ class GCPCluster(VMCluster):
         Whether to use preemptible instances for workers in this cluster. Defaults to ``False``.
     debug: bool, optional
         More information will be printed when constructing clusters to enable debugging.
+    instance_labels: dict (optional)
+        Labels to be applied to all GCP instances upon creation.
 
     Examples
     --------
@@ -573,6 +580,7 @@ class GCPCluster(VMCluster):
         bootstrap=True,
         preemptible=None,
         debug=False,
+        instance_labels=None,
         **kwargs,
     ):
 
@@ -615,6 +623,7 @@ class GCPCluster(VMCluster):
             "preemptible": preemptible
             if preemptible is not None
             else self.config.get("preemptible"),
+            "instance_labels": instance_labels or self.config.get("instance_labels")
         }
         self.scheduler_options = {**self.options}
         self.worker_options = {**self.options}
