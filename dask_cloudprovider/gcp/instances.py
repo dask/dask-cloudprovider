@@ -623,7 +623,7 @@ class GCPCluster(VMCluster):
             "preemptible": preemptible
             if preemptible is not None
             else self.config.get("preemptible"),
-            "instance_labels": instance_labels or self.config.get("instance_labels")
+            "instance_labels": instance_labels or self.config.get("instance_labels"),
         }
         self.scheduler_options = {**self.options}
         self.worker_options = {**self.options}
