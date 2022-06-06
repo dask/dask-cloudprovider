@@ -100,6 +100,8 @@ cloudprovider:
     docker_image: "daskdev/dask:latest" # docker image to use
     auto_shutdown: true # Shutdown instances automatically if the scheduler or worker services time out.
     public_ingress: true # configure the scheduler to be externally accessible.  This assumes firefwall rules for 8787 and 8786
+    instance_labels:
+      container_vm: "dask-cloudprovider"
 
   hetzner:
     token: null # API token for interacting with the Hetzner cloud API
