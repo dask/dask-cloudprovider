@@ -25,7 +25,6 @@ def get_sleep_duration(current_try, min_sleep_millis=10, max_sleep_millis=5000):
 
 
 class ConfigMixin:
-
     def update_attr_from_config(self, attr: str, private: bool):
         """Update class attribute of given cluster based on config, if not already set. If `private` is True, the class
         attribute will be prefixed with an underscore.

@@ -808,10 +808,29 @@ class ECSCluster(SpecCluster, ConfigMixin):
 
         self.config = dask.config.get("cloudprovider.ecs", {})
 
-        for attr in ["region_name", "aws_access_key_id", "aws_secret_access_key", "fargate_scheduler", "fargate_workers",
-                     "fargate_spot", "fargate_use_private_ip", "tags", "environment", "scheduler_cpu", "scheduler_mem",
-                     "scheduler_timeout", "worker_cpu", "worker_nthreads", "worker_mem", "n_workers", "cluster_name_template",
-                     "platform_version", "task_role_policies", "vpc", "cloudwatch_logs_default_retention"]:
+        for attr in [
+            "region_name",
+            "aws_access_key_id",
+            "aws_secret_access_key",
+            "fargate_scheduler",
+            "fargate_workers",
+            "fargate_spot",
+            "fargate_use_private_ip",
+            "tags",
+            "environment",
+            "scheduler_cpu",
+            "scheduler_mem",
+            "scheduler_timeout",
+            "worker_cpu",
+            "worker_nthreads",
+            "worker_mem",
+            "n_workers",
+            "cluster_name_template",
+            "platform_version",
+            "task_role_policies",
+            "vpc",
+            "cloudwatch_logs_default_retention",
+        ]:
             self.update_attr_from_config(attr=attr, private=True)
 
         # Cleanup any stale resources before we start

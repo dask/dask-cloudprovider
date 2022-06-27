@@ -51,9 +51,7 @@ def test_config_mixin():
         attr2 = None
 
         def __init__(self):
-            self.config = {
-                "attr2": "bar"
-            }
+            self.config = {"attr2": "bar"}
 
     cluster_with_mixin = MockCluster()
 
