@@ -24,6 +24,19 @@ def get_sleep_duration(current_try, min_sleep_millis=10, max_sleep_millis=5000):
     return min(current_sleep_millis, max_sleep_millis) / 1000  # return in seconds
 
 
+class ConfigMixin:
+
+    def update_attr_from_config(self, attr: str, private: bool):
+        """Update class attribute of given cluster based on config, if not already set. If `private` is True, the class
+        attribute will be prefixed with an underscore.
+
+        This mixin can be applied to any class that has a config dict attribute.
+        """
+        prefix = "_" if private else ""
+        if getattr(self, f"{prefix}{attr}") is None:
+            setattr(self, f"{prefix}{attr}", self.config.get(attr))
+
+
 async def get_latest_ami_id(client, name_glob, owner):
     images = await client.describe_images(
         Filters=[
