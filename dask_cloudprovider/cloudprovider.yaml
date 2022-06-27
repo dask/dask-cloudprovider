@@ -2,6 +2,7 @@ cloudprovider:
   ecs:
     fargate_scheduler: False # Use fargate mode for the scheduler
     fargate_workers: False # Use fargate mode for the workers
+    fargate_use_private_ip: False
     scheduler_cpu: 1024 # Millicpu (1024ths of a CPU core)
     scheduler_mem: 4096 # Memory in MB
     #   scheduler_extra_args: "--tls-cert,/path/to/cert.pem,--tls-key,/path/to/cert.key,--tls-ca-file,/path/to/ca.key"
