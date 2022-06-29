@@ -483,6 +483,13 @@ class ECSCluster(SpecCluster, ConfigMixin):
         Any extra command line arguments to pass to dask-scheduler, e.g. ``["--tls-cert", "/path/to/cert.pem"]``
 
         Defaults to `None`, no extra command line arguments.
+    scheduler_task_definition_arn: str (optional)
+        The arn of the task definition that the cluster should use to start the scheduler task. If provided, this will
+        override the `image`, `scheduler_cpu`, `scheduler_mem`, any role settings, any networking / VPC settings, as
+        these are all part of the task definition.
+
+        Defaults to `None`, meaning that the task definition will be created along with the cluster, and cleaned up once
+        the cluster is shut down.
     scheduler_task_kwargs: dict (optional)
         Additional keyword arguments for the scheduler ECS task.
     scheduler_address: str (optional)
@@ -511,7 +518,13 @@ class ECSCluster(SpecCluster, ConfigMixin):
         cluster. Fargate is not supported at this time.
 
         Defaults to `None`, no GPUs.
+    worker_task_definition_arn: str (optional)
+        The arn of the task definition that the cluster should use to start the worker tasks. If provided, this will
+        override the `image`, `worker_cpu`, `worker_mem`, any role settings, any networking / VPC settings, as
+        these are all part of the task definition.
 
+        Defaults to `None`, meaning that the task definition will be created along with the cluster, and cleaned up once
+        the cluster is shut down.
     worker_extra_args: List[str] (optional)
         Any extra command line arguments to pass to dask-worker, e.g. ``["--tls-cert", "/path/to/cert.pem"]``
 
@@ -681,6 +694,7 @@ class ECSCluster(SpecCluster, ConfigMixin):
         scheduler_port=8786,
         scheduler_timeout=None,
         scheduler_extra_args=None,
+        scheduler_task_definition_arn=None,
         scheduler_task_kwargs=None,
         scheduler_address=None,
         worker_cpu=None,
@@ -688,6 +702,7 @@ class ECSCluster(SpecCluster, ConfigMixin):
         worker_mem=None,
         worker_gpu=None,
         worker_extra_args=None,
+        worker_task_definition_arn=None,
         worker_task_kwargs=None,
         n_workers=None,
         workers_name_start=0,
@@ -725,12 +740,18 @@ class ECSCluster(SpecCluster, ConfigMixin):
         self._scheduler_port = scheduler_port
         self._scheduler_timeout = scheduler_timeout
         self._scheduler_extra_args = scheduler_extra_args
+        self.scheduler_task_definition_arn = scheduler_task_definition_arn
+        self._scheduler_task_definition_arn_provided = (
+            scheduler_task_definition_arn != None
+        )
         self._scheduler_task_kwargs = scheduler_task_kwargs
         self._scheduler_address = scheduler_address
         self._worker_cpu = worker_cpu
         self._worker_nthreads = worker_nthreads
         self._worker_mem = worker_mem
         self._worker_gpu = worker_gpu
+        self.worker_task_definition_arn = worker_task_definition_arn
+        self._worker_task_definition_arn_provided = worker_task_definition_arn != None
         self._worker_extra_args = worker_extra_args
         self._worker_task_kwargs = worker_task_kwargs
         self._n_workers = n_workers
@@ -889,12 +910,14 @@ class ECSCluster(SpecCluster, ConfigMixin):
                 or await self._create_security_groups()
             )
 
-        self.scheduler_task_definition_arn = (
-            await self._create_scheduler_task_definition_arn()
-        )
-        self.worker_task_definition_arn = (
-            await self._create_worker_task_definition_arn()
-        )
+        if self.scheduler_task_definition_arn is None:
+            self.scheduler_task_definition_arn = (
+                await self._create_scheduler_task_definition_arn()
+            )
+        if self.worker_task_definition_arn is None:
+            self.worker_task_definition_arn = (
+                await self._create_worker_task_definition_arn()
+            )
 
         options = {
             "client": self._client,
@@ -1179,10 +1202,11 @@ class ECSCluster(SpecCluster, ConfigMixin):
         return response["taskDefinition"]["taskDefinitionArn"]
 
     async def _delete_scheduler_task_definition_arn(self):
-        async with self._client("ecs") as ecs:
-            await ecs.deregister_task_definition(
-                taskDefinition=self.scheduler_task_definition_arn
-            )
+        if not self._scheduler_task_definition_arn_provided:
+            async with self._client("ecs") as ecs:
+                await ecs.deregister_task_definition(
+                    taskDefinition=self.scheduler_task_definition_arn
+                )
 
     async def _create_worker_task_definition_arn(self):
         resource_requirements = []
@@ -1252,10 +1276,11 @@ class ECSCluster(SpecCluster, ConfigMixin):
         return response["taskDefinition"]["taskDefinitionArn"]
 
     async def _delete_worker_task_definition_arn(self):
-        async with self._client("ecs") as ecs:
-            await ecs.deregister_task_definition(
-                taskDefinition=self.worker_task_definition_arn
-            )
+        if not self._worker_task_definition_arn_provided:
+            async with self._client("ecs") as ecs:
+                await ecs.deregister_task_definition(
+                    taskDefinition=self.worker_task_definition_arn
+                )
 
     def logs(self):
         async def get_logs(task):
