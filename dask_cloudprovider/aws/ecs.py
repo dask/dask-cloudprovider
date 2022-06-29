@@ -367,10 +367,18 @@ class Scheduler(Task):
     See :class:`Task` for parameter info.
     """
 
-    def __init__(self, port, **kwargs):
+    def __init__(self, scheduler_timeout, scheduler_extra_args=None, **kwargs):
         super().__init__(**kwargs)
         self.port = port
         self.task_type = "scheduler"
+        self._overrides = {
+            "command": [
+                "dask-scheduler",
+                "--idle-timeout",
+                scheduler_timeout,
+            ]
+            + (list() if not scheduler_extra_args else scheduler_extra_args)
+        }
 
     @property
     def address(self):
@@ -937,6 +945,8 @@ class ECSCluster(SpecCluster, ConfigMixin):
             "fargate_capacity_provider": "FARGATE" if self._fargate_spot else None,
             "port": self._scheduler_port,
             "task_kwargs": self._scheduler_task_kwargs,
+            "scheduler_timeout": self._scheduler_timeout,
+            "scheduler_extra_args": self._scheduler_extra_args,
             **options,
         }
         worker_options = {
