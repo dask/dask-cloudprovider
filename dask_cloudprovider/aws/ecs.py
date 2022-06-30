@@ -754,7 +754,7 @@ class ECSCluster(SpecCluster, ConfigMixin):
         self._scheduler_extra_args = scheduler_extra_args
         self.scheduler_task_definition_arn = scheduler_task_definition_arn
         self._scheduler_task_definition_arn_provided = (
-            scheduler_task_definition_arn != None
+            scheduler_task_definition_arn is not None
         )
         self._scheduler_task_kwargs = scheduler_task_kwargs
         self._scheduler_address = scheduler_address
@@ -763,7 +763,9 @@ class ECSCluster(SpecCluster, ConfigMixin):
         self._worker_mem = worker_mem
         self._worker_gpu = worker_gpu
         self.worker_task_definition_arn = worker_task_definition_arn
-        self._worker_task_definition_arn_provided = worker_task_definition_arn != None
+        self._worker_task_definition_arn_provided = (
+            worker_task_definition_arn is not None
+        )
         self._worker_extra_args = worker_extra_args
         self._worker_task_kwargs = worker_task_kwargs
         self._n_workers = n_workers
