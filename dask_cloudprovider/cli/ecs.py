@@ -144,6 +144,12 @@ logger = logging.getLogger(__name__)
     default=None,
     help="Configurable timeout in seconds for finding the task IP from the cloudwatch logs.",
 )
+@click.option(
+    "--task-definition-name",
+    type=str,
+    default=None,
+    help="Name of the task to use when setting up ECS containers",
+)
 @click.option("--skip_cleanup", is_flag=True, help="Skip cleanup of stale resources")
 @click.version_option()
 def main(
@@ -156,6 +162,7 @@ def main(
     scheduler_timeout,
     worker_cpu,
     worker_mem,
+    worker_task_def_name,
     n_workers,
     cluster_arn,
     cluster_name_template,
@@ -191,6 +198,7 @@ def main(
             scheduler_timeout=scheduler_timeout,
             worker_cpu=worker_cpu,
             worker_mem=worker_mem,
+            worker_task_def_name=worker_task_def_name,
             n_workers=n_workers,
             cluster_arn=cluster_arn,
             cluster_name_template=cluster_name_template,
