@@ -260,10 +260,12 @@ class Task:
                         "overrides": {
                             "containerOverrides": [
                                 {
-                                    "name": self.task_def_name if self.task_def_name else "dask-{}".format(self.task_type),
+                                    "name": self.task_def_name
+                                    if self.task_def_name
+                                    else "dask-{}".format(self.task_type),
                                     "environment": dict_to_aws(
                                         self.environment, key_string="name"
-                                    ),
+                                            ),
                                     **self._overrides,
                                 }
                             ]
@@ -766,7 +768,11 @@ class ECSCluster(SpecCluster):
         self._worker_mem = worker_mem
         self._worker_gpu = worker_gpu
         self._worker_extra_args = worker_extra_args
-        self._worker_task_def_name = worker_task_def_name if worker_task_def_name else "dask-worker-{}".format(str(uuid.uuid4())[:5])
+        self._worker_task_def_name = (
+            worker_task_def_name
+            if worker_task_def_name
+            else "dask-worker-{}".format(str(uuid.uuid4())[:5])
+        )
         self._worker_task_kwargs = worker_task_kwargs
         self._n_workers = n_workers
         self._workers_name_start = workers_name_start
