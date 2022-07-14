@@ -265,7 +265,7 @@ class Task:
                                     else "dask-{}".format(self.task_type),
                                     "environment": dict_to_aws(
                                         self.environment, key_string="name"
-                                            ),
+                                    ),
                                     **self._overrides,
                                 }
                             ]
