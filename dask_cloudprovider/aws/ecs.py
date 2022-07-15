@@ -543,10 +543,10 @@ class ECSCluster(SpecCluster):
         Any extra command line arguments to pass to dask-worker, e.g. ``["--tls-cert", "/path/to/cert.pem"]``
 
         Defaults to `None`, no extra command line arguments.
-    worker_task_def_name: str (optional)
-        Name to use when setting up ECS task definitions.
+    task_def_name: str (optional)
+        Name to preprend when setting up ECS task definitions for Scheduler and Worker.
 
-        Defaults to ``dask-worker``.
+        Defaults to ``dask-scheduler-{uuid}`` or ``dask-worker-{uuid}``.
     worker_task_kwargs: dict (optional)
         Additional keyword arguments for the workers ECS task.
     n_workers: int (optional)
@@ -723,7 +723,7 @@ class ECSCluster(SpecCluster):
         worker_mem=None,
         worker_gpu=None,
         worker_extra_args=None,
-        worker_task_def_name=None,
+        task_def_name=None,
         worker_task_kwargs=None,
         n_workers=None,
         workers_name_start=0,
@@ -769,11 +769,15 @@ class ECSCluster(SpecCluster):
         self._worker_gpu = worker_gpu
         self._worker_extra_args = worker_extra_args
         self._worker_task_def_name = (
-            worker_task_def_name
-            if worker_task_def_name
+            str(task_def_name) + "-worker-{uuid}"
+            if task_def_name
             else "dask-worker-{uuid}"
         ).format(uuid=str(uuid.uuid4())[:5])
-        
+        self._scheduler_task_def_name = (
+            str(task_def_name) + "-scheduler-{uuid}"
+            if task_def_name
+            else "dask-scheduler-{uuid}"
+        ).format(uuid=str(uuid.uuid4())[:5])
         self._worker_task_kwargs = worker_task_kwargs
         self._n_workers = n_workers
         self._workers_name_start = workers_name_start
@@ -996,6 +1000,7 @@ class ECSCluster(SpecCluster):
             "task_definition_arn": self.scheduler_task_definition_arn,
             "fargate": self._fargate_scheduler,
             "fargate_capacity_provider": "FARGATE" if self._fargate_spot else None,
+            "task_def_name": self._scheduler_task_def_name,
             "task_kwargs": self._scheduler_task_kwargs,
             **options,
         }
@@ -1003,7 +1008,7 @@ class ECSCluster(SpecCluster):
             "task_definition_arn": self.worker_task_definition_arn,
             "fargate": self._fargate_workers,
             "fargate_capacity_provider": "FARGATE_SPOT" if self._fargate_spot else None,
-            "worker_task_def_name": self._worker_task_def_name,
+            "task_def_name": self._worker_task_def_name,
             "cpu": self._worker_cpu,
             "nthreads": self._worker_nthreads,
             "mem": self._worker_mem,
@@ -1214,7 +1219,7 @@ class ECSCluster(SpecCluster):
                 networkMode="awsvpc",
                 containerDefinitions=[
                     {
-                        "name": "dask-scheduler",
+                        "name": self._scheduler_task_def_name,
                         "image": self.image,
                         "cpu": self._scheduler_cpu,
                         "memory": self._scheduler_mem,
