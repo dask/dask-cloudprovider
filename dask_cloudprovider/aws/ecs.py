@@ -771,8 +771,9 @@ class ECSCluster(SpecCluster):
         self._worker_task_def_name = (
             worker_task_def_name
             if worker_task_def_name
-            else "dask-worker-{}".format(str(uuid.uuid4())[:5])
-        )
+            else "dask-worker-{uuid}"
+        ).format(uuid=str(uuid.uuid4())[:5])
+        
         self._worker_task_kwargs = worker_task_kwargs
         self._n_workers = n_workers
         self._workers_name_start = workers_name_start
