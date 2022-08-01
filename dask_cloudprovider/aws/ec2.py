@@ -87,7 +87,7 @@ class EC2Instance(VMInterface):
         """
         # TODO Enable Spot support
 
-        boto_config = botocore.config.Config(retries = dict(max_attempts=10))
+        boto_config = botocore.config.Config(retries=dict(max_attempts=10))
         async with self.cluster.boto_session.create_client(
             "ec2", region_name=self.region, config=boto_config
         ) as client:
@@ -164,11 +164,10 @@ class EC2Instance(VMInterface):
 
             try:    # Ensure we tear down any resources we allocated if something goes wrong
                 return await self.configure_vm(client)
-            except:
+            except Exception:
                 self.cluster._log(f"reclaiming vm because configure_vm failed {self.name}")
                 await self.destroy_vm()
                 raise
-
 
     async def configure_vm(self, client):
         timeout = Timeout(300, f"Failed to add tags for {self.instance['InstanceId']}")
@@ -214,9 +213,8 @@ class EC2Instance(VMInterface):
             backoff = backoff * 2
         return self.instance[ip_address_key]
 
-
     async def destroy_vm(self):
-        boto_config = botocore.config.Config(retries = dict(max_attempts=10))
+        boto_config = botocore.config.Config(retries=dict(max_attempts=10))
         async with self.cluster.boto_session.create_client(
             "ec2", region_name=self.region, config=boto_config
         ) as client:
