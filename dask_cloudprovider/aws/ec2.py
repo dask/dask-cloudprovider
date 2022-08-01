@@ -162,10 +162,12 @@ class EC2Instance(VMInterface):
             response = await client.run_instances(**vm_kwargs)
             [self.instance] = response["Instances"]
 
-            try:    # Ensure we tear down any resources we allocated if something goes wrong
+            try:  # Ensure we tear down any resources we allocated if something goes wrong
                 return await self.configure_vm(client)
             except Exception:
-                self.cluster._log(f"reclaiming vm because configure_vm failed {self.name}")
+                self.cluster._log(
+                    f"reclaiming vm because configure_vm failed {self.name}"
+                )
                 await self.destroy_vm()
                 raise
 
@@ -196,7 +198,9 @@ class EC2Instance(VMInterface):
         address_type = "Private" if self.use_private_ip else "Public"
         ip_address_key = f"{address_type}IpAddress"
 
-        default_error = f"Failed {address_type} IP for instance {self.instance['InstanceId']}"
+        default_error = (
+            f"Failed {address_type} IP for instance {self.instance['InstanceId']}"
+        )
         timeout = Timeout(300, default_error)
         backoff = 0.1
         while self.instance.get(ip_address_key) is None and timeout.run():
