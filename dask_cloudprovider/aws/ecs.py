@@ -6,6 +6,7 @@ import weakref
 from typing import List, Optional
 
 import dask
+import os
 
 from dask_cloudprovider.utils.logs import Log, Logs
 from dask_cloudprovider.utils.timeout import Timeout
@@ -968,16 +969,14 @@ class ECSCluster(SpecCluster):
             )
 
         self._worker_task_def_name = (
-            self._task_def_name
-            if self._task_def_name
-            else "dask-worker-{uuid}"
+            self._task_def_name if self._task_def_name else "dask-worker-{uuid}"
         ).format(uuid=str(uuid.uuid4())[:5], **os.environ)
 
         self._scheduler_task_def_name = (
             f"{str(self._task_def_name)}-scheduler-{uuid}"
             if self._task_def_name
             else "dask-scheduler-{uuid}"
-        ).format(uuid=str(uuid.uuid4())[:5])
+        ).format(uuid=str(uuid.uuid4())[:5], **os.environ)
 
         self.scheduler_task_definition_arn = (
             await self._create_scheduler_task_definition_arn()
