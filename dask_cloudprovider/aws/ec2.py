@@ -55,7 +55,7 @@ class EC2Instance(VMInterface):
         instance_tags: None,
         volume_tags: None,
         use_private_ip: False,
-        enable_detailed_monitoring: False,
+        enable_detailed_monitoring=False,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
@@ -361,7 +361,7 @@ class EC2Cluster(VMCluster):
     enable_detailed_monitoring: bool (optional)
         Whether to enable detailed monitoring for created instances.
         See https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-cloudwatch-new.html
-        Default ``False``.
+        Default ``None``.
 
     Notes
     -----
@@ -470,7 +470,7 @@ class EC2Cluster(VMCluster):
         instance_tags=None,
         volume_tags=None,
         use_private_ip=False,
-        enable_detailed_monitoring=False,
+        enable_detailed_monitoring=None,
         **kwargs,
     ):
         self.boto_session = get_session()
@@ -531,7 +531,11 @@ class EC2Cluster(VMCluster):
 
         self._use_private_ip = use_private_ip
 
-        self.enable_detailed_monitoring = enable_detailed_monitoring
+        self.enable_detailed_monitoring = (
+            enable_detailed_monitoring
+            if enable_detailed_monitoring is not None
+            else self.config.get("enable_detailed_monitoring")
+        )
 
         self.options = {
             "cluster": self,
