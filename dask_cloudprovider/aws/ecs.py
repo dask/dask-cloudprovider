@@ -968,7 +968,7 @@ class ECSCluster(SpecCluster):
             )
 
         self._worker_task_def_name = (
-            f"{str(self._task_def_name)}-worker-{uuid}"
+            self._task_def_name
             if self._task_def_name
             else "dask-worker-{uuid}"
         ).format(uuid=str(uuid.uuid4())[:5], **os.environ)
