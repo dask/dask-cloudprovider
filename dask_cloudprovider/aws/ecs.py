@@ -970,6 +970,7 @@ class ECSCluster(SpecCluster, ConfigMixin):
             class SchedulerAddress(object):
                 def __init__(self_):
                     self_.address = self._scheduler_address
+                    self_.status = Status.running
 
                 def __await__(self):
                     async def _():
