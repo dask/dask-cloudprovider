@@ -55,7 +55,7 @@ class EC2Instance(VMInterface):
         instance_tags: None,
         volume_tags: None,
         use_private_ip: False,
-        enable_detailed_monitoring=False,
+        enable_detailed_monitoring=None,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
@@ -361,7 +361,7 @@ class EC2Cluster(VMCluster):
     enable_detailed_monitoring: bool (optional)
         Whether to enable detailed monitoring for created instances.
         See https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-cloudwatch-new.html
-        Default ``None``.
+        Default ``False``.
 
     Notes
     -----
