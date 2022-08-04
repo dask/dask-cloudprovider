@@ -697,9 +697,9 @@ class ECSCluster(SpecCluster, ConfigMixin):
 
     def __init__(
         self,
-        fargate_scheduler=False,
-        fargate_workers=False,
-        fargate_spot=False,
+        fargate_scheduler=None,
+        fargate_workers=None,
+        fargate_spot=None,
         image=None,
         scheduler_cpu=None,
         scheduler_mem=None,
@@ -809,33 +809,33 @@ class ECSCluster(SpecCluster, ConfigMixin):
         self.config = dask.config.get("cloudprovider.ecs", {})
 
         for attr in [
-            "region_name",
             "aws_access_key_id",
             "aws_secret_access_key",
-            "fargate_scheduler",
-            "fargate_workers",
-            "fargate_spot",
-            "fargate_use_private_ip",
-            "tags",
+            "cloudwatch_logs_default_retention",
+            "cluster_name_template",
             "environment",
+            "fargate_scheduler",
+            "fargate_spot",
+            "fargate_workers",
+            "fargate_use_private_ip",
+            "n_workers",
+            "platform_version",
+            "region_name",
             "scheduler_cpu",
             "scheduler_mem",
             "scheduler_timeout",
-            "worker_cpu",
-            "worker_nthreads",
-            "worker_mem",
-            "n_workers",
-            "cluster_name_template",
-            "platform_version",
+            "skip_cleanup",
+            "tags",
             "task_role_policies",
+            "worker_cpu",
+            "worker_gpu",  # TODO Detect whether cluster is GPU capable
+            "worker_mem",
+            "worker_nthreads",
             "vpc",
-            "cloudwatch_logs_default_retention",
         ]:
             self.update_attr_from_config(attr=attr, private=True)
 
         # Cleanup any stale resources before we start
-        if self._skip_cleanup is None:
-            self._skip_cleanup = self.config.get("skip_cleanup")
         if not self._skip_cleanup:
             await _cleanup_stale_resources(
                 aws_access_key_id=self._aws_access_key_id,
@@ -845,11 +845,6 @@ class ECSCluster(SpecCluster, ConfigMixin):
 
         if self._find_address_timeout is None:
             self._find_address_timeout = self.config.get("find_address_timeout", 60)
-
-        if self._worker_gpu is None:
-            self._worker_gpu = self.config.get(
-                "worker_gpu"
-            )  # TODO Detect whether cluster is GPU capable
 
         if self.image is None:
             if self._worker_gpu:
