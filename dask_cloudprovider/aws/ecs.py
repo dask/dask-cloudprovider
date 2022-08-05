@@ -16,6 +16,7 @@ from dask_cloudprovider.aws.helper import (
     get_default_vpc,
     get_vpc_subnets,
     create_default_security_group,
+    ConfigMixin,
 )
 
 from distributed.deploy.spec import SpecCluster
@@ -455,7 +456,7 @@ class Worker(Task):
         }
 
 
-class ECSCluster(SpecCluster):
+class ECSCluster(SpecCluster, ConfigMixin):
     """Deploy a Dask cluster using ECS
 
     This creates a dask scheduler and workers on an existing ECS cluster.
@@ -696,9 +697,9 @@ class ECSCluster(SpecCluster):
 
     def __init__(
         self,
-        fargate_scheduler=False,
-        fargate_workers=False,
-        fargate_spot=False,
+        fargate_scheduler=None,
+        fargate_workers=None,
+        fargate_spot=None,
         image=None,
         scheduler_cpu=None,
         scheduler_mem=None,
@@ -807,18 +808,34 @@ class ECSCluster(SpecCluster):
 
         self.config = dask.config.get("cloudprovider.ecs", {})
 
-        if self._region_name is None:
-            self._region_name = self.config.get("region_name")
-
-        if self._aws_access_key_id is None:
-            self._aws_access_key_id = self.config.get("aws_access_key_id")
-
-        if self._aws_secret_access_key is None:
-            self._aws_secret_access_key = self.config.get("aws_secret_access_key")
+        for attr in [
+            "aws_access_key_id",
+            "aws_secret_access_key",
+            "cloudwatch_logs_default_retention",
+            "cluster_name_template",
+            "environment",
+            "fargate_scheduler",
+            "fargate_spot",
+            "fargate_workers",
+            "fargate_use_private_ip",
+            "n_workers",
+            "platform_version",
+            "region_name",
+            "scheduler_cpu",
+            "scheduler_mem",
+            "scheduler_timeout",
+            "skip_cleanup",
+            "tags",
+            "task_role_policies",
+            "worker_cpu",
+            "worker_gpu",  # TODO Detect whether cluster is GPU capable
+            "worker_mem",
+            "worker_nthreads",
+            "vpc",
+        ]:
+            self.update_attr_from_config(attr=attr, private=True)
 
         # Cleanup any stale resources before we start
-        if self._skip_cleanup is None:
-            self._skip_cleanup = self.config.get("skip_cleanup")
         if not self._skip_cleanup:
             await _cleanup_stale_resources(
                 aws_access_key_id=self._aws_access_key_id,
@@ -826,26 +843,8 @@ class ECSCluster(SpecCluster):
                 region_name=self._region_name,
             )
 
-        if self._fargate_scheduler is None:
-            self._fargate_scheduler = self.config.get("fargate_scheduler")
-        if self._fargate_workers is None:
-            self._fargate_workers = self.config.get("fargate_workers")
-        if self._fargate_spot is None:
-            self._fargate_spot = self.config.get("fargate_spot")
-
-        if self._tags is None:
-            self._tags = self.config.get("tags")
-
-        if self._environment is None:
-            self._environment = self.config.get("environment")
-
         if self._find_address_timeout is None:
             self._find_address_timeout = self.config.get("find_address_timeout", 60)
-
-        if self._worker_gpu is None:
-            self._worker_gpu = self.config.get(
-                "worker_gpu"
-            )  # TODO Detect whether cluster is GPU capable
 
         if self.image is None:
             if self._worker_gpu:
@@ -853,44 +852,17 @@ class ECSCluster(SpecCluster):
             else:
                 self.image = self.config.get("image")
 
-        if self._scheduler_cpu is None:
-            self._scheduler_cpu = self.config.get("scheduler_cpu")
-
-        if self._scheduler_mem is None:
-            self._scheduler_mem = self.config.get("scheduler_mem")
-
-        if self._scheduler_timeout is None:
-            self._scheduler_timeout = self.config.get("scheduler_timeout")
-
         if self._scheduler_extra_args is None:
             comma_separated_args = self.config.get("scheduler_extra_args")
             self._scheduler_extra_args = (
                 comma_separated_args.split(",") if comma_separated_args else None
             )
 
-        if self._worker_cpu is None:
-            self._worker_cpu = self.config.get("worker_cpu")
-
-        if self._worker_nthreads is None:
-            self._worker_nthreads = self.config.get("worker_nthreads")
-
-        if self._worker_mem is None:
-            self._worker_mem = self.config.get("worker_mem")
-
         if self._worker_extra_args is None:
             comma_separated_args = self.config.get("worker_extra_args")
             self._worker_extra_args = (
                 comma_separated_args.split(",") if comma_separated_args else None
             )
-
-        if self._n_workers is None:
-            self._n_workers = self.config.get("n_workers")
-
-        if self._cluster_name_template is None:
-            self._cluster_name_template = self.config.get("cluster_name_template")
-
-        if self._platform_version is None:
-            self._platform_version = self.config.get("platform_version")
 
         if self.cluster_arn is None:
             self.cluster_arn = (
@@ -910,9 +882,6 @@ class ECSCluster(SpecCluster):
                 or await self._create_execution_role()
             )
 
-        if self._task_role_policies is None:
-            self._task_role_policies = self.config.get("task_role_policies")
-
         if self._task_role_arn is None:
             self._task_role_arn = (
                 self.config.get("task_role_arn") or await self._create_task_role()
@@ -923,19 +892,11 @@ class ECSCluster(SpecCluster):
                 "cloudwatch_logs_stream_prefix"
             ).format(cluster_name=self.cluster_name)
 
-        if self._cloudwatch_logs_default_retention is None:
-            self._cloudwatch_logs_default_retention = self.config.get(
-                "cloudwatch_logs_default_retention"
-            )
-
         if self.cloudwatch_logs_group is None:
             self.cloudwatch_logs_group = (
                 self.config.get("cloudwatch_logs_group")
                 or await self._create_cloudwatch_logs_group()
             )
-
-        if self._vpc is None:
-            self._vpc = self.config.get("vpc")
 
         if self._vpc == "default":
             async with self._client("ec2") as client:

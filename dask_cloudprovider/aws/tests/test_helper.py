@@ -40,3 +40,26 @@ def test_get_sleep_duration_negative_try():
         current_try=-1, min_sleep_millis=10, max_sleep_millis=5000
     )
     assert duration == 0.01
+
+
+def test_config_mixin():
+    from dask_cloudprovider.aws.helper import ConfigMixin
+
+    class MockCluster(ConfigMixin):
+        config = None
+        _attr1 = "foo"
+        attr2 = None
+
+        def __init__(self):
+            self.config = {"attr2": "bar"}
+
+    cluster_with_mixin = MockCluster()
+
+    # Test that nothing happens if attr is already set
+    attr1 = cluster_with_mixin._attr1
+    cluster_with_mixin.update_attr_from_config(attr="attr1", private=True)
+    assert cluster_with_mixin._attr1 == attr1
+
+    # Test that attr is updated if existing value is None
+    cluster_with_mixin.update_attr_from_config(attr="attr2", private=False)
+    assert cluster_with_mixin.attr2 == "bar"
