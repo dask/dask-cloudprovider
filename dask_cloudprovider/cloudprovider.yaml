@@ -57,6 +57,7 @@ cloudprovider:
       createdBy: dask-cloudprovider
     volume_tags:
       createdBy: dask-cloudprovider
+    enable_detailed_monitoring: false
 
   azure:
     location: null # The Azure location to launch your cluster

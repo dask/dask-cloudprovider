@@ -55,6 +55,7 @@ class EC2Instance(VMInterface):
         instance_tags: None,
         volume_tags: None,
         use_private_ip: False,
+        enable_detailed_monitoring=None,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
@@ -79,6 +80,7 @@ class EC2Instance(VMInterface):
         self.instance_tags = instance_tags
         self.volume_tags = volume_tags
         self.use_private_ip = use_private_ip
+        self.enable_detailed_monitoring = enable_detailed_monitoring
 
     async def create_vm(self):
         """
@@ -121,7 +123,7 @@ class EC2Instance(VMInterface):
                 "InstanceType": self.instance_type,
                 "MaxCount": 1,
                 "MinCount": 1,
-                "Monitoring": {"Enabled": False},
+                "Monitoring": {"Enabled": self.enable_detailed_monitoring},
                 "UserData": self.cluster.render_process_cloud_init(self),
                 "InstanceInitiatedShutdownBehavior": "terminate",
                 "NetworkInterfaces": [
@@ -356,6 +358,10 @@ class EC2Cluster(VMCluster):
         Whether to use a private IP (if True) or public IP (if False).
 
         Default ``False``.
+    enable_detailed_monitoring: bool (optional)
+        Whether to enable detailed monitoring for created instances.
+        See https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-cloudwatch-new.html
+        Default ``False``.
 
     Notes
     -----
@@ -464,6 +470,7 @@ class EC2Cluster(VMCluster):
         instance_tags=None,
         volume_tags=None,
         use_private_ip=False,
+        enable_detailed_monitoring=None,
         **kwargs,
     ):
         self.boto_session = get_session()
@@ -524,6 +531,12 @@ class EC2Cluster(VMCluster):
 
         self._use_private_ip = use_private_ip
 
+        self.enable_detailed_monitoring = (
+            enable_detailed_monitoring
+            if enable_detailed_monitoring is not None
+            else self.config.get("enable_detailed_monitoring")
+        )
+
         self.options = {
             "cluster": self,
             "config": self.config,
@@ -543,6 +556,7 @@ class EC2Cluster(VMCluster):
             "instance_tags": self.instance_tags,
             "volume_tags": self.volume_tags,
             "use_private_ip": self._use_private_ip,
+            "enable_detailed_monitoring": self.enable_detailed_monitoring,
         }
         self.scheduler_options = {**self.options}
         self.worker_options = {**self.options}
