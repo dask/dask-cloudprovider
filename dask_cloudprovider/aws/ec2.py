@@ -516,7 +516,7 @@ class EC2Cluster(VMCluster):
             if instance_type is not None
             else self.config.get("instance_type")
         )
-        if self.instance_type is None:
+        if instance_type is None:
             self.scheduler_instance_type = (
                 scheduler_instance_type
                 if scheduler_instance_type is not None
