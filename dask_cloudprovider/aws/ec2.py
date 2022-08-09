@@ -533,7 +533,8 @@ class EC2Cluster(VMCluster):
                     "If you specify instance_type, you may not specify scheduler_instance_type or worker_instance_type"
                 )
             warnings.warn(
-                "The instance_type argument will be deprecated in a future version. Please use scheduler_instance_type and worker_instance_type instead",
+                "The instance_type argument will be deprecated in a future version. Please use scheduler_instance_type"
+                "and worker_instance_type instead",
                 DeprecationWarning,
                 stacklevel=2,
             )
