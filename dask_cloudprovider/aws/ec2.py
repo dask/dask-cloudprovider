@@ -114,7 +114,7 @@ class EC2Instance(VMInterface):
                         "Ebs": {
                             "DeleteOnTermination": True,
                             "VolumeSize": self.filesystem_size,
-                            "VolumeType": "gp2",
+                            "VolumeType": "gp3",
                             "Encrypted": False,
                         },
                     }
