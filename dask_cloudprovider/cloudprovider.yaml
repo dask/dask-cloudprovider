@@ -43,7 +43,7 @@ cloudprovider:
     auto_shutdown: true # Shutdown instances automatically if the scheduler or worker services time out.
     # worker_command: "dask-worker" # The command for workers to run. If the instance_type is a GPU instance dask-cuda-worker will be used.
     # ami: "" # AMI ID to use for all instances. Defaults to latest Ubuntu 20.04 image.
-    instance_type: "t2.micro" # [Will be deprecated in future release] Instance type for the scheduler and all workers
+    instance_type: "t2.micro" # Instance type for the scheduler and all workers
     scheduler_instance_type: "t2.micro" # Instance type for the scheduler
     worker_instance_type: "t2.micro" # Instance type for all workers
     docker_image: "daskdev/dask:latest" # docker image to use

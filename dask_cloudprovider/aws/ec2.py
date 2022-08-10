@@ -1,6 +1,5 @@
 import asyncio
 import random
-import warnings
 
 import dask
 from dask_cloudprovider.generic.vmcluster import (
@@ -280,10 +279,7 @@ class EC2Cluster(VMCluster):
         at runtime.
     instance_type: string (optional)
         A valid EC2 instance type. This will determine the resources available to the scheduler and all workers.
-
-        **Note:** this will be deprecated in a future release. Please use ``scheduler_instance_type`` and
-        ``worker_instance_type`` instead. If supplied, you may not specify ``scheduler_instance_type`` or
-        ``worker_instance_type``
+        If supplied, you may not specify ``scheduler_instance_type`` or ``worker_instance_type``.
 
         See https://aws.amazon.com/ec2/instance-types/.
 
@@ -532,12 +528,6 @@ class EC2Cluster(VMCluster):
                 raise ValueError(
                     "If you specify instance_type, you may not specify scheduler_instance_type or worker_instance_type"
                 )
-            warnings.warn(
-                "The instance_type argument will be deprecated in a future version. Please use scheduler_instance_type"
-                "and worker_instance_type instead",
-                DeprecationWarning,
-                stacklevel=2,
-            )
             self.scheduler_instance_type = instance_type
             self.worker_instance_type = instance_type
 
