@@ -278,7 +278,20 @@ class EC2Cluster(VMCluster):
         If the instance_type is a GPU instance the NVIDIA drivers and Docker GPU runtime will be installed
         at runtime.
     instance_type: string (optional)
-        A valid EC2 instance type. This will determine the resources available to your workers.
+        A valid EC2 instance type. This will determine the resources available to the scheduler and all workers.
+        If supplied, you may not specify ``scheduler_instance_type`` or ``worker_instance_type``.
+
+        See https://aws.amazon.com/ec2/instance-types/.
+
+        By default will use ``t2.micro``.
+    scheduler_instance_type: string (optional)
+        A valid EC2 instance type.  This will determine the resources available to the scheduler.
+
+        See https://aws.amazon.com/ec2/instance-types/.
+
+        By default will use ``t2.micro``.
+    worker_instance_type: string (optional)
+        A valid EC2 instance type.  This will determine the resources available to all workers.
 
         See https://aws.amazon.com/ec2/instance-types/.
 
@@ -459,6 +472,8 @@ class EC2Cluster(VMCluster):
         auto_shutdown=None,
         ami=None,
         instance_type=None,
+        scheduler_instance_type=None,
+        worker_instance_type=None,
         vpc=None,
         subnet_id=None,
         security_groups=None,
@@ -497,6 +512,25 @@ class EC2Cluster(VMCluster):
             if instance_type is not None
             else self.config.get("instance_type")
         )
+        if instance_type is None:
+            self.scheduler_instance_type = (
+                scheduler_instance_type
+                if scheduler_instance_type is not None
+                else self.config.get("scheduler_instance_type")
+            )
+            self.worker_instance_type = (
+                worker_instance_type
+                if worker_instance_type is not None
+                else self.config.get("worker_instance_type")
+            )
+        else:
+            if scheduler_instance_type is not None or worker_instance_type is not None:
+                raise ValueError(
+                    "If you specify instance_type, you may not specify scheduler_instance_type or worker_instance_type"
+                )
+            self.scheduler_instance_type = instance_type
+            self.worker_instance_type = instance_type
+
         self.gpu_instance = self.instance_type.startswith(("p", "g"))
         self.vpc = vpc if vpc is not None else self.config.get("vpc")
         self.subnet_id = (
@@ -546,6 +580,8 @@ class EC2Cluster(VMCluster):
             "ami": self.ami,
             "docker_image": docker_image or self.config.get("docker_image"),
             "instance_type": self.instance_type,
+            "scheduler_instance_type": self.scheduler_instance_type,
+            "worker_instance_type": self.worker_instance_type,
             "gpu_instance": self.gpu_instance,
             "vpc": self.vpc,
             "subnet_id": self.subnet_id,
@@ -560,4 +596,6 @@ class EC2Cluster(VMCluster):
         }
         self.scheduler_options = {**self.options}
         self.worker_options = {**self.options}
+        self.scheduler_options["instance_type"] = self.scheduler_instance_type
+        self.worker_options["instance_type"] = self.worker_instance_type
         super().__init__(debug=debug, **kwargs)
