@@ -484,7 +484,7 @@ class EC2Cluster(VMCluster):
         debug=False,
         instance_tags=None,
         volume_tags=None,
-        use_private_ip=False,
+        use_private_ip=None,
         enable_detailed_monitoring=None,
         **kwargs,
     ):
@@ -563,7 +563,11 @@ class EC2Cluster(VMCluster):
         volume_tags = volume_tags if volume_tags is not None else {}
         self.volume_tags = {**volume_tags, **self.config.get("volume_tags")}
 
-        self._use_private_ip = use_private_ip
+        self._use_private_ip = (
+            use_private_ip
+            if use_private_ip is not None
+            else self.config.get("use_private_ip")
+        )
 
         self.enable_detailed_monitoring = (
             enable_detailed_monitoring

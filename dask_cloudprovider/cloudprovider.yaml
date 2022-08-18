@@ -42,14 +42,14 @@ cloudprovider:
     bootstrap: true # It is assumed that the AMI does not have Docker and needs bootstrapping. Set this to false if using a custom AMI with Docker already installed.
     auto_shutdown: true # Shutdown instances automatically if the scheduler or worker services time out.
     # worker_command: "dask-worker" # The command for workers to run. If the instance_type is a GPU instance dask-cuda-worker will be used.
-    # ami: "" # AMI ID to use for all instances. Defaults to latest Ubuntu 20.04 image.
+    ami: null # AMI ID to use for all instances. Defaults to latest Ubuntu 20.04 image.
     instance_type: "t2.micro" # Instance type for the scheduler and all workers
     scheduler_instance_type: "t2.micro" # Instance type for the scheduler
     worker_instance_type: "t2.micro" # Instance type for all workers
     docker_image: "daskdev/dask:latest" # docker image to use
-    # vpc: "" # VPC id for instances to join. Defaults to default VPC.
-    # subnet_id: "" # Subnet ID for instances to. Defaults to all subnets in default VPC.
-    # security_groups: [] # Security groups for instances. Will create a minimal Dask security group by default.
+    vpc: null # VPC id for instances to join. Defaults to default VPC.
+    subnet_id: null # Subnet ID for instances to. Defaults to all subnets in default VPC.
+    security_groups: [] # Security groups for instances. Will create a minimal Dask security group by default.
     filesystem_size: 40 # Default root filesystem size for scheduler and worker VMs in GB
     key_name: null # SSH Key name to assign to instances
     iam_instance_profile: {} # Iam role to assign to instances
@@ -60,6 +60,7 @@ cloudprovider:
     volume_tags:
       createdBy: dask-cloudprovider
     enable_detailed_monitoring: false
+    use_private_ip: false
 
   azure:
     location: null # The Azure location to launch your cluster
