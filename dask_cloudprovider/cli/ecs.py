@@ -138,12 +138,6 @@ logger = logging.getLogger(__name__)
     multiple=True,
     help="Tag to apply to all resources created automatically in the form FOO=bar (can be used multiple times)",
 )
-@click.option(
-    "--find-address-timeout",
-    type=int,
-    default=None,
-    help="Configurable timeout in seconds for finding the task IP from the cloudwatch logs.",
-)
 @click.option("--skip_cleanup", is_flag=True, help="Skip cleanup of stale resources")
 @click.version_option()
 def main(
@@ -170,7 +164,6 @@ def main(
     security_group,
     environment,
     tag,
-    find_address_timeout,
     skip_cleanup,
 ):
     tag = {v.split("=")[0]: v.split("=")[1] for v in tag} if tag else None

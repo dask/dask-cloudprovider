@@ -33,7 +33,6 @@ cloudprovider:
 
     tags: {} # Tags to apply to all AWS resources created by the cluster manager
     environment: {} # Environment variables that are set within a task container
-    find_address_timeout: 60 # Configurable timeout in seconds for finding the task IP from the cloudwatch logs.
     skip_cleanup: false # Skip cleaning up of stale resources
 
   ec2:
