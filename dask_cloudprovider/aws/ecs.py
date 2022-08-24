@@ -495,7 +495,7 @@ class ECSCluster(SpecCluster, ConfigMixin):
         The arn of the task definition that the cluster should use to start the scheduler task. If provided, this will
         override the `image`, `scheduler_cpu`, `scheduler_mem`, any role settings, any networking / VPC settings, as
         these are all part of the task definition.
-        
+
         If this is provided, the log configuration (cloudwatch_logs_group / cloudwatch_logs_stream_prefix /
         scheduler_logs_group / scheduler_logs_prefix) must match the actual task definition logging configuration
         so that dask-cloudprovider can detect using the logs when the task has launched. However, if no logging
