@@ -495,6 +495,11 @@ class ECSCluster(SpecCluster, ConfigMixin):
         The arn of the task definition that the cluster should use to start the scheduler task. If provided, this will
         override the `image`, `scheduler_cpu`, `scheduler_mem`, any role settings, any networking / VPC settings, as
         these are all part of the task definition.
+        
+        If this is provided, the log configuration (cloudwatch_logs_group / cloudwatch_logs_stream_prefix /
+        scheduler_logs_group / scheduler_logs_prefix) must match the actual task definition logging configuration
+        so that dask-cloudprovider can detect using the logs when the task has launched. However, if no logging
+        configuration is provided, dask-cloudprovider will read the logging configuration from the task definition.
 
         Defaults to `None`, meaning that the task definition will be created along with the cluster, and cleaned up once
         the cluster is shut down.
@@ -530,6 +535,11 @@ class ECSCluster(SpecCluster, ConfigMixin):
         The arn of the task definition that the cluster should use to start the worker tasks. If provided, this will
         override the `image`, `worker_cpu`, `worker_mem`, any role settings, any networking / VPC settings, as
         these are all part of the task definition.
+
+        If this is provided, the log configuration (cloudwatch_logs_group / cloudwatch_logs_stream_prefix /
+        worker_logs_group / worker_logs_prefix) must match the actual task definition logging configuration
+        so that dask-cloudprovider can detect using the logs when the task has launched. However, if no logging
+        configuration is provided, dask-cloudprovider will read the logging configuration from the task definition.
 
         Defaults to `None`, meaning that the task definition will be created along with the cluster, and cleaned up once
         the cluster is shut down.
@@ -601,6 +611,8 @@ class ECSCluster(SpecCluster, ConfigMixin):
         Default ``None`` (no policies will be attached to the role)
     cloudwatch_logs_group: str (optional)
         The name of an existing cloudwatch log group to place logs into.
+        Can be overridden separately for the scheduler / worker using the
+        scheduler_logs_group / worker_logs_group arguments.
 
         Default ``None`` (one will be created called ``dask-ecs``)
     cloudwatch_logs_stream_prefix: str (optional)
@@ -611,6 +623,26 @@ class ECSCluster(SpecCluster, ConfigMixin):
         Retention for logs in days. For use when log group is auto created.
 
         Defaults to ``30``.
+    scheduler_logs_group: str (optional)
+        The name of an existing cloudwatch log group to place scheduler logs into.
+        If provided, scheduler_logs_prefix must be also provided.
+
+        Defaults to ``None`` (the value of cloudwatch_logs_group will be used)
+    scheduler_logs_prefix: str (optional)
+        Prefix for the scheduler log streams.
+        If provided, scheduler_logs_group must be also provided.
+
+        Defaults to ``None`` (the value of cloudwatch_logs_stream_prefix will be used)
+    worker_logs_group: str (optional)
+        The name of an existing cloudwatch log group to place scheduler logs into.
+        If provided, worker_logs_prefix must be also provided.
+
+        Defaults to ``None`` (the value of cloudwatch_logs_group will be used)
+    worker_logs_prefix: str (optional)
+        Prefix for the scheduler log streams.
+        If provided, worker_logs_group must be also provided.
+
+        Defaults to ``None`` (the value of cloudwatch_logs_stream_prefix will be used)
     vpc: str (optional)
         The ID of the VPC you wish to launch your cluster in.
 
