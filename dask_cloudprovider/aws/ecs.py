@@ -1282,15 +1282,16 @@ class ECSCluster(SpecCluster, ConfigMixin):
             port_value_index = port_param_index + 1
             if port_value_index < len(self._scheduler_extra_args):
                 port_value = int(self._scheduler_extra_args[+1])
-        if port_value and port_value != self._scheduler_port:
-            warnings.warn(
-                f"--port provided in scheduler_extra_args ({port_value}) did not "
-                "match port provided in cluster configuration "
-                f"({self._scheduler_port}). This can be OK if the task has port "
-                "mappings to map the scheduler's internal port to this external "
-                "port value. If the cluster fails to connect to the scheduler, try "
-                "setting these to the same value."
-            )
+        if port_value:
+            if port_value != self._scheduler_port:
+                warnings.warn(
+                    f"--port provided in scheduler_extra_args ({port_value}) did not "
+                    "match port provided in cluster configuration "
+                    f"({self._scheduler_port}). This can be OK if the task has port "
+                    "mappings to map the scheduler's internal port to this external "
+                    "port value. If the cluster fails to connect to the scheduler, try "
+                    "setting these to the same value."
+                )
         elif self._scheduler_port != 8786:
             warnings.warn(
                 f"non-default scheduler port ({self._scheduler_port}) was "
