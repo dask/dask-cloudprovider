@@ -41,6 +41,12 @@ logger = logging.getLogger(__name__)
     "--scheduler-mem", type=int, default=None, help="Scheduler memory reservation in MB"
 )
 @click.option(
+    "--scheduler-port",
+    type=int,
+    default=8786,
+    help="The port on which the scheduler will be reachable to the workers and clients",
+)
+@click.option(
     "--scheduler-timeout",
     type=int,
     default=None,
@@ -147,6 +153,7 @@ def main(
     image,
     scheduler_cpu,
     scheduler_mem,
+    scheduler_port,
     scheduler_timeout,
     worker_cpu,
     worker_mem,
@@ -181,6 +188,7 @@ def main(
             image=image,
             scheduler_cpu=scheduler_cpu,
             scheduler_mem=scheduler_mem,
+            scheduler_port=scheduler_port,
             scheduler_timeout=scheduler_timeout,
             worker_cpu=worker_cpu,
             worker_mem=worker_mem,
