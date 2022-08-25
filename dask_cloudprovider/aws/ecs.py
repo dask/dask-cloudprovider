@@ -1281,9 +1281,7 @@ class ECSCluster(SpecCluster, ConfigMixin):
             port_param_index = self._scheduler_extra_args.index("--port")
             port_value_index = port_param_index + 1
             if port_value_index < len(self._scheduler_extra_args):
-                port_value = int(
-                    self._scheduler_extra_args[ + 1]
-                )
+                port_value = int(self._scheduler_extra_args[+1])
         if port_value and port_value != self._scheduler_port:
             warnings.warn(
                 f"--port provided in scheduler_extra_args ({port_value}) did not "
