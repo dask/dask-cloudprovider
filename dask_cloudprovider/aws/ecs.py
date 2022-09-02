@@ -67,13 +67,6 @@ class Task:
         The security groups to attach to the ENI that will be created when
         launching this task.
 
-    log_group: str
-        The log group to send all task logs to.
-
-    log_stream_prefix: str
-        A prefix for the log stream that will be created automatically in the
-        log group when launching this task.
-
     fargate: bool
         Whether or not to launch on Fargate.
 
@@ -82,10 +75,6 @@ class Task:
 
     tags: str
         AWS resource tags to be applied to any resources that are created.
-
-    find_address_timeout: int
-        Configurable timeout in seconds for finding the task IP from the
-        cloudwatch logs.
 
     name: str (optional)
         Name for the task. Currently used for the --namecommand line argument to dask-worker.
@@ -123,24 +112,19 @@ class Task:
         task_definition_arn,
         vpc_subnets,
         security_groups,
-        log_group,
-        log_stream_prefix,
         fargate,
         environment,
         tags,
-        find_address_timeout,
         name=None,
         platform_version=None,
         fargate_use_private_ip=False,
         fargate_capacity_provider=None,
         task_kwargs=None,
-        **kwargs
+        **kwargs,
     ):
         self.lock = asyncio.Lock()
         self._client = client
         self.name = name
-        self.address = None
-        self.external_address = None
         self.cluster_arn = cluster_arn
         self.task_definition_arn = task_definition_arn
         self.task = None
@@ -148,8 +132,6 @@ class Task:
         self.task_type = None
         self.public_ip = None
         self.private_ip = None
-        self.log_group = log_group
-        self.log_stream_prefix = log_stream_prefix
         self.connection = None
         self._overrides = {}
         self._vpc_subnets = vpc_subnets
@@ -157,7 +139,6 @@ class Task:
         self.fargate = fargate
         self.environment = environment or {}
         self.tags = tags
-        self._find_address_timeout = find_address_timeout
         self.platform_version = platform_version
         self._fargate_use_private_ip = fargate_use_private_ip
         self._fargate_capacity_provider = fargate_capacity_provider
@@ -206,31 +187,6 @@ class Task:
                 else:
                     break
                 await asyncio.sleep(wait_duration)
-
-    async def _set_address_from_logs(self):
-        timeout = Timeout(
-            self._find_address_timeout,
-            "Failed to find {} ip address after {} seconds.".format(
-                self.task_type, self._find_address_timeout
-            ),
-        )
-        while timeout.run():
-            async for line in self.logs():
-                for query_string in ["worker at:", "Scheduler at:"]:
-                    if query_string in line:
-                        address = line.split(query_string)[1].strip()
-                        if self._use_public_ip:
-                            self.external_address = address.replace(
-                                self.private_ip, self.public_ip
-                            )
-                        logger.debug("%s", line)
-                        self.address = address
-                        return
-            else:
-                if not await self._task_is_running():
-                    raise RuntimeError("%s exited unexpectedly!" % type(self).__name__)
-                continue
-            break
 
     async def _task_is_running(self):
         await self._update_task()
@@ -323,7 +279,6 @@ class Task:
         if self._use_public_ip:
             self.public_ip = interface["Association"]["PublicIp"]
         self.private_ip = interface["PrivateIpAddresses"][0]["PrivateIpAddress"]
-        await self._set_address_from_logs()
         self.status = Status.running
 
     async def close(self, **kwargs):
@@ -398,13 +353,34 @@ class Task:
 
 class Scheduler(Task):
     """A Remote Dask Scheduler controlled by ECS
+    Parameters
+    ----------
+    port: int
+        The external port on which the scheduler will be listening.
+        Note: If the task is launched with a default configuration, the internal and
+        external port will be the same. Otherwise it is the caller's responsibility to
+        set up the task such that the scheduler is reachable on this port.
+
+    kwargs: Dict()
+        Other kwargs to be passed to :class:`Task`.
 
     See :class:`Task` for parameter info.
     """
 
-    def __init__(self, **kwargs):
+    def __init__(self, port, **kwargs):
         super().__init__(**kwargs)
+        self.port = port
         self.task_type = "scheduler"
+
+    @property
+    def address(self):
+        ip = getattr(self, "private_ip", None)
+        return f"{ip}:{self.port}" if ip else None
+
+    @property
+    def external_address(self):
+        ip = getattr(self, "public_ip", None)
+        return f"{ip}:{self.port}" if ip else None
 
 
 class Worker(Task):
@@ -426,7 +402,7 @@ class Worker(Task):
         gpu: int,
         nthreads: Optional[int],
         extra_args: List[str],
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
         self.task_type = "worker"
@@ -499,6 +475,10 @@ class ECSCluster(SpecCluster, ConfigMixin):
         The scheduler task will exit after this amount of time if there are no clients connected.
 
         Defaults to ``5 minutes``.
+    scheduler_port: int (optional)
+        The port on which the scheduler should listen.
+
+        Defaults to ``8786``
     scheduler_extra_args: List[str] (optional)
         Any extra command line arguments to pass to dask-scheduler, e.g. ``["--tls-cert", "/path/to/cert.pem"]``
 
@@ -634,11 +614,6 @@ class ECSCluster(SpecCluster, ConfigMixin):
         Tags to apply to all resources created automatically.
 
         Defaults to ``None``. Tags will always include ``{"createdBy": "dask-cloudprovider"}``
-    find_address_timeout: int
-        Configurable timeout in seconds for finding the task IP from the
-        cloudwatch logs.
-
-        Defaults to 60 seconds.
     skip_cleanup: bool (optional)
         Skip cleaning up of stale resources. Useful if you have lots of resources
         and this operation takes a while.
@@ -703,6 +678,7 @@ class ECSCluster(SpecCluster, ConfigMixin):
         image=None,
         scheduler_cpu=None,
         scheduler_mem=None,
+        scheduler_port=8786,
         scheduler_timeout=None,
         scheduler_extra_args=None,
         scheduler_task_kwargs=None,
@@ -729,7 +705,6 @@ class ECSCluster(SpecCluster, ConfigMixin):
         security_groups=None,
         environment=None,
         tags=None,
-        find_address_timeout=None,
         skip_cleanup=None,
         aws_access_key_id=None,
         aws_secret_access_key=None,
@@ -739,7 +714,7 @@ class ECSCluster(SpecCluster, ConfigMixin):
         mount_points=None,
         volumes=None,
         mount_volumes_on_scheduler=False,
-        **kwargs
+        **kwargs,
     ):
         self._fargate_scheduler = fargate_scheduler
         self._fargate_workers = fargate_workers
@@ -747,6 +722,7 @@ class ECSCluster(SpecCluster, ConfigMixin):
         self.image = image
         self._scheduler_cpu = scheduler_cpu
         self._scheduler_mem = scheduler_mem
+        self._scheduler_port = scheduler_port
         self._scheduler_timeout = scheduler_timeout
         self._scheduler_extra_args = scheduler_extra_args
         self._scheduler_task_kwargs = scheduler_task_kwargs
@@ -774,7 +750,6 @@ class ECSCluster(SpecCluster, ConfigMixin):
         self._security_groups = security_groups
         self._environment = environment
         self._tags = tags
-        self._find_address_timeout = find_address_timeout
         self._skip_cleanup = skip_cleanup
         self._fargate_use_private_ip = fargate_use_private_ip
         self._mount_points = mount_points
@@ -823,6 +798,7 @@ class ECSCluster(SpecCluster, ConfigMixin):
             "region_name",
             "scheduler_cpu",
             "scheduler_mem",
+            "scheduler_port",
             "scheduler_timeout",
             "skip_cleanup",
             "tags",
@@ -835,6 +811,8 @@ class ECSCluster(SpecCluster, ConfigMixin):
         ]:
             self.update_attr_from_config(attr=attr, private=True)
 
+        self._check_scheduler_port_config()
+
         # Cleanup any stale resources before we start
         if not self._skip_cleanup:
             await _cleanup_stale_resources(
@@ -842,9 +820,6 @@ class ECSCluster(SpecCluster, ConfigMixin):
                 aws_secret_access_key=self._aws_secret_access_key,
                 region_name=self._region_name,
             )
-
-        if self._find_address_timeout is None:
-            self._find_address_timeout = self.config.get("find_address_timeout", 60)
 
         if self.image is None:
             if self._worker_gpu:
@@ -930,7 +905,6 @@ class ECSCluster(SpecCluster, ConfigMixin):
             "log_stream_prefix": self._cloudwatch_logs_stream_prefix,
             "environment": self._environment,
             "tags": self.tags,
-            "find_address_timeout": self._find_address_timeout,
             "platform_version": self._platform_version,
             "fargate_use_private_ip": self._fargate_use_private_ip,
         }
@@ -938,6 +912,7 @@ class ECSCluster(SpecCluster, ConfigMixin):
             "task_definition_arn": self.scheduler_task_definition_arn,
             "fargate": self._fargate_scheduler,
             "fargate_capacity_provider": "FARGATE" if self._fargate_spot else None,
+            "port": self._scheduler_port,
             "task_kwargs": self._scheduler_task_kwargs,
             **options,
         }
@@ -1299,6 +1274,33 @@ class ECSCluster(SpecCluster, ConfigMixin):
             for key, worker in self.workers.items()
         }
         return Logs({**scheduler_logs, **worker_logs})
+
+    def _check_scheduler_port_config(self):
+        port_value = None
+        if "--port" in (self._scheduler_extra_args or []):
+            port_param_index = self._scheduler_extra_args.index("--port")
+            port_value_index = port_param_index + 1
+            if port_value_index < len(self._scheduler_extra_args):
+                port_value = int(self._scheduler_extra_args[+1])
+        if port_value:
+            if port_value != self._scheduler_port:
+                warnings.warn(
+                    f"--port provided in scheduler_extra_args ({port_value}) did not "
+                    "match port provided in cluster configuration "
+                    f"({self._scheduler_port}). This can be OK if the task has port "
+                    "mappings to map the scheduler's internal port to this external "
+                    "port value. If the cluster fails to connect to the scheduler, try "
+                    "setting these to the same value."
+                )
+        elif self._scheduler_port != 8786:
+            warnings.warn(
+                f"non-default scheduler port ({self._scheduler_port}) was "
+                "specified, but no port override was found in "
+                "scheduler_extra_args. This can be OK if the port is overridden in "
+                "the scheduler configuration elsewhere, or if there is a port "
+                "mapping in the task to map the scheduler port to the specified "
+                "port."
+            )
 
 
 class FargateCluster(ECSCluster):

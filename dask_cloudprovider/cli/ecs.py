@@ -41,6 +41,12 @@ logger = logging.getLogger(__name__)
     "--scheduler-mem", type=int, default=None, help="Scheduler memory reservation in MB"
 )
 @click.option(
+    "--scheduler-port",
+    type=int,
+    default=8786,
+    help="The port on which the scheduler will be reachable to the workers and clients",
+)
+@click.option(
     "--scheduler-timeout",
     type=int,
     default=None,
@@ -138,12 +144,6 @@ logger = logging.getLogger(__name__)
     multiple=True,
     help="Tag to apply to all resources created automatically in the form FOO=bar (can be used multiple times)",
 )
-@click.option(
-    "--find-address-timeout",
-    type=int,
-    default=None,
-    help="Configurable timeout in seconds for finding the task IP from the cloudwatch logs.",
-)
 @click.option("--skip_cleanup", is_flag=True, help="Skip cleanup of stale resources")
 @click.version_option()
 def main(
@@ -153,6 +153,7 @@ def main(
     image,
     scheduler_cpu,
     scheduler_mem,
+    scheduler_port,
     scheduler_timeout,
     worker_cpu,
     worker_mem,
@@ -170,7 +171,6 @@ def main(
     security_group,
     environment,
     tag,
-    find_address_timeout,
     skip_cleanup,
 ):
     tag = {v.split("=")[0]: v.split("=")[1] for v in tag} if tag else None
@@ -188,6 +188,7 @@ def main(
             image=image,
             scheduler_cpu=scheduler_cpu,
             scheduler_mem=scheduler_mem,
+            scheduler_port=scheduler_port,
             scheduler_timeout=scheduler_timeout,
             worker_cpu=worker_cpu,
             worker_mem=worker_mem,
