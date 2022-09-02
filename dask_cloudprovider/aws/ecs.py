@@ -360,14 +360,19 @@ class Scheduler(Task):
         Note: If the task is launched with a default configuration, the internal and
         external port will be the same. Otherwise it is the caller's responsibility to
         set up the task such that the scheduler is reachable on this port.
+    scheduler_timeout: str
+        Time of inactivity after which to kill the scheduler.
+    scheduler_extra_args: List[str] (optional)
+        Any extra command line arguments to pass to dask-scheduler, e.g. ``["--tls-cert", "/path/to/cert.pem"]``
 
+        Defaults to `None`, no extra command line arguments.
     kwargs: Dict()
         Other kwargs to be passed to :class:`Task`.
 
     See :class:`Task` for parameter info.
     """
 
-    def __init__(self, scheduler_timeout, scheduler_extra_args=None, **kwargs):
+    def __init__(self, port, scheduler_timeout, scheduler_extra_args=None, **kwargs):
         super().__init__(**kwargs)
         self.port = port
         self.task_type = "scheduler"
