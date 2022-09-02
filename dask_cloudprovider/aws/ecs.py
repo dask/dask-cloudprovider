@@ -754,10 +754,6 @@ class ECSCluster(SpecCluster, ConfigMixin):
         task_role_policies=None,
         cloudwatch_logs_group=None,
         cloudwatch_logs_stream_prefix=None,
-        scheduler_logs_group=None,
-        scheduler_logs_prefix=None,
-        worker_logs_group=None,
-        worker_logs_prefix=None,
         cloudwatch_logs_default_retention=None,
         vpc=None,
         subnets=None,
@@ -809,35 +805,8 @@ class ECSCluster(SpecCluster, ConfigMixin):
         self._execution_role_arn = execution_role_arn
         self._task_role_arn = task_role_arn
         self._task_role_policies = task_role_policies
-
-        if (scheduler_logs_group is None) != (scheduler_logs_prefix is None) or (
-            worker_logs_group is None
-        ) != (worker_logs_prefix is None):
-            raise ValueError(
-                "When overriding the scheduler / worker log group / prefix, both the group and the prefix must be "
-                "provided."
-            )
-
-        self.scheduler_logs_group = (
-            scheduler_logs_group
-            if scheduler_logs_group is not None
-            else cloudwatch_logs_group,
-        )
-        self._scheduler_logs_prefix = (
-            scheduler_logs_prefix
-            if scheduler_logs_prefix is not None
-            else cloudwatch_logs_stream_prefix
-        )
-        self.worker_logs_group = (
-            worker_logs_group
-            if worker_logs_group is not None
-            else cloudwatch_logs_group
-        )
-        self._worker_logs_prefix = (
-            worker_logs_prefix
-            if worker_logs_prefix is not None
-            else cloudwatch_logs_stream_prefix
-        )
+        self.cloudwatch_logs_group = cloudwatch_logs_group
+        self._cloudwatch_logs_stream_prefix = cloudwatch_logs_stream_prefix
         self._cloudwatch_logs_default_retention = cloudwatch_logs_default_retention
         self._vpc = vpc
         self._vpc_subnets = subnets
@@ -945,72 +914,27 @@ class ECSCluster(SpecCluster, ConfigMixin):
                 )["clusters"]
             self.cluster_name = cluster_info["clusterName"]
 
-        if (
-            not self._scheduler_task_definition_arn_provided
-            and not self._worker_task_definition_arn_provided
-        ):
-            if self._execution_role_arn is None:
-                self._execution_role_arn = (
-                    self.config.get("execution_role_arn")
-                    or await self._create_execution_role()
-                )
-
-            if self._task_role_policies is None:
-                self._task_role_policies = self.config.get("task_role_policies")
-
-            if self._task_role_arn is None:
-                self._task_role_arn = (
-                    self.config.get("task_role_arn") or await self._create_task_role()
-                )
-
-        if self._cloudwatch_logs_default_retention is None:
-            self._cloudwatch_logs_default_retention = self.config.get(
-                "cloudwatch_logs_default_retention"
+        if self._execution_role_arn is None:
+            self._execution_role_arn = (
+                self.config.get("execution_role_arn")
+                or await self._create_execution_role()
             )
 
-        if self._scheduler_logs_prefix is None or self.scheduler_logs_group is None:
-            if self._scheduler_task_definition_arn_provided:
-                log_options = await _get_log_properties_from_task_definition(
-                    self.scheduler_task_definition_arn,
-                    aws_access_key_id=self._aws_access_key_id,
-                    aws_secret_access_key=self._aws_secret_access_key,
-                    region_name=self._region_name,
-                )
-                self._scheduler_logs_prefix = log_options["awslogs-stream-prefix"]
-                self.scheduler_logs_group = log_options["awslogs-group"]
-            else:
-                if self._scheduler_logs_prefix is None:
-                    self._scheduler_logs_prefix = self.config.get(
-                        "cloudwatch_logs_stream_prefix"
-                    ).format(cluster_name=self.cluster_name)
+        if self._task_role_arn is None:
+            self._task_role_arn = (
+                self.config.get("task_role_arn") or await self._create_task_role()
+            )
 
-                if self.scheduler_logs_group is None:
-                    self.scheduler_logs_group = (
-                        self.config.get("cloudwatch_logs_group")
-                        or await self._create_cloudwatch_logs_group()
-                    )
+        if self._cloudwatch_logs_stream_prefix is None:
+            self._cloudwatch_logs_stream_prefix = self.config.get(
+                "cloudwatch_logs_stream_prefix"
+            ).format(cluster_name=self.cluster_name)
 
-        if self._worker_logs_prefix is None or self.worker_logs_group is None:
-            if self._worker_task_definition_arn_provided:
-                log_options = await _get_log_properties_from_task_definition(
-                    self.worker_task_definition_arn,
-                    aws_access_key_id=self._aws_access_key_id,
-                    aws_secret_access_key=self._aws_secret_access_key,
-                    region_name=self._region_name,
-                )
-                self._worker_logs_prefix = log_options["awslogs-stream-prefix"]
-                self.worker_logs_group = log_options["awslogs-group"]
-            else:
-                if self._worker_logs_prefix is None:
-                    self._worker_logs_prefix = self.config.get(
-                        "cloudwatch_logs_stream_prefix"
-                    ).format(cluster_name=self.cluster_name)
-
-                if self.worker_logs_group is None:
-                    self.worker_logs_group = (
-                        self.config.get("cloudwatch_logs_group")
-                        or await self._create_cloudwatch_logs_group()
-                    )
+        if self.cloudwatch_logs_group is None:
+            self.cloudwatch_logs_group = (
+                self.config.get("cloudwatch_logs_group")
+                or await self._create_cloudwatch_logs_group()
+            )
 
         if self._vpc == "default":
             async with self._client("ec2") as client:
@@ -1042,6 +966,8 @@ class ECSCluster(SpecCluster, ConfigMixin):
             "cluster_arn": self.cluster_arn,
             "vpc_subnets": self._vpc_subnets,
             "security_groups": self._security_groups,
+            "log_group": self.cloudwatch_logs_group,
+            "log_stream_prefix": self._cloudwatch_logs_stream_prefix,
             "environment": self._environment,
             "tags": self.tags,
             "platform_version": self._platform_version,
@@ -1061,8 +987,6 @@ class ECSCluster(SpecCluster, ConfigMixin):
             "task_definition_arn": self.worker_task_definition_arn,
             "fargate": self._fargate_workers,
             "fargate_capacity_provider": "FARGATE_SPOT" if self._fargate_spot else None,
-            "log_group": self.worker_logs_group,
-            "log_stream_prefix": self._worker_logs_prefix,
             "cpu": self._worker_cpu,
             "nthreads": self._worker_nthreads,
             "mem": self._worker_mem,
@@ -1300,8 +1224,8 @@ class ECSCluster(SpecCluster, ConfigMixin):
                             "logDriver": "awslogs",
                             "options": {
                                 "awslogs-region": ecs.meta.region_name,
-                                "awslogs-group": self.scheduler_logs_group,
-                                "awslogs-stream-prefix": self._scheduler_logs_prefix,
+                                "awslogs-group": self.cloudwatch_logs_group,
+                                "awslogs-stream-prefix": self._cloudwatch_logs_stream_prefix,
                                 "awslogs-create-group": "true",
                             },
                         },
@@ -1378,8 +1302,8 @@ class ECSCluster(SpecCluster, ConfigMixin):
                             "logDriver": "awslogs",
                             "options": {
                                 "awslogs-region": ecs.meta.region_name,
-                                "awslogs-group": self.worker_logs_group,
-                                "awslogs-stream-prefix": self._worker_logs_prefix,
+                                "awslogs-group": self.cloudwatch_logs_group,
+                                "awslogs-stream-prefix": self._cloudwatch_logs_stream_prefix,
                                 "awslogs-create-group": "true",
                             },
                         },
@@ -1685,28 +1609,3 @@ async def _cleanup_stale_resources(**kwargs):
                                 RoleName=role["RoleName"], PolicyArn=policy["PolicyArn"]
                             )
                         await iam.delete_role(RoleName=role["RoleName"])
-
-
-async def _get_log_properties_from_task_definition(task_definition_arn, **kwargs):
-    session = get_session()
-    async with session.create_client("ecs", **kwargs) as ecs:
-        response = await ecs.describe_task_definition(
-            taskDefinition=task_definition_arn, include=["TAGS"]
-        )
-        log_configs = [
-            c["logConfiguration"]["options"]
-            for c in response["taskDefinition"]["containerDefinitions"]
-            if "logConfiguration" in c
-            and c["logConfiguration"]["logDriver"] == "awslogs"
-        ]
-
-        if len(log_configs) == 1:
-            log_config = log_configs[0]
-            if log_config["awslogs-region"] != ecs.meta.region_name:
-                raise ValueError(
-                    "the log group for the scheduler / worker must be in the same region"
-                    "as the task running the cluster"
-                )
-            return log_config
-        else:
-            raise ValueError("cannot determine what log configuration to use")
