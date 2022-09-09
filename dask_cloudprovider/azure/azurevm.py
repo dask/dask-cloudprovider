@@ -485,9 +485,13 @@ class AzureVMCluster(VMCluster):
         self.public_ingress = self.config.get(
             "azurevm.public_ingress", override_with=public_ingress
         )
-        if subscription_id is None:
-            subscription_id = _get_default_subscription()
-        self.subscription_id = self.config.get("subscription_id", override_with=subscription_id)
+        # We prefer code > Dask config > Azure CLI
+        self.subscription_id = self.config.get(
+            "subscription_id", override_with=subscription_id
+        )
+        if self.subscription_id is None:
+            self.subscription_id = _get_default_subscription()
+
         self.credentials = DefaultAzureCredential()
         self.compute_client = ComputeManagementClient(
             self.credentials, self.subscription_id

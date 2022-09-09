@@ -1,4 +1,3 @@
-from dask_cloudprovider.azure.azurevm import AzureVM
 import pytest
 
 import dask
@@ -6,7 +5,6 @@ import dask
 azure_compute = pytest.importorskip("azure.mgmt.compute")
 
 from dask_cloudprovider.azure import AzureVMCluster
-from dask_cloudprovider.azure.utils import _get_default_subscription
 from dask.distributed import Client
 from distributed.core import Status
 
