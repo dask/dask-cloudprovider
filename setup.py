@@ -8,10 +8,8 @@ import versioneer
 extras_require = {
     "aws": ["aiobotocore>=0.10.2"],
     "azure": [
-        "azure-mgmt-compute>=18.0.0,<19",
-        "azure-mgmt-network>=16.0.0,<17",
-        "azure-cli-core>=2.15.1,<2.21.0",
-        "msrestazure",
+        "azure-mgmt-compute>=18.0.0",
+        "azure-mgmt-network>=16.0.0",
         "azure-identity",
     ],
     "digitalocean": ["python-digitalocean>=1.15.0"],

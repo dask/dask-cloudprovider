@@ -64,6 +64,7 @@ cloudprovider:
   azure:
     location: null # The Azure location to launch your cluster
     resource_group: null # The Azure resource group for the cluster
+    subscription_id: null # The Azure subscription ID for the cluster
     azurevm:
       vnet: null # Azure Virtual Network to launch VMs in
       security_group: null # Network security group to allow 8786 and 8787

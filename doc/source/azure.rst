@@ -93,6 +93,32 @@ or specific IP.
 
 Again take note of this security group name for later.
 
+Dask Configuration
+^^^^^^^^^^^^^^^^^^
+
+You'll provide the names or IDs of the Azure resources when you create a :class:`AzureVMCluster`. You can specify
+these values manually, or use Dask's `configuration system <https://docs.dask.org/en/stable/configuration.html>`_
+system. For example, the ``resource_group`` value can be specified using an environment variable:
+
+.. code-block:: console
+
+   $ export DASK_CLOUDPROVIDER__AZURE__RESOURCE_GROUP="<resource group name>"
+   $ python
+
+Or you can set it in a YAML configuration file.
+
+.. code-block:: yaml
+
+   cloudprovider:
+     azure:
+       resource_group: "<resource group name>"
+       azurevm:
+        vnet: "<vnet name>"
+
+Note that the options controlling the VMs are under the `cloudprovider.azure.azurevm` key.
+
+See :doc:`config` for more.
+
 AzureVM
 -------
 

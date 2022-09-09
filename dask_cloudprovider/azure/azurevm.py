@@ -1,6 +1,7 @@
 import base64
 import json
 import uuid
+from typing import Optional
 
 import dask
 from dask_cloudprovider.config import ClusterConfig
@@ -11,9 +12,9 @@ from dask_cloudprovider.generic.vmcluster import (
     WorkerMixin,
 )
 from dask_cloudprovider.exceptions import ConfigError
+from dask_cloudprovider.azure.utils import _get_default_subscription
 
 try:
-    from azure.common.credentials import get_cli_profile
     from azure.mgmt.network import NetworkManagementClient
     from azure.mgmt.compute import ComputeManagementClient
     from azure.identity import DefaultAzureCredential
@@ -266,7 +267,7 @@ class AzureVMCluster(VMCluster):
     security_group: str
         The security group to apply to your VMs.
         This must allow ports 8786-8787 from wherever you are running this from.
-        List your security greoups with ``az network nsg list``.
+        List your security groups with ``az network nsg list``.
     public_ingress: bool
         Assign a public IP address to the scheduler. Default ``True``.
     vm_size: str
@@ -336,7 +337,10 @@ class AzureVMCluster(VMCluster):
         All three fields "name", "publisher", "product" must be passed in the dictionary if set. For e.g.
 
         ``{"name": "ngc-base-version-21-02-2", "publisher": "nvidia","product": "ngc_azure_17_11"}``
-
+    subscription_id: str (optional)
+        The ID of the Azure Subscription to create the virtual machines in. If not specified, then
+        dask-cloudprovider will attempt to use the configured default for the Azure CLI. List your
+        subscriptions with ``az account list``.
 
     Examples
     --------
@@ -464,6 +468,7 @@ class AzureVMCluster(VMCluster):
         docker_image=None,
         debug: bool = False,
         marketplace_plan: dict = {},
+        subscription_id: Optional[str] = None,
         **kwargs,
     ):
         self.config = ClusterConfig(dask.config.get("cloudprovider.azure", {}))
@@ -480,7 +485,9 @@ class AzureVMCluster(VMCluster):
         self.public_ingress = self.config.get(
             "azurevm.public_ingress", override_with=public_ingress
         )
-        self.subscription_id = get_cli_profile().get_subscription_id()
+        if subscription_id is None:
+            subscription_id = _get_default_subscription()
+        self.subscription_id = self.config.get("subscription_id", override_with=subscription_id)
         self.credentials = DefaultAzureCredential()
         self.compute_client = ComputeManagementClient(
             self.credentials, self.subscription_id

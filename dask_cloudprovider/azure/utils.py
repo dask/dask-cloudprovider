@@ -1,5 +1,7 @@
 import asyncio
 import datetime
+import json
+import subprocess
 import logging
 
 import aiohttp
@@ -12,6 +14,21 @@ logger = logging.getLogger(__name__)
 AZURE_EVENTS_METADATA_URL = (
     "http://169.254.169.254/metadata/scheduledevents?api-version=2019-08-01"
 )
+
+
+def _get_default_subscription() -> str:
+    """
+    Get the default Azure subscription ID, as configured by the Azure CLI.
+    """
+    out = subprocess.check_output(["az", "account", "list", "--query", "[?isDefault]"])
+    accounts = json.loads(out)
+    if accounts:
+        subscription_id = accounts[0]["id"]
+        return subscription_id
+    raise ValueError(
+        "Could not find a default subscription. "
+        "Run 'az account set' to set a default subscription."
+    )
 
 
 class AzurePreemptibleWorkerPlugin(WorkerPlugin):
