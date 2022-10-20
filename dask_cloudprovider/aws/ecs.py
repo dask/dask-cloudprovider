@@ -1343,7 +1343,6 @@ class ECSCluster(SpecCluster, ConfigMixin):
                 "port."
             )
 
-
     async def _cleanup_stale_resources(self):
         """Clean up any stale resources which are tagged with 'createdBy': 'dask-cloudprovider'.
 
