@@ -42,8 +42,6 @@ except ImportError as e:
 logger = logging.getLogger(__name__)
 
 
-
-
 class Task:
     """A superclass for managing ECS Tasks
     Parameters
@@ -1369,11 +1367,9 @@ class ECSCluster(SpecCluster, ConfigMixin):
         session = get_session()
         async with session.create_client("ecs", **aws_client_kwargs) as ecs:
             if self._cluster_arn_provided:
-                    # Can remove this permission if we parse the ARN instead
-                    cluster = await ecs.describe_clusters(
-                        clusters=self.cluster_arn
-                    )
-                    active_clusters = [cluster["clusterName"]]
+                # Can remove this permission if we parse the ARN instead
+                cluster = await ecs.describe_clusters(clusters=self.cluster_arn)
+                active_clusters = [cluster["clusterName"]]
             else:
                 # Clean up clusters (clusters with no running tasks)
                 active_clusters = await cleanup_stale_ecs_clusters(ecs)
@@ -1389,7 +1385,6 @@ class ECSCluster(SpecCluster, ConfigMixin):
         if not self._security_groups_provided:
             async with session.create_client("ec2", **aws_client_kwargs) as ec2:
                 await cleanup_stale_ec2_resources(ec2, active_clusters)
-
 
         # Clean up roles (with no active clusters)
         if not self._execution_role_arn_provided or not self._task_role_arn_provided:

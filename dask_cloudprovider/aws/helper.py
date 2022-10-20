@@ -142,9 +142,7 @@ async def cleanup_stale_ecs_clusters(ecs_client):
             )
         )["clusters"]
         for cluster in clusters:
-            if set(DEFAULT_TAGS.items()) <= set(
-                aws_to_dict(cluster["tags"]).items()
-            ):
+            if set(DEFAULT_TAGS.items()) <= set(aws_to_dict(cluster["tags"]).items()):
                 if (
                     cluster["runningTasksCount"] == 0
                     and cluster["pendingTasksCount"] == 0
