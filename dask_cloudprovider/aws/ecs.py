@@ -11,12 +11,16 @@ from dask_cloudprovider.utils.logs import Log, Logs
 from dask_cloudprovider.utils.timeout import Timeout
 from dask_cloudprovider.aws.helper import (
     dict_to_aws,
-    aws_to_dict,
     get_sleep_duration,
     get_default_vpc,
     get_vpc_subnets,
     create_default_security_group,
+    cleanup_stale_ec2_resources,
+    cleanup_stale_ecs_clusters,
+    cleanup_stale_ecs_task_definitions,
+    cleanup_stale_iam_resources,
     ConfigMixin,
+    DEFAULT_TAGS,
 )
 
 from distributed.deploy.spec import SpecCluster
@@ -38,9 +42,6 @@ except ImportError as e:
 logger = logging.getLogger(__name__)
 
 
-DEFAULT_TAGS = {
-    "createdBy": "dask-cloudprovider"
-}  # Package tags to apply to all resources
 
 
 class Task:
@@ -773,10 +774,13 @@ class ECSCluster(SpecCluster, ConfigMixin):
         self._workers_name_start = workers_name_start
         self._workers_name_step = workers_name_step
         self.cluster_arn = cluster_arn
+        self._cluster_arn_provided = cluster_arn is not None
         self.cluster_name = None
         self._cluster_name_template = cluster_name_template
         self._execution_role_arn = execution_role_arn
+        self._execution_role_arn_provided = execution_role_arn is not None
         self._task_role_arn = task_role_arn
+        self._task_role_arn_provided = task_role_arn is not None
         self._task_role_policies = task_role_policies
         self.cloudwatch_logs_group = cloudwatch_logs_group
         self._cloudwatch_logs_stream_prefix = cloudwatch_logs_stream_prefix
@@ -784,6 +788,7 @@ class ECSCluster(SpecCluster, ConfigMixin):
         self._vpc = vpc
         self._vpc_subnets = subnets
         self._security_groups = security_groups
+        self._security_groups_provided = security_groups is not None
         self._environment = environment
         self._tags = tags
         self._skip_cleanup = skip_cleanup
@@ -851,11 +856,7 @@ class ECSCluster(SpecCluster, ConfigMixin):
 
         # Cleanup any stale resources before we start
         if not self._skip_cleanup:
-            await _cleanup_stale_resources(
-                aws_access_key_id=self._aws_access_key_id,
-                aws_secret_access_key=self._aws_secret_access_key,
-                region_name=self._region_name,
-            )
+            await self._cleanup_stale_resources()
 
         if self.image is None:
             if self._worker_gpu:
@@ -1345,6 +1346,57 @@ class ECSCluster(SpecCluster, ConfigMixin):
             )
 
 
+    async def _cleanup_stale_resources(self):
+        """Clean up any stale resources which are tagged with 'createdBy': 'dask-cloudprovider'.
+
+        This function will scan through AWS looking for resources that were created
+        by the ``ECSCluster`` class. Any ECS clusters which do not have any running
+        tasks will be deleted and then any supporting resources such as task definitions
+        security groups and IAM roles that are not associated with an active cluster
+        will also be deleted.
+
+        Stale resources will only be deleted if resource ARN's are not provided
+
+        The ``ECSCluster`` should clean up after itself when it is garbage collected
+        however if the Python process is terminated without notice this may not happen.
+        Therefore this is useful to remove shrapnel from past failures.
+        """
+        aws_client_kwargs = {
+            "aws_access_key_id": self._aws_access_key_id,
+            "aws_secret_access_key": self._aws_secret_access_key,
+            "region_name": self._region_name,
+        }
+        session = get_session()
+        async with session.create_client("ecs", **aws_client_kwargs) as ecs:
+            if self._cluster_arn_provided:
+                    # Can remove this permission if we parse the ARN instead
+                    cluster = await ecs.describe_clusters(
+                        clusters=self.cluster_arn
+                    )
+                    active_clusters = [cluster["clusterName"]]
+            else:
+                # Clean up clusters (clusters with no running tasks)
+                active_clusters = await cleanup_stale_ecs_clusters(ecs)
+
+            # Clean up task definitions (with no active clusters)
+            if (
+                not self._worker_task_definition_arn_provided
+                or not self._scheduler_task_definition_arn_provided
+            ):
+                await cleanup_stale_ecs_task_definitions(ecs, active_clusters)
+
+        # Clean up security groups (with no active clusters)
+        if not self._security_groups_provided:
+            async with session.create_client("ec2", **aws_client_kwargs) as ec2:
+                await cleanup_stale_ec2_resources(ec2, active_clusters)
+
+
+        # Clean up roles (with no active clusters)
+        if not self._execution_role_arn_provided or not self._task_role_arn_provided:
+            async with session.create_client("iam", **aws_client_kwargs) as iam:
+                await cleanup_stale_iam_resources(iam, active_clusters)
+
+
 class FargateCluster(ECSCluster):
     """Deploy a Dask cluster using Fargate on ECS
 
@@ -1453,25 +1505,12 @@ class FargateCluster(ECSCluster):
             "Statement": [
                 {
                     "Action": [
-                        "ec2:CreateTags",
                         "ec2:DescribeNetworkInterfaces",
-                        "ec2:DescribeSecurityGroups",
-                        "ec2:DescribeSubnets",
-                        "ec2:DescribeVpcs",
                         "ecs:DescribeTasks",
                         "ecs:ListAccountSettings",
-                        "ecs:RegisterTaskDefinition",
                         "ecs:RunTask",
                         "ecs:StopTask",
-                        "ecs:ListClusters",
                         "ecs:DescribeClusters",
-                        "ecs:ListTaskDefinitions",
-                        "ecs:DescribeTaskDefinition",
-                        "ecs:DeregisterTaskDefinition",
-                        "iam:ListRoles",
-                        "iam:ListRoleTags",
-                        "logs:DescribeLogGroups",
-                        "logs:GetLogEvents"
                     ],
                     "Effect": "Allow",
                     "Resource": [
@@ -1487,98 +1526,3 @@ class FargateCluster(ECSCluster):
 
     def __init__(self, **kwargs):
         super().__init__(fargate_scheduler=True, fargate_workers=True, **kwargs)
-
-
-async def _cleanup_stale_resources(**kwargs):
-    """Clean up any stale resources which are tagged with 'createdBy': 'dask-cloudprovider'.
-
-    This function will scan through AWS looking for resources that were created
-    by the ``ECSCluster`` class. Any ECS clusters which do not have any running
-    tasks will be deleted and then any supporting resources such as task definitions
-    security groups and IAM roles that are not associated with an active cluster
-    will also be deleted.
-
-    The ``ECSCluster`` should clean up after itself when it is garbage collected
-    however if the Python process is terminated without notice this may not happen.
-    Therefore this is useful to remove shrapnel from past failures.
-
-    """
-    # Clean up clusters (clusters with no running tasks)
-    session = get_session()
-    async with session.create_client("ecs", **kwargs) as ecs:
-        active_clusters = []
-        clusters_to_delete = []
-        async for page in ecs.get_paginator("list_clusters").paginate():
-            clusters = (
-                await ecs.describe_clusters(
-                    clusters=page["clusterArns"], include=["TAGS"]
-                )
-            )["clusters"]
-            for cluster in clusters:
-                if set(DEFAULT_TAGS.items()) <= set(
-                    aws_to_dict(cluster["tags"]).items()
-                ):
-                    if (
-                        cluster["runningTasksCount"] == 0
-                        and cluster["pendingTasksCount"] == 0
-                    ):
-                        clusters_to_delete.append(cluster["clusterArn"])
-                    else:
-                        active_clusters.append(cluster["clusterName"])
-        for cluster_arn in clusters_to_delete:
-            await ecs.delete_cluster(cluster=cluster_arn)
-
-        # Clean up task definitions (with no active clusters)
-        async for page in ecs.get_paginator("list_task_definitions").paginate():
-            for task_definition_arn in page["taskDefinitionArns"]:
-                response = await ecs.describe_task_definition(
-                    taskDefinition=task_definition_arn, include=["TAGS"]
-                )
-                task_definition = response["taskDefinition"]
-                task_definition["tags"] = response["tags"]
-                task_definition_cluster = aws_to_dict(task_definition["tags"]).get(
-                    "cluster"
-                )
-                if set(DEFAULT_TAGS.items()) <= set(
-                    aws_to_dict(task_definition["tags"]).items()
-                ):
-                    if (
-                        task_definition_cluster is None
-                        or task_definition_cluster not in active_clusters
-                    ):
-                        await ecs.deregister_task_definition(
-                            taskDefinition=task_definition_arn
-                        )
-
-    # Clean up security groups (with no active clusters)
-    async with session.create_client("ec2", **kwargs) as ec2:
-        async for page in ec2.get_paginator("describe_security_groups").paginate(
-            Filters=[{"Name": "tag:createdBy", "Values": ["dask-cloudprovider"]}]
-        ):
-            for group in page["SecurityGroups"]:
-                sg_cluster = aws_to_dict(group["Tags"]).get("cluster")
-                if sg_cluster is None or sg_cluster not in active_clusters:
-                    await ec2.delete_security_group(
-                        GroupName=group["GroupName"], DryRun=False
-                    )
-
-    # Clean up roles (with no active clusters)
-    async with session.create_client("iam", **kwargs) as iam:
-        async for page in iam.get_paginator("list_roles").paginate():
-            for role in page["Roles"]:
-                role["Tags"] = (
-                    await iam.list_role_tags(RoleName=role["RoleName"])
-                ).get("Tags")
-                if set(DEFAULT_TAGS.items()) <= set(aws_to_dict(role["Tags"]).items()):
-                    role_cluster = aws_to_dict(role["Tags"]).get("cluster")
-                    if role_cluster is None or role_cluster not in active_clusters:
-                        attached_policies = (
-                            await iam.list_attached_role_policies(
-                                RoleName=role["RoleName"]
-                            )
-                        )["AttachedPolicies"]
-                        for policy in attached_policies:
-                            await iam.detach_role_policy(
-                                RoleName=role["RoleName"], PolicyArn=policy["PolicyArn"]
-                            )
-                        await iam.delete_role(RoleName=role["RoleName"])

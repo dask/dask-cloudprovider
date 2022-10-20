@@ -2,6 +2,9 @@
 from datetime import datetime
 
 DEFAULT_SECURITY_GROUP_NAME = "dask-default"
+DEFAULT_TAGS = {
+    "createdBy": "dask-cloudprovider"
+}  # Package tags to apply to all resources
 
 
 def dict_to_aws(py_dict, upper=False, key_string=None, value_string=None):
@@ -122,3 +125,89 @@ async def create_default_security_group(client, group_name, vpc):
     )
 
     return response["GroupId"]
+
+
+async def cleanup_stale_ecs_clusters(ecs_client):
+    """Removes ECS clusters created by dask-cloudprovider with no active tasks
+
+    Also returns a list of active clusters created by dask-cloudprovider
+    """
+    active_clusters = []
+    clusters_to_delete = []
+
+    async for page in ecs_client.get_paginator("list_clusters").paginate():
+        clusters = (
+            await ecs_client.describe_clusters(
+                clusters=page["clusterArns"], include=["TAGS"]
+            )
+        )["clusters"]
+        for cluster in clusters:
+            if set(DEFAULT_TAGS.items()) <= set(
+                aws_to_dict(cluster["tags"]).items()
+            ):
+                if (
+                    cluster["runningTasksCount"] == 0
+                    and cluster["pendingTasksCount"] == 0
+                ):
+                    clusters_to_delete.append(cluster["clusterArn"])
+                else:
+                    active_clusters.append(cluster["clusterName"])
+        for cluster_arn in clusters_to_delete:
+            await ecs_client.delete_cluster(cluster=cluster_arn)
+        return active_clusters
+
+
+async def cleanup_stale_ecs_task_definitions(ecs_client, active_clusters):
+    async for page in ecs_client.get_paginator("list_task_definitions").paginate():
+        for task_definition_arn in page["taskDefinitionArns"]:
+            response = await ecs_client.describe_task_definition(
+                taskDefinition=task_definition_arn, include=["TAGS"]
+            )
+            task_definition = response["taskDefinition"]
+            task_definition["tags"] = response["tags"]
+            task_definition_cluster = aws_to_dict(task_definition["tags"]).get(
+                "cluster"
+            )
+            if set(DEFAULT_TAGS.items()) <= set(
+                aws_to_dict(task_definition["tags"]).items()
+            ):
+                if (
+                    task_definition_cluster is None
+                    or task_definition_cluster not in active_clusters
+                ):
+                    await ecs_client.deregister_task_definition(
+                        taskDefinition=task_definition_arn
+                    )
+
+
+async def cleanup_stale_ec2_resources(ec2_client, active_clusters):
+    async for page in ec2_client.get_paginator("describe_security_groups").paginate(
+        Filters=[{"Name": "tag:createdBy", "Values": ["dask-cloudprovider"]}]
+    ):
+        for group in page["SecurityGroups"]:
+            sg_cluster = aws_to_dict(group["Tags"]).get("cluster")
+            if sg_cluster is None or sg_cluster not in active_clusters:
+                await ec2_client.delete_security_group(
+                    GroupName=group["GroupName"], DryRun=False
+                )
+
+
+async def cleanup_stale_iam_resources(iam_client, active_clusters):
+    async for page in iam_client.get_paginator("list_roles").paginate():
+        for role in page["Roles"]:
+            role["Tags"] = (
+                await iam_client.list_role_tags(RoleName=role["RoleName"])
+            ).get("Tags")
+            if set(DEFAULT_TAGS.items()) <= set(aws_to_dict(role["Tags"]).items()):
+                role_cluster = aws_to_dict(role["Tags"]).get("cluster")
+                if role_cluster is None or role_cluster not in active_clusters:
+                    attached_policies = (
+                        await iam_client.list_attached_role_policies(
+                            RoleName=role["RoleName"]
+                        )
+                    )["AttachedPolicies"]
+                    for policy in attached_policies:
+                        await iam_client.detach_role_policy(
+                            RoleName=role["RoleName"], PolicyArn=policy["PolicyArn"]
+                        )
+                    await iam_client.delete_role(RoleName=role["RoleName"])
