@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import sched
 import uuid
 import warnings
 import weakref
