@@ -502,13 +502,6 @@ class ECSCluster(SpecCluster, ConfigMixin):
         The port on which the scheduler should listen.
 
         Defaults to ``8786``
-    scheduler_tls: bool (optional)
-        Whether or not the scheduler is expecting TLS connections.
-
-        Defaults to ``false``.
-        Note: the value of this argument needs to be consistent with the TLS arguments provided in
-        `scheduler_extra_args`, otherwise a warning will be logged, and the workers won't be able
-        to connect to the cluster.
     scheduler_extra_args: List[str] (optional)
         Any extra command line arguments to pass to dask-scheduler, e.g. ``["--tls-cert", "/path/to/cert.pem"]``
 
@@ -722,7 +715,6 @@ class ECSCluster(SpecCluster, ConfigMixin):
         scheduler_cpu=None,
         scheduler_mem=None,
         scheduler_port=8786,
-        scheduler_tls=False,
         scheduler_timeout=None,
         scheduler_extra_args=None,
         scheduler_task_definition_arn=None,
@@ -769,7 +761,6 @@ class ECSCluster(SpecCluster, ConfigMixin):
         self._scheduler_cpu = scheduler_cpu
         self._scheduler_mem = scheduler_mem
         self._scheduler_port = scheduler_port
-        self._scheduler_tls = scheduler_tls
         self._scheduler_timeout = scheduler_timeout
         self._scheduler_extra_args = scheduler_extra_args
         self.scheduler_task_definition_arn = scheduler_task_definition_arn
@@ -971,7 +962,7 @@ class ECSCluster(SpecCluster, ConfigMixin):
             "fargate": self._fargate_scheduler,
             "fargate_capacity_provider": "FARGATE" if self._fargate_spot else None,
             "port": self._scheduler_port,
-            "tls": self._scheduler_tls,
+            "tls": self.security.require_encryption,
             "task_kwargs": self._scheduler_task_kwargs,
             "scheduler_timeout": self._scheduler_timeout,
             "scheduler_extra_args": self._scheduler_extra_args,
@@ -1372,8 +1363,8 @@ class ECSCluster(SpecCluster, ConfigMixin):
                 self._scheduler_extra_args or [],
             )
         )
-        if scheduler_has_tls_config != self._scheduler_tls:
-            protocol = "tls" if self._scheduler_tls else "tcp"
+        if scheduler_has_tls_config != self.security.require_encryption:
+            protocol = "tls" if self.security.require_encryption else "tcp"
             scheduler_had_tls_config = (
                 "had tls configuration"
                 if scheduler_has_tls_config

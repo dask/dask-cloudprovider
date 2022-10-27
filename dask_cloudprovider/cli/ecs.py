@@ -47,12 +47,6 @@ logger = logging.getLogger(__name__)
     help="The port on which the scheduler will be reachable to the workers and clients",
 )
 @click.option(
-    "--scheduler-tls",
-    type=bool,
-    default=False,
-    help="Whether workers and clients should attempt to connect to the scheduler via TLS",
-)
-@click.option(
     "--scheduler-timeout",
     type=int,
     default=None,
@@ -160,7 +154,6 @@ def main(
     scheduler_cpu,
     scheduler_mem,
     scheduler_port,
-    scheduler_tls,
     scheduler_timeout,
     worker_cpu,
     worker_mem,
@@ -196,7 +189,6 @@ def main(
             scheduler_cpu=scheduler_cpu,
             scheduler_mem=scheduler_mem,
             scheduler_port=scheduler_port,
-            scheduler_tls=scheduler_tls,
             scheduler_timeout=scheduler_timeout,
             worker_cpu=worker_cpu,
             worker_mem=worker_mem,
