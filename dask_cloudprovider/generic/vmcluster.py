@@ -101,7 +101,7 @@ class WorkerMixin(object):
         worker_module: str = None,
         worker_class: str = None,
         worker_options: dict = {},
-	num_workers_per_vm: int = 1,
+        num_workers_per_vm: int = 1,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
@@ -124,7 +124,7 @@ class WorkerMixin(object):
             )
         if worker_class is not None:
             self.worker_class = worker_class
-	    self.num_workers_per_vm = num_workers_per_vm
+            self.num_workers_per_vm = num_workers_per_vm
             self.command = " ".join(
                 [
                     self.set_env,
@@ -135,15 +135,15 @@ class WorkerMixin(object):
                     "--spec",
                     "''%s''"  # in yaml double single quotes escape the single quote
                     % json.dumps(
-			{
-			    f"{i}": {
-				"cls": self.worker_class,
-				"opts": {
-				    **worker_options,
-				    "name": self.name,
-				},
-			    }
-			    for i in range(self.num_workers_per_vm)
+                        {
+                            f"{i}": {
+                                "cls": self.worker_class,
+                                "opts": {
+                                    **worker_options,
+                                    "name": self.name,
+                                },
+                            }
+                            for i in range(self.num_workers_per_vm)
                         }
                     ),
                 ]
@@ -229,7 +229,7 @@ class VMCluster(SpecCluster):
         n_workers: int = 0,
         worker_class: str = "dask.distributed.Nanny",
         worker_options: dict = {},
-	num_workers_per_vm: int = 1,
+        num_workers_per_vm: int = 1,
         scheduler_options: dict = {},
         docker_image="daskdev/dask:latest",
         docker_args: str = "",
@@ -295,7 +295,7 @@ class VMCluster(SpecCluster):
         self.worker_options["docker_args"] = docker_args
         self.worker_options["docker_image"] = image
         self.worker_options["worker_class"] = worker_class
-	self.worker_options["num_workers_per_vm"] = num_workers_per_vm
+        self.worker_options["num_workers_per_vm"] = num_workers_per_vm
         self.worker_options["protocol"] = protocol
         self.worker_options["worker_options"] = worker_options
         self.worker_options["extra_bootstrap"] = extra_bootstrap
