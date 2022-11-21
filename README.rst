@@ -24,6 +24,8 @@ Dask Cloud Provider
    :alt: Conda Forge
 
 
-Native Cloud integration for Dask. This library intends to allow people to
-create dask clusters on a given cloud provider with no set up other than having
-credentials.
+Native Cloud integration for Dask.
+
+This library provides tools to enable Dask clusters to more natively integrate with the cloud.
+It includes cluster managers to create dask clusters on a given cloud provider using native resources,
+plugins to more closely integrate Dask components with the cloud platform they are running on and documentation to empower all folks running Dask on the cloud.
