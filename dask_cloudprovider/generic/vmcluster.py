@@ -43,7 +43,10 @@ class VMInterface(ProcessInterface):
         raise NotImplementedError("destroy_vm is a required method of the VMInterface")
 
     async def wait_for_scheduler(self):
-        _, address = self.address.split("://")
+        if getattr(self, "external_address", None):
+            _, address = self.external_address.split("://")
+        else:
+            _, address = self.address.split("://")
         ip, port = address.split(":")
 
         self.cluster._log(f"Waiting for scheduler to run at {ip}:{port}")
