@@ -14,8 +14,6 @@ from dask_cloudprovider.generic.vmcluster import (
 from dask_cloudprovider.exceptions import ConfigError
 from dask_cloudprovider.azure.utils import _get_default_subscription
 
-from distributed.core import Status
-
 try:
     from azure.mgmt.network import NetworkManagementClient
     from azure.mgmt.compute import ComputeManagementClient
@@ -246,43 +244,9 @@ class AzureVM(VMInterface):
 class AzureVMScheduler(SchedulerMixin, AzureVM):
     """Scheduler running on an Azure VM."""
 
-    def __init__(self, *args, **kwargs):
-        kwargs.pop("preemptible", None)
-        super().__init__(*args, **kwargs)
-
-    async def start(self):
-        await self.start_scheduler()
-        self.status = Status.running
-
-    async def start_scheduler(self):
-        self.cluster._log("Creating scheduler instance")
-
-        internal_ip, external_ip = await self.create_vm()
-
-        self.address = f"{self.cluster.protocol}://{internal_ip}:{self.port}"
-
-        if external_ip is not None:
-            self.external_address = (
-                f"{self.cluster.protocol}://{external_ip}:{self.port}"
-            )
-        else:
-            self.external_address = None
-
-        await self.wait_for_scheduler()
-
 
 class AzureVMWorker(WorkerMixin, AzureVM):
     """Worker running on an AzureVM."""
-
-    async def start(self):
-        await self.start_worker()
-        self.status = Status.running
-
-    async def start_worker(self):
-        self.cluster._log("Creating worker instance")
-
-        internal_ip, _ = await self.create_vm()
-        self.address = internal_ip
 
 
 class AzureVMCluster(VMCluster):

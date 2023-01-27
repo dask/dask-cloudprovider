@@ -43,7 +43,7 @@ class VMInterface(ProcessInterface):
         raise NotImplementedError("destroy_vm is a required method of the VMInterface")
 
     async def wait_for_scheduler(self):
-        if getattr(self, "external_address", None):
+        if self.external_address:
             _, address = self.external_address.split("://")
         else:
             _, address = self.address.split("://")
@@ -87,9 +87,15 @@ class SchedulerMixin(object):
         )
 
     async def start(self):
-        self.cluster._log("Creating scheduler instance")
-        ip = await self.create_vm()
-        self.address = f"{self.cluster.protocol}://{ip}:{self.port}"
+        self.cluster._log("Creating scheduler instance MIXIN version")
+
+        internal_ip, external_ip = await self.create_vm()
+        self.address = f"{self.cluster.protocol}://{internal_ip}:{self.port}"
+        if external_ip:
+            self.external_address = (
+                f"{self.cluster.protocol}://{external_ip}:{self.port}"
+            )
+
         await self.wait_for_scheduler()
         await super().start()
 
@@ -148,8 +154,8 @@ class WorkerMixin(object):
             )
 
     async def start(self):
-        self.cluster._log("Creating worker instance")
-        self.address = await self.create_vm()
+        self.cluster._log("Creating worker instance MIXIN")
+        self.address, _ = await self.create_vm()
         await super().start()
 
 
