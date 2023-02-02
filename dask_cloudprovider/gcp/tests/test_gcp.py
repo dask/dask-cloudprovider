@@ -61,7 +61,7 @@ async def test_get_cloud_init():
         docker_args="--privileged",
         extra_bootstrap=["gcloud auth print-access-token"],
     )
-    assert "dask-scheduler" in cloud_init
+    assert "dask scheduler" in cloud_init
     assert "# Bootstrap" in cloud_init
     assert " --privileged " in cloud_init
     assert "- gcloud auth print-access-token" in cloud_init

@@ -265,9 +265,6 @@ class EC2Cluster(VMCluster):
         It is assumed that the ``ami`` will not have Docker installed (or the NVIDIA drivers for GPU instances).
         If ``bootstrap`` is ``True`` these dependencies will be installed on instance start. If you are using
         a custom AMI which already has these dependencies set this to ``False.``
-    worker_command: string (optional)
-        The command workers should run when starting. By default this will be ``"dask-worker"`` unless
-        ``instance_type`` is a GPU instance in which case ``dask-cuda-worker`` will be used.
     ami: string (optional)
         The base OS AMI to use for scheduler and workers.
 
@@ -340,7 +337,7 @@ class EC2Cluster(VMCluster):
         The Docker image to run on all instances.
 
         This image must have a valid Python environment and have ``dask`` installed in order for the
-        ``dask-scheduler`` and ``dask-worker`` commands to be available. It is recommended the Python
+        ``dask scheduler`` and ``dask worker`` commands to be available. It is recommended the Python
         environment matches your local environment where ``EC2Cluster`` is being created from.
 
         For GPU instance types the Docker image much have NVIDIA drivers and ``dask-cuda`` installed.

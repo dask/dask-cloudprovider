@@ -184,7 +184,7 @@ class VMCluster(SpecCluster):
         The Docker image to run on all instances.
 
         This image must have a valid Python environment and have ``dask`` installed in order for the
-        ``dask-scheduler`` and ``dask-worker`` commands to be available. It is recommended the Python
+        ``dask scheduler`` and ``dask worker`` commands to be available. It is recommended the Python
         environment matches your local environment where ``EC2Cluster`` is being created from.
 
         For GPU instance types the Docker image much have NVIDIA drivers and ``dask-cuda`` installed.
@@ -366,7 +366,7 @@ class VMCluster(SpecCluster):
         cluster.auto_shutdown = False
         return cluster.render_cloud_init(
             image=cluster.options["docker_image"],
-            command="dask-scheduler --version",
+            command="dask scheduler --version",
             docker_args=cluster.options["docker_args"],
             extra_bootstrap=cluster.options["extra_bootstrap"],
             gpu_instance=cluster.gpu_instance,
