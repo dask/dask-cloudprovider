@@ -200,9 +200,12 @@ class AzureVM(VMInterface):
             self.nic.name,
         )
         self.cluster._log(f"Created VM {self.name}")
+
+        private_ip_address = self.nic.ip_configurations[0].private_ip_address
         if self.public_ingress:
-            return self.public_ip.ip_address
-        return self.nic.ip_configurations[0].private_ip_address
+            return private_ip_address, self.public_ip.ip_address
+        else:
+            return private_ip_address, None
 
     async def destroy_vm(self):
         await self.cluster.call_async(
