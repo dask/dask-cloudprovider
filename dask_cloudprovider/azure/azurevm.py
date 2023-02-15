@@ -36,6 +36,7 @@ class AzureVM(VMInterface):
         *args,
         location: str = None,
         vnet: str = None,
+        subnet: str = None,
         public_ingress: bool = None,
         security_group: str = None,
         vm_size: str = None,
@@ -60,6 +61,8 @@ class AzureVM(VMInterface):
         self.extra_bootstrap = extra_bootstrap
         self.admin_username = "dask"
         self.admin_password = str(uuid.uuid4())[:32]
+        self.vnet = vnet
+        self.subnet = subnet
         self.security_group = security_group
         self.nic_name = f"dask-cloudprovider-nic-{str(uuid.uuid4())[:8]}"
         self.docker_image = docker_image
@@ -73,18 +76,20 @@ class AzureVM(VMInterface):
         self.marketplace_plan = marketplace_plan
 
     async def create_vm(self):
-        [subnet_info, *_] = await self.cluster.call_async(
-            self.cluster.network_client.subnets.list,
-            self.cluster.resource_group,
-            self.cluster.vnet,
-        )
+        if not self.subnet:
+            [subnet_info, *_] = await self.cluster.call_async(
+                self.cluster.network_client.subnets.list,
+                self.cluster.resource_group,
+                self.vnet,
+            )
+            self.subnet = subnet_info.id
 
         nic_parameters = {
             "location": self.location,
             "ip_configurations": [
                 {
                     "name": self.nic_name,
-                    "subnet": {"id": subnet_info.id},
+                    "subnet": {"id": self.subnet},
                 }
             ],
             "networkSecurityGroup": {
@@ -267,6 +272,9 @@ class AzureVMCluster(VMCluster):
         The resource group to create components in. List your resource groups with ``az group list``.
     vnet: str
         The vnet to attach VM network interfaces to. List your vnets with ``az network vnet list``.
+    subnet: str (optional)
+        The vnet subnet to attach VM network interfaces to.
+        If omitted it will automatically use the first subnet in your vnet.
     security_group: str
         The security group to apply to your VMs.
         This must allow ports 8786-8787 from wherever you are running this from.
@@ -460,6 +468,7 @@ class AzureVMCluster(VMCluster):
         location: str = None,
         resource_group: str = None,
         vnet: str = None,
+        subnet: str = None,
         security_group: str = None,
         public_ingress: bool = None,
         vm_size: str = None,
@@ -505,6 +514,7 @@ class AzureVMCluster(VMCluster):
         self.vnet = self.config.get("azurevm.vnet", override_with=vnet)
         if self.vnet is None:
             raise ConfigError("You must configure a vnet")
+        self.subnet = self.config.get("azurevm.subnet", override_with=subnet)
         self.security_group = self.config.get(
             "azurevm.security_group", override_with=security_group
         )
@@ -554,6 +564,8 @@ class AzureVMCluster(VMCluster):
         self.options = {
             "cluster": self,
             "config": self.config,
+            "subnet": self.subnet,
+            "vnet": self.vnet,
             "security_group": self.security_group,
             "location": self.location,
             "vm_image": self.vm_image,
