@@ -6,6 +6,8 @@ Dask Cloud Provider
 This package provides classes for constructing and managing ephemeral Dask clusters on various
 cloud platforms.
 
+Dask Cloud Provider is one of many options for deploying Dask clusters, see `Deploying Dask <https://docs.dask.org/en/stable/deploying.html#distributed-computing>`_ in the Dask documentation for an overview of additional options.
+
 To use a cloud provider cluster manager you can import it and instantiate it. Instantiating the class
 will result in cloud resources being created for you.
 
