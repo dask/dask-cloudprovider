@@ -93,6 +93,39 @@ or specific IP.
 
 Again take note of this security group name for later.
 
+Extra options
+^^^^^^^^^^^^^
+
+To further customize the VMs created, you can provide ``extra_vm_options`` to :class:`AzureVMCluster`. For example, to set the identity
+of the virtual machines to a (previously created) user assigned identity, create an ``azure.mgmt.compute.models.VirtualMachineIdentity``
+
+.. code-block:: python
+
+   >>> import os
+   >>> import azure.identity
+   >>> import dask_cloudprovider.azure
+   >>> import azure.mgmt.compute.models
+
+   >>> subscription_id = os.environ["DASK_CLOUDPROVIDER__AZURE__SUBSCRIPTION_ID"]
+   >>> rg_name = os.environ["DASK_CLOUDPROVIDER__AZURE__RESOURCE_GROUP"]
+   >>> identity_name = "dask-cloudprovider-identity"
+   >>> v = azure.mgmt.compute.models.UserAssignedIdentitiesValue()
+   >>> user_assigned_identities = {
+   ...     f"/subscriptions/{subscription_id}/resourcegroups/{rg_name}/providers/Microsoft.ManagedIdentity/userAssignedIdentities/{identity_name}": v
+   ... }
+   >>> identity = azure.mgmt.compute.models.VirtualMachineIdentity(
+   ...     type="UserAssigned",
+   ...     user_assigned_identities=user_assigned_identities   
+   ... )
+
+
+And then provide that to :class:`AzureVMCluster`
+
+.. code-block:: python
+
+   >>> cluster = dask_cloudprovider.azure.AzureVMCluster(extra_vm_options={"identity": identity.as_dict()})
+   >>> cluster.scale(1)
+
 Dask Configuration
 ^^^^^^^^^^^^^^^^^^
 
