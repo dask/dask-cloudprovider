@@ -1,5 +1,4 @@
-import asyncio
-
+import uuid
 import dask
 from dask_cloudprovider.generic.vmcluster import (
     VMCluster,
@@ -9,7 +8,15 @@ from dask_cloudprovider.generic.vmcluster import (
 )
 
 try:
-    import fly_python_sdk
+    from .sdk.models.machines import (
+        FlyMachineConfig,
+        FlyMachineConfigInit,
+        FlyMachineConfigServices,
+        FlyMachineRequestConfigServicesPort,
+        FlyMachineConfigGuest,
+        FlyMachineConfigProcess
+    )
+    from .sdk.fly import Fly
 except ImportError as e:
     msg = (
         "Dask Cloud Provider Fly.io requirements are not installed.\n\n"
@@ -25,42 +32,60 @@ class FlyMachine(VMInterface):
         cluster: str,
         config,
         *args,
-        region: str = None,
-        # size: str = None,
-        docker_image = None,
-        env_vars = None,
+        region: str = "sjc",
+        vm_size: str = "shared-cpu-1x",
+        memory_mb = 1024,
+        cpus = 1,
+        image = "daskdev/dask:latest",
+        env_vars = {},
         extra_bootstrap = None,
-        machine_id = None,
+        metadata = {},
+        restart = {},
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
         self.machine = None
         self.cluster = cluster
         self.config = config
-        self.region = region
-        self.size = self.config.get("size", "shared-cpu-1x")
-        self.cpus = self.config.get("cpus", 1)
-        self.memory_mb = self.config.get("memory_mb", 1024)
-        self.image = None
+        self.region = self.config.get("region", region or "sjc")
+        self.vm_size = self.config.get("vm_size", vm_size or "shared-cpu-1x")
+        self.cpus = self.config.get("cpus", cpus or 1)
+        self.memory_mb = self.config.get("memory_mb", memory_mb or 1024)
+        self.image = self.config.get("image", image or "daskdev/dask:latest")
         self.gpu_instance = False
         self.bootstrap = True
         self.extra_bootstrap = extra_bootstrap
-        self.docker_image = docker_image
-        self.env_vars = env_vars
+        self.env_vars = self.config.get("env_vars", env_vars or {})
+        self.metadata = self.config.get("metadata", metadata or {})
+        self.restart = restart or {}
+        self.app_name = self.cluster.app_name
+        # We need the token
+        self.api_token = config.get("token")
+        if self.api_token is None:
+            raise ValueError("Fly.io API token must be provided")
+        self.fly = Fly(api_token=self.api_token)
 
     async def create_vm(self):
-        config = fly_python_sdk.models.machines.FlyMachineConfig(
+        machine_config = FlyMachineConfig(
             env=self.env_vars,
-            init=fly_python_sdk.models.machines.FlyMachineConfigInit(
+            init=FlyMachineConfigInit(
                 cmd=[self.command],
             ),
             image=self.image,
-            metadata=None,
-            restart=None,
+            metadata=self.metadata,
+            restart=self.restart,
             services=[
-                fly_python_sdk.models.machines.FlyMachineConfigServices(
+                FlyMachineConfigServices(
                     ports=[
-                        fly_python_sdk.models.machines.FlyMachineConfigServicesPorts(
+                        FlyMachineRequestConfigServicesPort(
+                            port=80,
+                            handlers=["http"]
+                        ),
+                        FlyMachineRequestConfigServicesPort(
+                            port=443,
+                            handlers=["http", "tls"]
+                        ),
+                        FlyMachineRequestConfigServicesPort(
                             port=8786,
                             handlers=["http", "tls"]
                         ),
@@ -68,9 +93,9 @@ class FlyMachine(VMInterface):
                     protocol="tcp",
                     internal_port=8786,
                 ),
-                fly_python_sdk.models.machines.FlyMachineConfigServices(
+                FlyMachineConfigServices(
                     ports=[
-                        fly_python_sdk.models.machines.FlyMachineConfigServicesPorts(
+                        FlyMachineRequestConfigServicesPort(
                             port=8787,
                             handlers=["http", "tls"]
                         ),
@@ -79,7 +104,7 @@ class FlyMachine(VMInterface):
                     internal_port=8787,
                 ),
             ],
-            guest=fly_python_sdk.models.machines.FlyMachineConfigGuest(
+            guest=FlyMachineConfigGuest(
                 cpu_kind="shared",
                 cpus=self.cpus,
                 memory_mb=self.memory_mb,
@@ -87,32 +112,28 @@ class FlyMachine(VMInterface):
             size=self.size,
             metrics=None,
             processes=[
-                fly_python_sdk.models.machines.FlyMachineConfigProcess(
+                FlyMachineConfigProcess(
                     name="app",
                     cmd=[self.command],
                     env=self.env_vars,
                 )
             ]
         )
-        self.machine = fly_python_sdk.create_machine(
-            app_name=self.config.get("app_name"),
-            token=self.config.get("token"),
-            name=self.name,
-            region=self.region,
-            image=self.image,
-            size_slug=self.size,
-            backups=False,
-            user_data=self.cluster.render_process_cloud_init(self),
+        self.machine = self.fly.create_machine(
+            app_name=self.config.get("app_name"), # The name of the new Fly.io app.
+            config=machine_config,                # A FlyMachineConfig object containing creation details.
+            name=self.name,                       # The name of the machine.
+            region=self.region,                   # The deployment region for the machine.
         )
         self.cluster._log(f"Created machine {self.name}")
         return self.machine.private_ip, None
 
     async def destroy_vm(self):
-        self.destroy_machine(
+        self.fly.destroy_machine(
             app_name=self.config.get("app_name"),
             machine_id=self.machine.id,
         )
-        self.cluster._log(f"Terminated droplet {self.name}")
+        self.cluster._log(f"Terminated machine {self.name}")
 
 
 class FlyMachineScheduler(SchedulerMixin, FlyMachine):
@@ -137,13 +158,18 @@ class FlyMachineCluster(VMCluster):
     Parameters
     ----------
     region: str
-        The DO region to launch you cluster in. A full list can be obtained with ``doctl compute region list``.
-    size: str
-        The VM size slug. You can get a full list with ``doctl compute size list``.
-        The default is ``s-1vcpu-1gb`` which is 1GB RAM and 1 vCPU
+        The FLY region to launch your cluster in. A full list can be obtained with ``flyctl platform regions``.
+    vm_size: str
+        The VM size slug. You can get a full list with ``flyctl platform sizes``.
+        The default is ``shared-cpu-1x`` which is 256GB RAM and 1 vCPU
     image: str
-        The image ID to use for the host OS. This should be a Ubuntu variant.
-        You can list available images with ``doctl compute image list --public | grep ubuntu.*x64``.
+        The Docker image to run on all instances.
+
+        This image must have a valid Python environment and have ``dask`` installed in order for the
+        ``dask-scheduler`` and ``dask-worker`` commands to be available. It is recommended the Python
+        environment matches your local environment where ``FlyMachineCluster`` is being created from.
+
+        By default the ``daskdev/dask:latest`` image will be used.
     worker_module: str
         The Dask worker module to start on worker VMs.
     n_workers: int
@@ -157,18 +183,6 @@ class FlyMachineCluster(VMCluster):
     scheduler_options: dict
         Params to be passed to the scheduler class.
         See :class:`distributed.scheduler.Scheduler`.
-    docker_image: string (optional)
-        The Docker image to run on all instances.
-
-        This image must have a valid Python environment and have ``dask`` installed in order for the
-        ``dask-scheduler`` and ``dask-worker`` commands to be available. It is recommended the Python
-        environment matches your local environment where ``EC2Cluster`` is being created from.
-
-        For GPU instance types the Docker image much have NVIDIA drivers and ``dask-cuda`` installed.
-
-        By default the ``daskdev/dask:latest`` image will be used.
-    docker_args: string (optional)
-        Extra command line arguments to pass to Docker.
     extra_bootstrap: list[str] (optional)
         Extra commands to be run during the bootstrap phase.
     env_vars: dict (optional)
@@ -190,14 +204,14 @@ class FlyMachineCluster(VMCluster):
 
     Create the cluster.
 
-    >>> from dask_cloudprovider.digitalocean import DropletCluster
-    >>> cluster = DropletCluster(n_workers=1)
+    >>> from dask_cloudprovider.fly import FlyMachineCluster
+    >>> cluster = FlyMachineCluster(n_workers=1)
     Creating scheduler instance
-    Created droplet dask-38b817c1-scheduler
+    Created machine dask-38b817c1-scheduler
     Waiting for scheduler to run
     Scheduler is running
     Creating worker instance
-    Created droplet dask-38b817c1-worker-dc95260d
+    Created machine dask-38b817c1-worker-dc95260d
 
     Connect a client.
 
@@ -215,24 +229,24 @@ class FlyMachineCluster(VMCluster):
 
     >>> client.close()
     >>> cluster.close()
-    Terminated droplet dask-38b817c1-worker-dc95260d
-    Terminated droplet dask-38b817c1-scheduler
+    Terminated machine dask-38b817c1-worker-dc95260d
+    Terminated machine dask-38b817c1-scheduler
 
     You can also do this all in one go with context managers to ensure the cluster is
     created and cleaned up.
 
-    >>> with DropletCluster(n_workers=1) as cluster:
+    >>> with FlyMachineCluster(n_workers=1) as cluster:
     ...     with Client(cluster) as client:
     ...         print(da.random.random((1000, 1000), chunks=(100, 100)).mean().compute())
     Creating scheduler instance
-    Created droplet dask-48efe585-scheduler
+    Created machine dask-48efe585-scheduler
     Waiting for scheduler to run
     Scheduler is running
     Creating worker instance
-    Created droplet dask-48efe585-worker-5181aaf1
+    Created machine dask-48efe585-worker-5181aaf1
     0.5000558682356162
-    Terminated droplet dask-48efe585-worker-5181aaf1
-    Terminated droplet dask-48efe585-scheduler
+    Terminated machine dask-48efe585-worker-5181aaf1
+    Terminated machine dask-48efe585-scheduler
 
     """
 
@@ -257,4 +271,23 @@ class FlyMachineCluster(VMCluster):
         }
         self.scheduler_options = {**self.options}
         self.worker_options = {**self.options}
+        self.app_name = f'dask-{str(uuid.uuid4())[:8]}'
+        self.api_token = self.config.get("token")
+        self.app = None
         super().__init__(debug=debug, **kwargs)
+
+    def create_app(self):
+        """Create a Fly.io app."""
+        if self.app is None:
+            self._log("Not creating app as it already exists")
+            return
+        self.app = self.fly.create_app(name=self.app_name)
+        self._log(f"Created app {self.app_name}")
+
+    def delete_app(self):
+        """Delete a Fly.io app."""
+        if self.app is None:
+            self._log("Not deleting app as it does not exist")
+            return
+        self.fly.delete_app(name=self.app_name)
+        self._log(f"Deleted app {self.app_name}")
