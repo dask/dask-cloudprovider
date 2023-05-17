@@ -1,5 +1,6 @@
 # @see https://github.com/bwhli/fly-python-sdk/blob/main/fly_python_sdk/exceptions.py
 
+
 class AppInterfaceError(Exception):
     def __init__(self, message):
         self.message = message

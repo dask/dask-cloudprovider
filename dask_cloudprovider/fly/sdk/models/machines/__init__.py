@@ -38,9 +38,9 @@ class FlyMachineConfigGuest(BaseModel):
 class FlyMachineConfigInit(BaseModel):
     """Model for FlyMachineConfig.init"""
 
-    exec: Union[str,None]
-    entrypoint: Union[str,None]
-    cmd: Union[str,None]
+    exec: Union[str, None]
+    entrypoint: Union[str, None]
+    cmd: Union[str, None]
     tty: bool
 
 
@@ -60,7 +60,7 @@ class FlyMachineConfigProcess(BaseModel):
     entrypoint: list[str]
     cmd: list[str]
     env: dict[str, str]
-    user: Union[str,None] = None
+    user: Union[str, None] = None
 
 
 # FlyMachineConfig.services.port

@@ -11,8 +11,14 @@ from sdk.exceptions import (
     MachineInterfaceError,
     MissingMachineIdsError,
 )
-from sdk.models.apps import FlyAppCreateRequest, FlyAppDetailsResponse, FlyAppDeleteRequest, FlyAppDeleteResponse
+from sdk.models.apps import (
+    FlyAppCreateRequest,
+    FlyAppDetailsResponse,
+    FlyAppDeleteRequest,
+    FlyAppDeleteResponse,
+)
 from sdk.models.machines import FlyMachineConfig, FlyMachineDetails
+
 
 class Fly:
     """
@@ -36,7 +42,8 @@ class Fly:
 
         Args:
             app_name: The name of the new Fly.io app.
-            org_slug: The slug of the organization to create the app within. If None, the personal organization will be used.
+            org_slug: The slug of the organization to create the app within.
+                      If None, the personal organization will be used.
         """
         path = "apps"
         app_details = FlyAppCreateRequest(app_name=app_name, org_slug=org_slug)

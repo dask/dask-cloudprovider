@@ -14,7 +14,7 @@ try:
         FlyMachineConfigServices,
         FlyMachineRequestConfigServicesPort,
         FlyMachineConfigGuest,
-        FlyMachineConfigProcess
+        FlyMachineConfigProcess,
     )
     from .sdk.fly import Fly
 except ImportError as e:
@@ -34,13 +34,13 @@ class FlyMachine(VMInterface):
         *args,
         region: str = "sjc",
         vm_size: str = "shared-cpu-1x",
-        memory_mb = 1024,
-        cpus = 1,
-        image = "daskdev/dask:latest",
-        env_vars = {},
-        extra_bootstrap = None,
-        metadata = {},
-        restart = {},
+        memory_mb=1024,
+        cpus=1,
+        image="daskdev/dask:latest",
+        env_vars={},
+        extra_bootstrap=None,
+        metadata={},
+        restart={},
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
@@ -77,17 +77,12 @@ class FlyMachine(VMInterface):
             services=[
                 FlyMachineConfigServices(
                     ports=[
+                        FlyMachineRequestConfigServicesPort(port=80, handlers=["http"]),
                         FlyMachineRequestConfigServicesPort(
-                            port=80,
-                            handlers=["http"]
+                            port=443, handlers=["http", "tls"]
                         ),
                         FlyMachineRequestConfigServicesPort(
-                            port=443,
-                            handlers=["http", "tls"]
-                        ),
-                        FlyMachineRequestConfigServicesPort(
-                            port=8786,
-                            handlers=["http", "tls"]
+                            port=8786, handlers=["http", "tls"]
                         ),
                     ],
                     protocol="tcp",
@@ -96,8 +91,7 @@ class FlyMachine(VMInterface):
                 FlyMachineConfigServices(
                     ports=[
                         FlyMachineRequestConfigServicesPort(
-                            port=8787,
-                            handlers=["http", "tls"]
+                            port=8787, handlers=["http", "tls"]
                         ),
                     ],
                     protocol="tcp",
@@ -117,13 +111,13 @@ class FlyMachine(VMInterface):
                     cmd=[self.command],
                     env=self.env_vars,
                 )
-            ]
+            ],
         )
         self.machine = self.fly.create_machine(
-            app_name=self.config.get("app_name"), # The name of the new Fly.io app.
-            config=machine_config,                # A FlyMachineConfig object containing creation details.
-            name=self.name,                       # The name of the machine.
-            region=self.region,                   # The deployment region for the machine.
+            app_name=self.config.get("app_name"),  # The name of the new Fly.io app.
+            config=machine_config,  # A FlyMachineConfig object containing creation details.
+            name=self.name,  # The name of the machine.
+            region=self.region,  # The deployment region for the machine.
         )
         self.cluster._log(f"Created machine {self.name}")
         return self.machine.private_ip, None
@@ -271,7 +265,7 @@ class FlyMachineCluster(VMCluster):
         }
         self.scheduler_options = {**self.options}
         self.worker_options = {**self.options}
-        self.app_name = f'dask-{str(uuid.uuid4())[:8]}'
+        self.app_name = f"dask-{str(uuid.uuid4())[:8]}"
         self.api_token = self.config.get("token")
         self.app = None
         super().__init__(debug=debug, **kwargs)
