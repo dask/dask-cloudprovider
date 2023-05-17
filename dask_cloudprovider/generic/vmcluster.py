@@ -178,8 +178,8 @@ class VMCluster(SpecCluster):
 
     For a reference implementation see :class:`DropletCluster`.
 
-    The following paramaters section should be copied to the subclass docstring and appended
-    to the provider specific paramaters.
+    The following parameters section should be copied to the subclass docstring and appended
+    to the provider specific parameters.
 
     Parameters
     ----------
