@@ -2,9 +2,9 @@ import pytest
 
 import dask
 
-digitalocean = pytest.importorskip("digitalocean")
+# sdk = pytest.importorskip(".sdk")
 
-from dask_cloudprovider.digitalocean.droplet import DropletCluster
+from dask_cloudprovider.fly.machine import FlyMachineCluster
 from dask.distributed import Client
 from distributed.core import Status
 
@@ -13,18 +13,18 @@ async def skip_without_credentials(config):
     if config.get("token") is None:
         pytest.skip(
             """
-        You must configure a Digital Ocean API token to run this test.
+        You must configure a Fly.io API token to run this test.
 
         Either set this in your config
 
             # cloudprovider.yaml
             cloudprovider:
-              digitalocean:
+              fly:
                 token: "yourtoken"
 
         Or by setting it as an environment variable
 
-            export DASK_CLOUDPROVIDER__DIGITALOCEAN__TOKEN="yourtoken"
+            export DASK_CLOUDPROVIDER__FLY__TOKEN="yourtoken"
 
         """
         )
@@ -32,21 +32,21 @@ async def skip_without_credentials(config):
 
 @pytest.fixture
 async def config():
-    return dask.config.get("cloudprovider.digitalocean", {})
+    return dask.config.get("cloudprovider.fly", {})
 
 
 @pytest.fixture
 @pytest.mark.external
 async def cluster(config):
     await skip_without_credentials(config)
-    async with DropletCluster(asynchronous=True) as cluster:
+    async with FlyMachineCluster(asynchronous=True) as cluster:
         yield cluster
 
 
 @pytest.mark.asyncio
 @pytest.mark.external
 async def test_init():
-    cluster = DropletCluster(asynchronous=True)
+    cluster = FlyMachineCluster(asynchronous=True)
     assert cluster.status == Status.created
 
 
@@ -68,9 +68,9 @@ async def test_create_cluster(cluster):
         assert await client.submit(inc, 10).result() == 11
 
 
-@pytest.mark.asyncio
-async def test_get_cloud_init():
-    cloud_init = DropletCluster.get_cloud_init(
-        docker_args="--privileged",
-    )
-    assert " --privileged " in cloud_init
+# @pytest.mark.asyncio
+# async def test_get_cloud_init():
+#     cloud_init = FlyMachineCluster.get_cloud_init(
+#         docker_args="--privileged",
+#     )
+#     assert " --privileged " in cloud_init
