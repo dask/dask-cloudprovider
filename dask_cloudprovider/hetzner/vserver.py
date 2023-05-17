@@ -104,6 +104,8 @@ class HetznerCluster(VMCluster):
         The default is ``cx11`` which is vServer with 2GB RAM and 1 vCPU.
     n_workers: int
         Number of workers to initialise the cluster with. Defaults to ``0``.
+    n_worker_procs:
+        Number of worker process to spawn in each worker node of the cluster. Defaults to ``1``.
     worker_module: str
         The Python module to run for the worker. Defaults to ``distributed.cli.dask_worker``
     worker_options: dict

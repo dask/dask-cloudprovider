@@ -327,6 +327,8 @@ class EC2Cluster(VMCluster):
         See https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/iam-roles-for-amazon-ec2.html.
     n_workers: int
         Number of workers to initialise the cluster with. Defaults to ``0``.
+    n_worker_procs:
+        Number of worker process to spawn in each worker node of the cluster. Defaults to ``1``.
     worker_module: str
         The Python module to run for the worker. Defaults to ``distributed.cli.dask_worker``
     worker_options: dict
