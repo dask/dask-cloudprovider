@@ -4,8 +4,11 @@ from typing import Union
 
 class FlyAppCreateRequest(BaseModel):
     app_name: str
-    org_slug: str
+    org_slug: Union[str, None] = None
 
+class FlyAppCreateResponse(BaseModel):
+    app_name: str
+    org_slug: Union[str, None] = None
 
 class FlyAppDetailsResponse(BaseModel):
     name: str
@@ -21,6 +24,6 @@ class FlyAppDeleteRequest(BaseModel):
 
 class FlyAppDeleteResponse(BaseModel):
     app_name: str
-    org_slug: str
+    org_slug: Union[str, None] = None
     status: str
     organization: dict

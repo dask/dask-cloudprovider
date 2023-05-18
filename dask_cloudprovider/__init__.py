@@ -43,7 +43,7 @@ def __getattr__(name):
             f"Please import dask_cloudprovider.digitalocean.{name}"
         )
 
-    if name in ["FlyCluster"]:
+    if name in ["FlyMachineCluster"]:
         raise ImportError(
             "Fly.io cluster managers must be imported from the fly subpackage. "
             f"Please import dask_cloudprovider.fly.{name}"

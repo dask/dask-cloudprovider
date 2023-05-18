@@ -41,7 +41,7 @@ class FlyMachineConfigInit(BaseModel):
     exec: Union[str, None]
     entrypoint: Union[str, None]
     cmd: Union[str, None]
-    tty: bool
+    tty: bool = False
 
 
 # FlyMachineConfig.mounts
@@ -56,10 +56,10 @@ class FlyMachineConfigMount(BaseModel):
 
 
 class FlyMachineConfigProcess(BaseModel):
-    name: str
-    entrypoint: list[str]
-    cmd: list[str]
-    env: dict[str, str]
+    name: str = "app"
+    entrypoint: Union[list[str], None] = None
+    cmd: Union[list[str], None] = None
+    env: Union[dict[str, str], None] = None
     user: Union[str, None] = None
 
 

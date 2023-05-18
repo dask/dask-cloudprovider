@@ -6,18 +6,19 @@ from typing import Union
 import httpx
 from pydantic import BaseModel
 
-from sdk.exceptions import (
+from .exceptions import (
     AppInterfaceError,
     MachineInterfaceError,
     MissingMachineIdsError,
 )
-from sdk.models.apps import (
+from .models.apps import (
     FlyAppCreateRequest,
+    FlyAppCreateResponse,
     FlyAppDetailsResponse,
     FlyAppDeleteRequest,
     FlyAppDeleteResponse,
 )
-from sdk.models.machines import FlyMachineConfig, FlyMachineDetails
+from .models.machines import FlyMachineConfig, FlyMachineDetails
 
 
 class Fly:
@@ -36,8 +37,8 @@ class Fly:
     async def create_app(
         self,
         app_name: str,
-        org_slug: str,
-    ) -> None:
+        org_slug: str = "personal",
+    ) -> FlyAppCreateResponse:
         """Creates a new app on Fly.io.
 
         Args:
@@ -51,11 +52,11 @@ class Fly:
 
         # Raise an exception if HTTP status code is not 201.
         if r.status_code != 201:
+            error_msg = r.json().get("error", {}).get("message", "Unknown error!")
             raise AppInterfaceError(
-                message=f"Unable to create {app_name} in {org_slug}!"
+                message=f"Unable to create {app_name} in {org_slug}! Error: {error_msg}"
             )
-
-        return FlyMachineDetails(**r.json())
+        return FlyAppCreateResponse(app_name=app_name, org_slug=org_slug)
 
     async def get_app(
         self,
@@ -78,7 +79,7 @@ class Fly:
     async def delete_app(
         self,
         app_name: str,
-        org_slug: str = None,
+        org_slug: str = "personal",
         force: bool = False,
     ) -> None:
         """Deletes a Fly.io application.
@@ -177,14 +178,16 @@ class Fly:
         self,
         app_name: str,
         machine_id: str,
+        force: bool = False,
     ) -> None:
         """Deletes a Fly.io machine.
 
         Args:
             app_name: The name of the new Fly.io app.
             machine_id: The id string for a Fly.io machine.
+            force: If True, the machine will be deleted even if it is running.
         """
-        path = f"apps/{app_name}/machines/{machine_id}"
+        path = f"apps/{app_name}/machines/{machine_id}?force={str(force).lower()}"
         r = await self._make_api_delete_request(path)
 
         # Raise an exception if HTTP status code is not 200.
@@ -200,6 +203,7 @@ class Fly:
         app_name: str,
         machine_ids: list[str] = [],
         delete_all: bool = False,
+        force: bool = False,
     ) -> None:
         """Deletes multiple Fly.io machines.
 
@@ -207,6 +211,7 @@ class Fly:
             app_name: The name of the new Fly.io app.
             machine_ids: An array of machine IDs to delete.
             delete_all: Delete all machines in the app if True.
+            force: Delete even if running
         """
         # If delete_all is True, override provided machine_ids.
         if delete_all is True:
@@ -224,7 +229,7 @@ class Fly:
 
         # Delete machines.
         for machine_id in machine_ids:
-            self.delete_machine(app_name, machine_id)
+            self.delete_machine(app_name, machine_id, force=force)
 
         return
 
@@ -330,8 +335,9 @@ class Fly:
         """An internal function for making POST requests to the Fly.io API."""
         api_hostname = self._get_api_hostname()
         url = f"{api_hostname}/v{self.api_version}/{path}"
+        headers = self._generate_headers()
         async with httpx.AsyncClient() as client:
-            r = await client.post(url, headers=self._generate_headers(), json=payload)
+            r = await client.post(url, headers=headers, json=payload)
             r.raise_for_status()
         return r
 
