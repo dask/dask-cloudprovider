@@ -79,27 +79,25 @@ class Fly:
     async def delete_app(
         self,
         app_name: str,
-        org_slug: str = "personal",
         force: bool = False,
     ) -> None:
         """Deletes a Fly.io application.
 
         Args:
             app_name: The name of the new Fly.io app.
-            org_slug: The slug of the organization. If None, the personal organization will be used.
-            force: If True, the app will be deleted even if it has machines.
+            force: If True, the app will be deleted even if it has active machines.
         """
-        path = f"apps/{app_name}"
-        app_details = FlyAppDeleteRequest(
-            app_name=app_name, org_slug=org_slug, force=force
-        )
-        r = await self._make_api_delete_request(path, app_details.dict())
+        path = f"apps/{app_name}?force={str(force).lower()}"
+        r = await self._make_api_delete_request(path)
 
         # Raise an exception if HTTP status code is not 200.
-        if r.status_code != 200:
-            raise AppInterfaceError(message=f"Unable to delete {app_name}!")
+        if r.status_code != 202:
+            raise AppInterfaceError(message=f"Unable to delete {app_name}! status_code={r.status_code}")
 
-        return FlyAppDeleteResponse(**r.json())
+        return FlyAppDeleteResponse(
+            status=r.status_code,
+            app_name=app_name,
+        )
 
     ############
     # Machines #

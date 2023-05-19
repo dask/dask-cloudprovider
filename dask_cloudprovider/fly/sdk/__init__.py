@@ -6,4 +6,3 @@ from . import constants
 from . import exceptions
 from . import fly
 from . import models
-from . import sdk
