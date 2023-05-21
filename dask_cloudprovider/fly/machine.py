@@ -275,6 +275,10 @@ class FlyMachineCluster(VMCluster):
     VMs in Fly.io (FLY) are referred to as machines. This cluster manager constructs a Dask cluster
     running on VMs.
 
+    _Note: By default, the cluster will instantiate a new Fly.io app. The app will be deleted when
+    the cluster is closed. If you want to use an existing app, you can pass the app name to the
+    ``app_name`` parameter._
+
     When configuring your cluster you may find it useful to install the ``flyctl`` tool for querying the
     CLY API for available options.
 
