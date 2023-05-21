@@ -61,8 +61,9 @@ class FlyMachine(VMInterface):
         self.app_name = self.cluster.app_name
         self.env_vars['DASK_INTERNAL__INHERIT_CONFIG'] = dask.config.serialize(dask.config.global_config)
         self.api_token = self.cluster.api_token
+        self._client = None
         if self.api_token is None:
-            raise ValueError("Fly.io API token must be provided")
+            raise ValueError("[fly.io] API token must be provided")
 
     async def create_vm(self):
         machine_config = machines.FlyMachineConfig(
@@ -112,14 +113,14 @@ class FlyMachine(VMInterface):
                 )
             ],
         )
-        await self.wait_for_app()
-        self.machine = await self.cluster._fly().create_machine(
+        # await self.wait_for_app()
+        self.machine = await self._fly().create_machine(
             app_name=self.cluster.app_name,  # The name of the new Fly.io app.
             config=machine_config,  # A FlyMachineConfig object containing creation details.
             name=self.name,  # The name of the machine.
             region=self.region,  # The deployment region for the machine.
         )
-        self.cluster._log(f"Created machine name={self.name} id={self.machine.id}")
+        self.cluster._log(f"[fly.io] Created machine name={self.name} id={self.machine.id}")
         self.host = f'{self.machine.id}.vm.{self.cluster.app_name}.internal'
         self.internal_ip = self.machine.private_ip
         self.port = 8786
@@ -130,14 +131,14 @@ class FlyMachine(VMInterface):
     
     async def destroy_vm(self):
         if self.machine is None:
-            self.cluster._log("Not Terminating Machine: Machine does not exist")
+            self.cluster._log("[fly.io] Not Terminating Machine: Machine does not exist")
             return
-        await self.cluster._fly().delete_machine(
+        await self._fly().delete_machine(
             app_name=self.cluster.app_name,
             machine_id=self.machine.id,
             force=True,
         )
-        self.cluster._log(f"Terminated machine {self.name}")
+        self.cluster._log(f"[fly.io] Terminated machine {self.name}")
 
     async def wait_for_scheduler(self):
         self.cluster._log(f"Waiting for scheduler to run at {self.host}:{self.port}")
@@ -147,10 +148,15 @@ class FlyMachine(VMInterface):
         return True
     
     async def wait_for_app(self):
-        self.cluster._log("Waiting for app to be created...")
-        while self.cluster.app_name is None or self.cluster.app is None:
+        self.cluster._log("[fly.io] Waiting for app to be created...")
+        while self.cluster.app_name is None or self.app is None:
             await asyncio.sleep(1)
         return True
+
+    def _fly(self):
+        if self._client is None:
+            self._client = Fly(api_token=self.api_token)
+        return self._client
 
 class FlyMachineScheduler(SchedulerMixin, FlyMachine):
     """Scheduler running on a Fly.io Machine."""
@@ -172,9 +178,8 @@ class FlyMachineScheduler(SchedulerMixin, FlyMachine):
 
     async def start(self):
         self.cluster._log(f"Starting scheduler on {self.name}")
-        if self.cluster.app is None:
-            await self.cluster.create_app()
-        await self.cluster.wait_for_app()
+        if self.cluster.app_name is None:
+            await self.create_app()
         await self.start_scheduler()
         self.status = Status.running
     
@@ -190,7 +195,37 @@ class FlyMachineScheduler(SchedulerMixin, FlyMachine):
     async def close(self):
         await super().close()
         if self.cluster.app_name is not None:
-            await self.cluster.delete_app()
+            await self.delete_app()
+
+    async def create_app(self):
+        """Create a Fly.io app."""
+        if self.cluster.app_name is not None:
+            self.cluster._log("[fly.io] Not creating app as it already exists")
+            return
+        app_name = f"dask-{str(uuid.uuid4())[:8]}"
+        try:
+            self.cluster._log(f"[fly.io] Trying to create app {app_name}")
+            self.app = await self._fly().create_app(app_name=app_name)
+            self.cluster._log(f"[fly.io] Created app {app_name}")
+            self.cluster.app_name = app_name
+        except Exception as e:
+            self.cluster._log(f"[fly.io] Failed to create app {app_name}")
+            self.app = "failed"
+            raise e
+
+    async def delete_app(self):
+        """Delete a Fly.io app."""
+        if self.cluster.app_name is None:
+            self.cluster._log("[fly.io] Not deleting app as it does not exist")
+            return
+        await self._fly().delete_app(app_name=self.cluster.app_name)
+        self.cluster._log(f"[fly.io] Deleted app {self.cluster.app_name}")
+
+    async def wait_for_app(self):
+        """Wait for the Fly.io app to be ready."""
+        while self.app is None or self.cluster.app_name is None:
+            self.cluster._log("[fly.io] Waiting for app to be created")
+            await asyncio.sleep(1)
 
 
 class FlyMachineWorker(WorkerMixin, FlyMachine):
@@ -286,7 +321,7 @@ class FlyMachineCluster(VMCluster):
         Configures communication security in this cluster. Can be a security
         object, or True. If True, temporary self-signed credentials will
         be created automatically. Default is ``True``.
-    debug: bool, optional
+    debug : bool, optional
         More information will be printed when constructing clusters to enable debugging.
 
     Examples
@@ -296,12 +331,16 @@ class FlyMachineCluster(VMCluster):
 
     >>> from dask_cloudprovider.fly import FlyMachineCluster
     >>> cluster = FlyMachineCluster(n_workers=1)
+    Starting scheduler on dask-e058d78e-scheduler
+    [fly.io] Trying to create app dask-122f0e5f
+    [fly.io] Created app dask-122f0e5f
     Creating scheduler instance
-    Created machine dask-38b817c1-scheduler
-    Waiting for scheduler to run
+    [fly.io] Created machine name=dask-e058d78e-scheduler id=6e82d4e6a02d58
+    Waiting for scheduler to run at 6e82d4e6a02d58.vm.dask-122f0e5f.internal:8786
     Scheduler is running
+    Scheduler running at tcp://[fdaa:1:53b:a7b:112:2bed:ccd1:2]:8786
     Creating worker instance
-    Created machine dask-38b817c1-worker-dc95260d
+    [fly.io] Created machine name=dask-e058d78e-worker-7b24cb61 id=32873e0a095985
 
     Connect a client.
 
@@ -319,8 +358,9 @@ class FlyMachineCluster(VMCluster):
 
     >>> client.close()
     >>> cluster.close()
-    Terminated machine dask-38b817c1-worker-dc95260d
-    Terminated machine dask-38b817c1-scheduler
+    [fly.io] Terminated machine dask-e058d78e-worker-7b24cb61
+    [fly.io] Terminated machine dask-e058d78e-scheduler
+    [fly.io] Deleted app dask-122f0e5f
 
     You can also do this all in one go with context managers to ensure the cluster is
     created and cleaned up.
@@ -328,15 +368,20 @@ class FlyMachineCluster(VMCluster):
     >>> with FlyMachineCluster(n_workers=1) as cluster:
     ...     with Client(cluster) as client:
     ...         print(da.random.random((1000, 1000), chunks=(100, 100)).mean().compute())
+    Starting scheduler on dask-e058d78e-scheduler
+    [fly.io] Trying to create app dask-122f0e5f
+    [fly.io] Created app dask-122f0e5f
     Creating scheduler instance
-    Created machine dask-48efe585-scheduler
-    Waiting for scheduler to run
+    [fly.io] Created machine name=dask-e058d78e-scheduler id=6e82d4e6a02d58
+    Waiting for scheduler to run at 6e82d4e6a02d58.vm.dask-122f0e5f.internal:8786
     Scheduler is running
+    Scheduler running at tcp://[fdaa:1:53b:a7b:112:2bed:ccd1:2]:8786
     Creating worker instance
-    Created machine dask-48efe585-worker-5181aaf1
+    [fly.io] Created machine name=dask-e058d78e-worker-7b24cb61 id=32873e0a095985
     0.5000558682356162
-    Terminated machine dask-48efe585-worker-5181aaf1
-    Terminated machine dask-48efe585-scheduler
+    [fly.io] Terminated machine dask-e058d78e-worker-7b24cb61
+    [fly.io] Terminated machine dask-e058d78e-scheduler
+    [fly.io] Deleted app dask-122f0e5f
 
     """
 
@@ -356,7 +401,6 @@ class FlyMachineCluster(VMCluster):
         self.scheduler_class = FlyMachineScheduler
         self.worker_class = FlyMachineWorker
         self.debug = debug
-        self.app = None
         self.app_name = app_name
         self._client = None
         self.options = {
@@ -374,9 +418,7 @@ class FlyMachineCluster(VMCluster):
             "host": "fly-local-6pn",
             "security": self.config.get("security", False),
         }
-        self.scheduler_options = {
-            **self.options,
-        }
+        self.scheduler_options = {**self.options}
         self.worker_options = {**self.options}
         self.api_token = self.options["token"]
         super().__init__(
@@ -384,38 +426,3 @@ class FlyMachineCluster(VMCluster):
             security=self.options["security"],
             **kwargs
         )
-
-    def _fly(self):
-        if self._client is None:
-            self._client = Fly(api_token=self.api_token)
-        return self._client
-
-    async def create_app(self):
-        """Create a Fly.io app."""
-        if self.app_name is not None:
-            warnings.warn("Not creating app as it already exists")
-            return
-        app_name = f"dask-{str(uuid.uuid4())[:8]}"
-        try:
-            warnings.warn(f"trying to create app {app_name}")
-            self.app = await self._fly().create_app(app_name=app_name)
-            warnings.warn(f"Created app {app_name}")
-            self.app_name = app_name
-        except Exception as e:
-            warnings.warn(f"Failed to create app {app_name}")
-            self.app = "failed"
-            raise e
-
-    async def delete_app(self):
-        """Delete a Fly.io app."""
-        if self.app_name is None:
-            warnings.warn("Not deleting app as it does not exist")
-            return
-        await self._fly().delete_app(app_name=self.app_name)
-        warnings.warn(f"Deleted app {self.app_name}")
-
-    async def wait_for_app(self):
-        """Wait for the Fly.io app to be ready."""
-        while self.app is None or self.app_name is None:
-            warnings.warn("Waiting for app to be created")
-            await asyncio.sleep(1)

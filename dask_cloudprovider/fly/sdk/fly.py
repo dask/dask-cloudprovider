@@ -15,7 +15,6 @@ from .models.apps import (
     FlyAppCreateRequest,
     FlyAppCreateResponse,
     FlyAppDetailsResponse,
-    FlyAppDeleteRequest,
     FlyAppDeleteResponse,
 )
 from .models.machines import FlyMachineConfig, FlyMachineDetails
@@ -308,7 +307,7 @@ class Fly:
         """An internal function for making DELETE requests to the Fly.io API."""
         api_hostname = self._get_api_hostname()
         url = f"{api_hostname}/v{self.api_version}/{path}"
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(verify=False) as client:
             r = await client.delete(url, headers=self._generate_headers())
             r.raise_for_status()
         return r
@@ -320,7 +319,7 @@ class Fly:
         """An internal function for making GET requests to the Fly.io API."""
         api_hostname = self._get_api_hostname()
         url = f"{api_hostname}/v{self.api_version}/{path}"
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(verify=False) as client:
             r = await client.get(url, headers=self._generate_headers())
             r.raise_for_status()
         return r
@@ -334,7 +333,7 @@ class Fly:
         api_hostname = self._get_api_hostname()
         url = f"{api_hostname}/v{self.api_version}/{path}"
         headers = self._generate_headers()
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(verify=False) as client:
             r = await client.post(url, headers=headers, json=payload)
             r.raise_for_status()
         return r
