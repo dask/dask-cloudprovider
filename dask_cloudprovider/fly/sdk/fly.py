@@ -91,7 +91,9 @@ class Fly:
 
         # Raise an exception if HTTP status code is not 200.
         if r.status_code != 202:
-            raise AppInterfaceError(message=f"Unable to delete {app_name}! status_code={r.status_code}")
+            raise AppInterfaceError(
+                message=f"Unable to delete {app_name}! status_code={r.status_code}"
+            )
 
         return FlyAppDeleteResponse(
             status=r.status_code,

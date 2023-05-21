@@ -1,1 +1,6 @@
-from .machine import FlyMachine, FlyMachineWorker, FlyMachineScheduler, FlyMachineCluster
+from .machine import (
+    FlyMachine,
+    FlyMachineWorker,
+    FlyMachineScheduler,
+    FlyMachineCluster,
+)

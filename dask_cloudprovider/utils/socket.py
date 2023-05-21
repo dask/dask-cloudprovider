@@ -11,6 +11,7 @@ def is_socket_open(ip, port):
     except Exception:
         return False
 
+
 def is_ipv6_socket_open(ip, port):
     connection = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
     try:
@@ -19,6 +20,7 @@ def is_ipv6_socket_open(ip, port):
         return True
     except Exception:
         return False
+
 
 async def async_socket_open(address, port):
     loop = asyncio.get_event_loop()

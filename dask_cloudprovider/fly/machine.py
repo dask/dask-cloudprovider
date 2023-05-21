@@ -26,6 +26,7 @@ except ImportError as e:
     )
     raise ImportError(msg) from e
 
+
 class FlyMachine(VMInterface):
     def __init__(
         self,
@@ -37,10 +38,10 @@ class FlyMachine(VMInterface):
         memory_mb: int = None,
         cpus: int = None,
         image: str = None,
-        env_vars = None,
-        extra_bootstrap = None,
-        metadata = None,
-        restart = None,
+        env_vars=None,
+        extra_bootstrap=None,
+        metadata=None,
+        restart=None,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
@@ -59,7 +60,9 @@ class FlyMachine(VMInterface):
         self.metadata = metadata
         self.restart = restart
         self.app_name = self.cluster.app_name
-        self.env_vars['DASK_INTERNAL__INHERIT_CONFIG'] = dask.config.serialize(dask.config.global_config)
+        self.env_vars["DASK_INTERNAL__INHERIT_CONFIG"] = dask.config.serialize(
+            dask.config.global_config
+        )
         self.api_token = self.cluster.api_token
         self._client = None
         if self.api_token is None:
@@ -81,8 +84,7 @@ class FlyMachine(VMInterface):
                             port=443, handlers=["http", "tls"]
                         ),
                         machines.FlyMachineRequestConfigServicesPort(
-                            port=8786,
-                            handlers=["http", "tls"]
+                            port=8786, handlers=["http", "tls"]
                         ),
                     ],
                     protocol="tcp",
@@ -91,8 +93,7 @@ class FlyMachine(VMInterface):
                 machines.FlyMachineConfigServices(
                     ports=[
                         machines.FlyMachineRequestConfigServicesPort(
-                            port=8787,
-                            handlers=["http", "tls"]
+                            port=8787, handlers=["http", "tls"]
                         ),
                     ],
                     protocol="tcp",
@@ -113,25 +114,28 @@ class FlyMachine(VMInterface):
                 )
             ],
         )
-        # await self.wait_for_app()
         self.machine = await self._fly().create_machine(
             app_name=self.cluster.app_name,  # The name of the new Fly.io app.
             config=machine_config,  # A FlyMachineConfig object containing creation details.
             name=self.name,  # The name of the machine.
             region=self.region,  # The deployment region for the machine.
         )
-        self.cluster._log(f"[fly.io] Created machine name={self.name} id={self.machine.id}")
-        self.host = f'{self.machine.id}.vm.{self.cluster.app_name}.internal'
+        self.cluster._log(
+            f"[fly.io] Created machine name={self.name} id={self.machine.id}"
+        )
+        self.host = f"{self.machine.id}.vm.{self.cluster.app_name}.internal"
         self.internal_ip = self.machine.private_ip
         self.port = 8786
         # self.address = f'tcp://{self.host}:{self.port}'
-        self.address = f'{self.cluster.protocol}://[{self.machine.private_ip}]:8786'
+        self.address = f"{self.cluster.protocol}://[{self.machine.private_ip}]:8786"
         # self.external_address = f'tls://{self.cluster.app_name}.fly.dev:443'
         return self.address, self.external_address
-    
+
     async def destroy_vm(self):
         if self.machine is None:
-            self.cluster._log("[fly.io] Not Terminating Machine: Machine does not exist")
+            self.cluster._log(
+                "[fly.io] Not Terminating Machine: Machine does not exist"
+            )
             return
         await self._fly().delete_machine(
             app_name=self.cluster.app_name,
@@ -146,7 +150,7 @@ class FlyMachine(VMInterface):
             await asyncio.sleep(1)
         self.cluster._log("Scheduler is running")
         return True
-    
+
     async def wait_for_app(self):
         self.cluster._log("[fly.io] Waiting for app to be created...")
         while self.cluster.app_name is None or self.app is None:
@@ -157,6 +161,7 @@ class FlyMachine(VMInterface):
         if self._client is None:
             self._client = Fly(api_token=self.api_token)
         return self._client
+
 
 class FlyMachineScheduler(SchedulerMixin, FlyMachine):
     """Scheduler running on a Fly.io Machine."""
@@ -174,7 +179,7 @@ class FlyMachineScheduler(SchedulerMixin, FlyMachine):
             "python",
             "-m",
             "distributed.cli.dask_scheduler",
-        ]+ cli_keywords(scheduler_options, cls=_Scheduler)
+        ] + cli_keywords(scheduler_options, cls=_Scheduler)
 
     async def start(self):
         self.cluster._log(f"Starting scheduler on {self.name}")
@@ -182,7 +187,7 @@ class FlyMachineScheduler(SchedulerMixin, FlyMachine):
             await self.create_app()
         await self.start_scheduler()
         self.status = Status.running
-    
+
     async def start_scheduler(self):
         self.cluster._log("Creating scheduler instance")
         address, external_address = await self.create_vm()
@@ -191,7 +196,7 @@ class FlyMachineScheduler(SchedulerMixin, FlyMachine):
         self.cluster.scheduler_internal_address = address
         self.cluster.scheduler_external_address = external_address
         self.cluster.scheduler_port = self.port
-    
+
     async def close(self):
         await super().close()
         if self.cluster.app_name is not None:
@@ -268,6 +273,7 @@ class FlyMachineWorker(WorkerMixin, FlyMachine):
                     }
                 ),
             ]
+
 
 class FlyMachineCluster(VMCluster):
     """Cluster running on Fly.io Machines.
@@ -414,7 +420,9 @@ class FlyMachineCluster(VMCluster):
             "vm_size": vm_size if vm_size is not None else self.config.get("vm_size"),
             "image": image if image is not None else self.config.get("image"),
             "token": token if token is not None else self.config.get("token"),
-            "memory_mb": memory_mb if memory_mb is not None else self.config.get("memory_mb"),
+            "memory_mb": memory_mb
+            if memory_mb is not None
+            else self.config.get("memory_mb"),
             "cpus": cpus if cpus is not None else self.config.get("cpus"),
             "app_name": self.app_name,
             "protocol": self.config.get("protocol", "tcp"),
@@ -425,8 +433,4 @@ class FlyMachineCluster(VMCluster):
         self.scheduler_options = {**self.options}
         self.worker_options = {**self.options}
         self.api_token = self.options["token"]
-        super().__init__(
-            debug=debug,
-            security=self.options["security"],
-            **kwargs
-        )
+        super().__init__(debug=debug, security=self.options["security"], **kwargs)

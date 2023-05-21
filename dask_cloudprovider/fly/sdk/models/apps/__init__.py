@@ -6,9 +6,11 @@ class FlyAppCreateRequest(BaseModel):
     app_name: str
     org_slug: Union[str, None] = None
 
+
 class FlyAppCreateResponse(BaseModel):
     app_name: str
     org_slug: Union[str, None] = None
+
 
 class FlyAppDetailsResponse(BaseModel):
     name: str
