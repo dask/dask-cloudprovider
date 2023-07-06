@@ -179,6 +179,7 @@ class Task:
                             cluster=self.cluster_arn, tasks=[self.task_arn]
                         )
                     )["tasks"]
+                    await asyncio.sleep(5)
                 except ClientError as e:
                     if e.response["Error"]["Code"] == "ThrottlingException":
                         wait_duration = min(wait_duration * 2, 20)
