@@ -110,7 +110,7 @@ class GCPInstance(VMInterface):
         self.service_account = service_account or self.config.get("service_account")
 
     def create_gcp_config(self):
-        
+
         subnetwork = f"projects/{self.network_projectid}/regions/{self.general_zone}/subnetworks/{self.network}"
         config = {
             "name": self.name,
@@ -494,7 +494,8 @@ class GCPCluster(VMCluster):
     instance_labels: dict (optional)
         Labels to be applied to all GCP instances upon creation.
     service_account: str
-        Service account that all VMs will run under. Defaults to the default Compute Engine service account for your GCP project.
+        Service account that all VMs will run under.
+        Defaults to the default Compute Engine service account for your GCP project.
 
     Examples
     --------
