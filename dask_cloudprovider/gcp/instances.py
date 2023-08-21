@@ -67,6 +67,7 @@ class GCPInstance(VMInterface):
         auto_shutdown=None,
         preemptible=False,
         instance_labels=None,
+        service_account=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -106,7 +107,10 @@ class GCPInstance(VMInterface):
 
         self.general_zone = "-".join(self.zone.split("-")[:2])  # us-east1-c -> us-east1
 
+        self.service_account = service_account or self.config.get("service_account")
+
     def create_gcp_config(self):
+
         subnetwork = f"projects/{self.network_projectid}/regions/{self.general_zone}/subnetworks/{self.network}"
         config = {
             "name": self.name,
@@ -143,7 +147,7 @@ class GCPInstance(VMInterface):
             # Allow the instance to access cloud storage and logging.
             "serviceAccounts": [
                 {
-                    "email": "default",
+                    "email": self.service_account,
                     "scopes": [
                         "https://www.googleapis.com/auth/devstorage.read_write",
                         "https://www.googleapis.com/auth/logging.write",
@@ -489,6 +493,9 @@ class GCPCluster(VMCluster):
         More information will be printed when constructing clusters to enable debugging.
     instance_labels: dict (optional)
         Labels to be applied to all GCP instances upon creation.
+    service_account: str
+        Service account that all VMs will run under.
+        Defaults to the default Compute Engine service account for your GCP project.
 
     Examples
     --------
@@ -581,6 +588,7 @@ class GCPCluster(VMCluster):
         preemptible=None,
         debug=False,
         instance_labels=None,
+        service_account=None,
         **kwargs,
     ):
 
@@ -624,6 +632,7 @@ class GCPCluster(VMCluster):
             if preemptible is not None
             else self.config.get("preemptible"),
             "instance_labels": instance_labels or self.config.get("instance_labels"),
+            "service_account": service_account or self.config.get("service_account"),
         }
         self.scheduler_options = {**self.options}
         self.worker_options = {**self.options}
