@@ -37,5 +37,5 @@ setup(
     [console_scripts]
     dask-ecs=dask_cloudprovider.cli.ecs:go
     """,
-    python_requires=">=3.8",
+    python_requires=">=3.9",
 )
