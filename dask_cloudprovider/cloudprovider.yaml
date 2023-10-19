@@ -108,6 +108,7 @@ cloudprovider:
     public_ingress: true # configure the scheduler to be externally accessible.  This assumes firefwall rules for 8787 and 8786
     instance_labels:
       container_vm: "dask-cloudprovider"
+    service_account: "default"
 
   hetzner:
     token: null # API token for interacting with the Hetzner cloud API
