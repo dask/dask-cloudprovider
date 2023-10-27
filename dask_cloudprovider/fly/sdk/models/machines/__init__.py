@@ -38,9 +38,9 @@ class FlyMachineConfigGuest(BaseModel):
 class FlyMachineConfigInit(BaseModel):
     """Model for FlyMachineConfig.init"""
 
-    exec: Union[str, None]
-    entrypoint: Union[str, None]
-    cmd: Union[str, None]
+    exec: Union[str, None] = None
+    entrypoint: Union[str, None] = None
+    cmd: Union[str, None] = None
     tty: bool = False
 
 

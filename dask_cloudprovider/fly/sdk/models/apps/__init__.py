@@ -25,4 +25,4 @@ class FlyAppDeleteRequest(BaseModel):
 
 class FlyAppDeleteResponse(BaseModel):
     app_name: str
-    status: str
+    status: int
