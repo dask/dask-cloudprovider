@@ -1,5 +1,5 @@
 Fly.io
-============
+======
 
 .. currentmodule:: dask_cloudprovider.fly
 
