@@ -78,13 +78,7 @@ class FlyMachine(VMInterface):
                 machines.FlyMachineConfigServices(
                     ports=[
                         machines.FlyMachineRequestConfigServicesPort(
-                            port=80, handlers=["http"]
-                        ),
-                        machines.FlyMachineRequestConfigServicesPort(
-                            port=443, handlers=["http", "tls"]
-                        ),
-                        machines.FlyMachineRequestConfigServicesPort(
-                            port=8786, handlers=["http", "tls"]
+                            port=8786
                         ),
                     ],
                     protocol="tcp",
@@ -92,6 +86,12 @@ class FlyMachine(VMInterface):
                 ),
                 machines.FlyMachineConfigServices(
                     ports=[
+                        machines.FlyMachineRequestConfigServicesPort(
+                            port=80, handlers=["http"]
+                        ),
+                        machines.FlyMachineRequestConfigServicesPort(
+                            port=443, handlers=["http", "tls"]
+                        ),
                         machines.FlyMachineRequestConfigServicesPort(
                             port=8787, handlers=["http", "tls"]
                         ),
@@ -120,15 +120,14 @@ class FlyMachine(VMInterface):
             name=self.name,  # The name of the machine.
             region=self.region,  # The deployment region for the machine.
         )
-        self.cluster._log(
-            f"[fly.io] Created machine name={self.name} id={self.machine.id}"
-        )
         self.host = f"{self.machine.id}.vm.{self.cluster.app_name}.internal"
         self.internal_ip = self.machine.private_ip
         self.port = 8786
-        # self.address = f'tcp://{self.host}:{self.port}'
-        self.address = f"{self.cluster.protocol}://[{self.machine.private_ip}]:8786"
-        # self.external_address = f'tls://{self.cluster.app_name}.fly.dev:443'
+        self.address = f"{self.cluster.protocol}://[{self.machine.private_ip}]:{self.port}"
+        # self.external_address = f"{self.cluster.protocol}://{self.host}:{self.port}"
+        self.cluster._log(
+            f"[fly.io] Created machine name={self.name} id={self.machine.id} internal_ip={self.internal_ip} address={self.address} external_address={self.external_address}"
+        )
         return self.address, self.external_address
 
     async def destroy_vm(self):
@@ -179,6 +178,8 @@ class FlyMachineScheduler(SchedulerMixin, FlyMachine):
             "python",
             "-m",
             "distributed.cli.dask_scheduler",
+            "--host",
+            "fly-local-6pn",
         ] + cli_keywords(scheduler_options, cls=_Scheduler)
 
     async def start(self):
@@ -269,6 +270,7 @@ class FlyMachineWorker(WorkerMixin, FlyMachine):
                         "opts": {
                             **worker_options,
                             "name": self.name,
+                            "host": "fly-local-6pn",
                         },
                     }
                 ),
@@ -429,7 +431,6 @@ class FlyMachineCluster(VMCluster):
             "protocol": self.config.get("protocol", "tcp"),
             "security": self.config.get("security", False),
             "host": "fly-local-6pn",
-            "security": self.config.get("security", False),
         }
         self.scheduler_options = {**self.options}
         self.worker_options = {**self.options}

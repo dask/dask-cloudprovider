@@ -70,7 +70,7 @@ class FlyMachineRequestConfigServicesPort(BaseModel):
     """Model for FlyMachineConfig.services.port"""
 
     port: int
-    handlers: list[str]
+    handlers: list[str] = []
 
     @validator("port")
     def validate_port(cls, port: int) -> int:
@@ -97,7 +97,7 @@ class FlyMachineRequestConfigServicesPort(BaseModel):
 class FlyMachineConfigServices(BaseModel):
     """Model for FlyMachineConfig.services"""
 
-    ports: list[FlyMachineRequestConfigServicesPort]
+    ports: list[FlyMachineRequestConfigServicesPort] = []
     protocol: str
     internal_port: int
 
