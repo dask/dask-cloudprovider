@@ -218,7 +218,7 @@ To launch `RAPIDS <https://rapids.ai/>`_ on AWS EC2 we can select a GPU instance
 
     cluster = EC2Cluster(
         ami="ami-0c7c7d78f752f8f17",  # Deep Learning AMI (this ID varies by region so find yours in the AWS Console)
-        docker_image="rapidsai/rapidsai:cuda10.1-runtime-ubuntu18.04-py3.8",
+        docker_image="rapidsai/rapidsai:cuda10.1-runtime-ubuntu18.04-py3.9",
         instance_type="p3.2xlarge",
         bootstrap=False,  # Docker is already installed on the Deep Learning AMI
         filesystem_size=120,
@@ -263,7 +263,7 @@ pull the RAPIDS Docker image. That way when a scheduler or worker VM is created 
             {
                 "type": "shell",
                 "inline": [
-                    "docker pull rapidsai/rapidsai:cuda10.1-runtime-ubuntu18.04-py3.8"
+                    "docker pull rapidsai/rapidsai:cuda10.1-runtime-ubuntu18.04-py3.9"
                 ]
             }
         ]
@@ -315,7 +315,7 @@ We can then run our code snippet again but this time it will take less than 5 mi
 
     cluster = EC2Cluster(
         ami="ami-04e5539cb82859e69",  # AMI ID provided by Packer
-        docker_image="rapidsai/rapidsai:cuda10.1-runtime-ubuntu18.04-py3.8",
+        docker_image="rapidsai/rapidsai:cuda10.1-runtime-ubuntu18.04-py3.9",
         instance_type="p3.2xlarge",
         bootstrap=False,
         filesystem_size=120,
