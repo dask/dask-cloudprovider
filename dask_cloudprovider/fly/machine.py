@@ -125,9 +125,18 @@ class FlyMachine(VMInterface):
         self.port = 8786
         self.address = f"{self.cluster.protocol}://[{self.machine.private_ip}]:{self.port}"
         # self.external_address = f"{self.cluster.protocol}://{self.host}:{self.port}"
-        self.cluster._log(
-            f"[fly.io] Created machine name={self.name} id={self.machine.id} internal_ip={self.internal_ip} address={self.address} external_address={self.external_address}"
+        log_attributes = {
+            'name': self.name,
+            'machine': self.machine.id,
+            'internal_ip': self.internal_ip,
+            'address': self.address,
+        }
+        if self.external_address is not None:
+            log_attributes['external_address'] = self.external_address
+        logline = "[fly.io] Created machine " + " ".join(
+            [f"{k}={v}" for k, v in log_attributes.items()]
         )
+        self.cluster._log(logline)
         return self.address, self.external_address
 
     async def destroy_vm(self):
@@ -144,7 +153,7 @@ class FlyMachine(VMInterface):
         self.cluster._log(f"[fly.io] Terminated machine {self.name}")
 
     async def wait_for_scheduler(self):
-        self.cluster._log(f"Waiting for scheduler to run at {self.host}:{self.port}")
+        self.cluster._log(f"Waiting for scheduler to run at {self.address}")
         while not asyncio.create_task(async_socket_open(self.internal_ip, self.port)):
             await asyncio.sleep(1)
         self.cluster._log("Scheduler is running")
@@ -333,7 +342,7 @@ class FlyMachineCluster(VMCluster):
     security : Security or bool, optional
         Configures communication security in this cluster. Can be a security
         object, or True. If True, temporary self-signed credentials will
-        be created automatically. Default is ``True``.
+        be created automatically. Default is ``False``.
     debug : bool, optional
         More information will be printed when constructing clusters to enable debugging.
 
