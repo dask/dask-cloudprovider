@@ -87,7 +87,7 @@ async def test_create_rapids_cluster_sync():
 
     with AzureVMCluster(
         vm_size="Standard_NC12s_v3",
-        docker_image="rapidsai/rapidsai:cuda11.0-runtime-ubuntu18.04-py3.8",
+        docker_image="rapidsai/rapidsai:cuda11.0-runtime-ubuntu18.04-py3.9",
         worker_class="dask_cuda.CUDAWorker",
         worker_options={"rmm_pool_size": "15GB"},
     ) as cluster:
