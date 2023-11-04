@@ -77,7 +77,7 @@ class Task:
         AWS resource tags to be applied to any resources that are created.
 
     name: str (optional)
-        Name for the task. Currently used for the --namecommand line argument to dask-worker.
+        Name for the task. Currently used for the --namecommand line argument to `dask worker`.
 
     platform_version: str (optional)
         Version of the AWS Fargate platform to use, e.g. "1.4.0" or "LATEST". This
@@ -368,7 +368,7 @@ class Scheduler(Task):
     scheduler_timeout: str
         Time of inactivity after which to kill the scheduler.
     scheduler_extra_args: List[str] (optional)
-        Any extra command line arguments to pass to dask-scheduler, e.g. ``["--tls-cert", "/path/to/cert.pem"]``
+        Any extra command line arguments to pass to ``dask scheduler``, e.g. ``["--tls-cert", "/path/to/cert.pem"]``
 
         Defaults to `None`, no extra command line arguments.
     kwargs: Dict()
@@ -386,7 +386,8 @@ class Scheduler(Task):
         self.task_type = "scheduler"
         self._overrides = {
             "command": [
-                "dask-scheduler",
+                "dask",
+                "scheduler",
                 "--idle-timeout",
                 scheduler_timeout,
             ]
@@ -434,24 +435,25 @@ class Worker(Task):
         self._mem = mem
         self._gpu = gpu
         self._nthreads = nthreads
+        _command = [
+            "dask",
+            "cuda" if self._gpu else None,
+            "worker",
+            self.scheduler,
+            "--name",
+            str(self.name),
+            "--nthreads",
+            "{}".format(
+                max(int(self._cpu / 1024), 1) if nthreads is None else self._nthreads
+            ),
+            "--memory-limit",
+            "{}GB".format(int(self._mem / 1024)),
+            "--death-timeout",
+            "60",
+        ]
+        _command = [e for e in _command if e is not None]
         self._overrides = {
-            "command": [
-                "dask-cuda-worker" if self._gpu else "dask-worker",
-                self.scheduler,
-                "--name",
-                str(self.name),
-                "--nthreads",
-                "{}".format(
-                    max(int(self._cpu / 1024), 1)
-                    if nthreads is None
-                    else self._nthreads
-                ),
-                "--memory-limit",
-                "{}GB".format(int(self._mem / 1024)),
-                "--death-timeout",
-                "60",
-            ]
-            + (list() if not extra_args else extra_args)
+            "command": _command + (list() if not extra_args else extra_args)
         }
 
 
@@ -503,7 +505,7 @@ class ECSCluster(SpecCluster, ConfigMixin):
 
         Defaults to ``8786``
     scheduler_extra_args: List[str] (optional)
-        Any extra command line arguments to pass to dask-scheduler, e.g. ``["--tls-cert", "/path/to/cert.pem"]``
+        Any extra command line arguments to pass to ``dask scheduler``, e.g. ``["--tls-cert", "/path/to/cert.pem"]``
 
         Defaults to `None`, no extra command line arguments.
     scheduler_task_definition_arn: str (optional)
@@ -549,7 +551,7 @@ class ECSCluster(SpecCluster, ConfigMixin):
         Defaults to `None`, meaning that the task definition will be created along with the cluster, and cleaned up once
         the cluster is shut down.
     worker_extra_args: List[str] (optional)
-        Any extra command line arguments to pass to dask-worker, e.g. ``["--tls-cert", "/path/to/cert.pem"]``
+        Any extra command line arguments to pass to ``dask worker``, e.g. ``["--tls-cert", "/path/to/cert.pem"]``
 
         Defaults to `None`, no extra command line arguments.
     worker_task_kwargs: dict (optional)
@@ -698,7 +700,7 @@ class ECSCluster(SpecCluster, ConfigMixin):
     ...     worker_gpu=1)
 
     By setting the ``worker_gpu`` option to something other than ``None`` will cause the cluster
-    to run ``dask-cuda-worker`` as the worker startup command. Setting this option will also change
+    to run ``dask cuda worker`` as the worker startup command. Setting this option will also change
     the default Docker image to ``rapidsai/rapidsai:latest``, if you're using a custom image
     you must ensure the NVIDIA CUDA toolkit is installed with a version that matches the host machine
     along with ``dask-cuda``.
@@ -1189,7 +1191,8 @@ class ECSCluster(SpecCluster, ConfigMixin):
                         "memoryReservation": self._scheduler_mem,
                         "essential": True,
                         "command": [
-                            "dask-scheduler",
+                            "dask",
+                            "scheduler",
                             "--idle-timeout",
                             self._scheduler_timeout,
                         ]
@@ -1259,17 +1262,23 @@ class ECSCluster(SpecCluster, ConfigMixin):
                         "resourceRequirements": resource_requirements,
                         "essential": True,
                         "command": [
-                            "dask-cuda-worker" if self._worker_gpu else "dask-worker",
-                            "--nthreads",
-                            "{}".format(
-                                max(int(self._worker_cpu / 1024), 1)
-                                if self._worker_nthreads is None
-                                else self._worker_nthreads
-                            ),
-                            "--memory-limit",
-                            "{}MB".format(int(self._worker_mem)),
-                            "--death-timeout",
-                            "60",
+                            e
+                            for e in [
+                                "dask",
+                                "cuda" if self._worker_gpu else None,
+                                "worker",
+                                "--nthreads",
+                                "{}".format(
+                                    max(int(self._worker_cpu / 1024), 1)
+                                    if self._worker_nthreads is None
+                                    else self._worker_nthreads
+                                ),
+                                "--memory-limit",
+                                "{}MB".format(int(self._worker_mem)),
+                                "--death-timeout",
+                                "60",
+                            ]
+                            if e is not None
                         ]
                         + (
                             list()

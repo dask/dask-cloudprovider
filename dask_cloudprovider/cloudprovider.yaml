@@ -40,7 +40,6 @@ cloudprovider:
     availability_zone: null # The availability zone to start you clusters. By default AWS will select the AZ with most free capacity.
     bootstrap: true # It is assumed that the AMI does not have Docker and needs bootstrapping. Set this to false if using a custom AMI with Docker already installed.
     auto_shutdown: true # Shutdown instances automatically if the scheduler or worker services time out.
-    # worker_command: "dask-worker" # The command for workers to run. If the instance_type is a GPU instance dask-cuda-worker will be used.
     ami: null # AMI ID to use for all instances. Defaults to latest Ubuntu 20.04 image.
     instance_type: "t2.micro" # Instance type for the scheduler and all workers
     scheduler_instance_type: "t2.micro" # Instance type for the scheduler

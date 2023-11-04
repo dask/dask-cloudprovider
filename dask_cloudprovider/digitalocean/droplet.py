@@ -119,7 +119,7 @@ class DropletCluster(VMCluster):
         The Docker image to run on all instances.
 
         This image must have a valid Python environment and have ``dask`` installed in order for the
-        ``dask-scheduler`` and ``dask-worker`` commands to be available. It is recommended the Python
+        ``dask scheduler`` and ``dask worker`` commands to be available. It is recommended the Python
         environment matches your local environment where ``EC2Cluster`` is being created from.
 
         For GPU instance types the Docker image much have NVIDIA drivers and ``dask-cuda`` installed.
