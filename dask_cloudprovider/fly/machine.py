@@ -77,9 +77,7 @@ class FlyMachine(VMInterface):
             services=[
                 machines.FlyMachineConfigServices(
                     ports=[
-                        machines.FlyMachineRequestConfigServicesPort(
-                            port=8786
-                        ),
+                        machines.FlyMachineRequestConfigServicesPort(port=8786),
                     ],
                     protocol="tcp",
                     internal_port=8786,
@@ -123,16 +121,18 @@ class FlyMachine(VMInterface):
         self.host = f"{self.machine.id}.vm.{self.cluster.app_name}.internal"
         self.internal_ip = self.machine.private_ip
         self.port = 8786
-        self.address = f"{self.cluster.protocol}://[{self.machine.private_ip}]:{self.port}"
+        self.address = (
+            f"{self.cluster.protocol}://[{self.machine.private_ip}]:{self.port}"
+        )
         # self.external_address = f"{self.cluster.protocol}://{self.host}:{self.port}"
         log_attributes = {
-            'name': self.name,
-            'machine': self.machine.id,
-            'internal_ip': self.internal_ip,
-            'address': self.address,
+            "name": self.name,
+            "machine": self.machine.id,
+            "internal_ip": self.internal_ip,
+            "address": self.address,
         }
         if self.external_address is not None:
-            log_attributes['external_address'] = self.external_address
+            log_attributes["external_address"] = self.external_address
         logline = "[fly.io] Created machine " + " ".join(
             [f"{k}={v}" for k, v in log_attributes.items()]
         )
