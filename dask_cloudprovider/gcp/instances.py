@@ -110,7 +110,6 @@ class GCPInstance(VMInterface):
         self.service_account = service_account or self.config.get("service_account")
 
     def create_gcp_config(self):
-
         subnetwork = f"projects/{self.network_projectid}/regions/{self.general_zone}/subnetworks/{self.network}"
         config = {
             "name": self.name,
@@ -205,7 +204,6 @@ class GCPInstance(VMInterface):
         return config
 
     async def create_vm(self):
-
         self.cloud_init = self.cluster.render_process_cloud_init(self)
 
         self.gcp_config = self.create_gcp_config()
@@ -591,7 +589,6 @@ class GCPCluster(VMCluster):
         service_account=None,
         **kwargs,
     ):
-
         self.compute = GCPCompute()
 
         self.config = dask.config.get("cloudprovider.gcp", {})
@@ -650,7 +647,6 @@ class GCPCompute:
         self._compute = self.refresh_client()
 
     def refresh_client(self):
-
         if os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", False):
             import google.oauth2.service_account  # google-auth
 
