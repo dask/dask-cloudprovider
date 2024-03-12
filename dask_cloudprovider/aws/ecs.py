@@ -484,6 +484,10 @@ class ECSCluster(SpecCluster, ConfigMixin):
         The docker image to use for the scheduler and worker tasks.
 
         Defaults to ``daskdev/dask:latest`` or ``rapidsai/rapidsai:latest`` if ``worker_gpu`` is set.
+    cpu_architecture: str (optional)
+        Runtime platform CPU architecture
+
+        Defaults to ``X86_64``.
     scheduler_cpu: int (optional)
         The amount of CPU to request for the scheduler in milli-cpu (1/1024).
 
@@ -712,6 +716,7 @@ class ECSCluster(SpecCluster, ConfigMixin):
         fargate_workers=None,
         fargate_spot=None,
         image=None,
+        cpu_architecture="X86_64",
         scheduler_cpu=None,
         scheduler_mem=None,
         scheduler_port=8786,
@@ -754,6 +759,7 @@ class ECSCluster(SpecCluster, ConfigMixin):
         mount_volumes_on_scheduler=False,
         **kwargs,
     ):
+        self._cpu_architecture = cpu_architecture
         self._fargate_scheduler = fargate_scheduler
         self._fargate_workers = fargate_workers
         self._fargate_spot = fargate_spot
@@ -1223,6 +1229,7 @@ class ECSCluster(SpecCluster, ConfigMixin):
                 if self._volumes and self._mount_volumes_on_scheduler
                 else [],
                 requiresCompatibilities=["FARGATE"] if self._fargate_scheduler else [],
+                runtimePlatform={"cpuArchitecture": self._cpu_architecture},
                 cpu=str(self._scheduler_cpu),
                 memory=str(self._scheduler_mem),
                 tags=dict_to_aws(self.tags),
@@ -1297,6 +1304,7 @@ class ECSCluster(SpecCluster, ConfigMixin):
                 ],
                 volumes=self._volumes if self._volumes else [],
                 requiresCompatibilities=["FARGATE"] if self._fargate_workers else [],
+                runtimePlatform={"cpuArchitecture": self._cpu_architecture},
                 cpu=str(self._worker_cpu),
                 memory=str(self._worker_mem),
                 tags=dict_to_aws(self.tags),
