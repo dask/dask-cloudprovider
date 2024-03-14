@@ -759,11 +759,11 @@ class ECSCluster(SpecCluster, ConfigMixin):
         mount_volumes_on_scheduler=False,
         **kwargs,
     ):
-        self._cpu_architecture = cpu_architecture
         self._fargate_scheduler = fargate_scheduler
         self._fargate_workers = fargate_workers
         self._fargate_spot = fargate_spot
         self.image = image
+        self._cpu_architecture = cpu_architecture.upper()
         self._scheduler_cpu = scheduler_cpu
         self._scheduler_mem = scheduler_mem
         self._scheduler_port = scheduler_port
