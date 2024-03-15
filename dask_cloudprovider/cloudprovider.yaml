@@ -15,6 +15,7 @@ cloudprovider:
     scheduler_timeout: "5 minutes" # Length of inactivity to wait before closing the cluster
 
     image: "daskdev/dask:latest" # Docker image to use for non GPU tasks
+    cpu_architecture: "X86_64" # Runtime platform CPU architecture
     gpu_image: "rapidsai/rapidsai:latest" # Docker image to use for GPU tasks
     cluster_name_template: "dask-{uuid}" # Template to use when creating a cluster
     cluster_arn: "" # ARN of existing ECS cluster to use (if not set one will be created)
