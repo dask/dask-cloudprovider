@@ -48,6 +48,7 @@ class AzureVM(VMInterface):
         extra_bootstrap=None,
         auto_shutdown: bool = None,
         marketplace_plan: dict = {},
+        extra_vm_options: Optional[dict] = None,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
@@ -71,6 +72,7 @@ class AzureVM(VMInterface):
         self.auto_shutdown = auto_shutdown
         self.env_vars = env_vars
         self.marketplace_plan = marketplace_plan
+        self.extra_vm_options = extra_vm_options or {}
 
     async def create_vm(self):
         [subnet_info, *_] = await self.cluster.call_async(
@@ -178,6 +180,13 @@ class AzureVM(VMInterface):
             ] = self.marketplace_plan["product"]
             vm_parameters["storage_profile"]["image_reference"]["version"] = "latest"
             self.cluster._log("Using Marketplace VM image with a Plan")
+
+        repeated = self.extra_vm_options.keys() & vm_parameters.keys()
+        if repeated:
+            raise TypeError(
+                f"Parameters are passed in both 'extra_vm_options' and as regular parameters: {repeated}"
+            )
+        vm_parameters = {**self.extra_vm_options, **vm_parameters}
 
         self.cluster._log("Creating VM")
         if self.cluster.debug:
@@ -344,6 +353,9 @@ class AzureVMCluster(VMCluster):
         The ID of the Azure Subscription to create the virtual machines in. If not specified, then
         dask-cloudprovider will attempt to use the configured default for the Azure CLI. List your
         subscriptions with ``az account list``.
+    extra_vm_options: dict[str, Any]:
+        Additional arguments to provide to Azure's ``VirtualMachinesOperations.begin_create_or_update``
+        when creating the scheduler and worker VMs.
 
     Examples
     --------
@@ -472,6 +484,7 @@ class AzureVMCluster(VMCluster):
         debug: bool = False,
         marketplace_plan: dict = {},
         subscription_id: Optional[str] = None,
+        extra_vm_options: Optional[dict] = None,
         **kwargs,
     ):
         self.config = ClusterConfig(dask.config.get("cloudprovider.azure", {}))
@@ -550,7 +563,9 @@ class AzureVMCluster(VMCluster):
                     """To create a virtual machine from Marketplace image or a custom image sourced
                 from a Marketplace image with a plan, all 3 fields 'name', 'publisher' and 'product' must be passed."""
                 )
-
+        self.extra_vm_options = extra_vm_options or self.config.get(
+            "azurevm.extra_vm_options"
+        )
         self.options = {
             "cluster": self,
             "config": self.config,
@@ -563,6 +578,7 @@ class AzureVMCluster(VMCluster):
             "auto_shutdown": self.auto_shutdown,
             "docker_image": self.docker_image,
             "marketplace_plan": self.marketplace_plan,
+            "extra_vm_options": self.extra_vm_options,
         }
         self.scheduler_options = {
             "vm_size": self.scheduler_vm_size,
