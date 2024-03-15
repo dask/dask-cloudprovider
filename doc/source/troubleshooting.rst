@@ -79,3 +79,14 @@ and ``extra_bootstrap`` argument where you can provide additional bash commands 
     cluster = AzureVMCluster(...
                              docker_image="my_private_image:latest",
                              extra_bootstrap=["docker login -u 'username' -p 'password'"])
+
+If you need to access Artifact/Container Registry in GCP, one way of doing it would be to authenticate Docker with 
+`gcloud credential helper <https://cloud.google.com/artifact-registry/docs/docker/authentication#gcloud-helper>`_ by adding extra bootstrap params similar to 
+the ones below:
+
+.. code-block:: python
+
+    from dask_cloudprovider.gcp import GCPCluster
+    cluster = GCPCluster(...
+                             docker_image=f"{region}-docker.pkg.dev/{project}/{repo}/{image}:{tag}",
+                             extra_bootstrap=[f"gcloud auth configure-docker {region}-docker.pkg.dev"])
