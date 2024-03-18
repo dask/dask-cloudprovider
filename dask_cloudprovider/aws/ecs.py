@@ -371,7 +371,7 @@ class Scheduler(Task):
         Any extra command line arguments to pass to dask-scheduler, e.g. ``["--tls-cert", "/path/to/cert.pem"]``
 
         Defaults to `None`, no extra command line arguments.
-    kwargs: Dict()
+    kwargs:
         Other kwargs to be passed to :class:`Task`.
 
     See :class:`Task` for parameter info.
@@ -413,7 +413,7 @@ class Worker(Task):
     scheduler: str
         The address of the scheduler
 
-    kwargs: Dict()
+    kwargs:
         Other kwargs to be passed to :class:`Task`.
     """
 
@@ -682,7 +682,7 @@ class ECSCluster(SpecCluster, ConfigMixin):
         mounted in worker tasks. This setting controls whether volumes are also mounted in the scheduler task.
 
         Default ``False``.
-    **kwargs: dict
+    **kwargs:
         Additional keyword arguments to pass to ``SpecCluster``.
 
     Examples
@@ -1396,7 +1396,7 @@ class FargateCluster(ECSCluster):
 
     Parameters
     ----------
-    kwargs: dict
+    kwargs:
         Keyword arguments to be passed to :class:`ECSCluster`.
 
     Examples
