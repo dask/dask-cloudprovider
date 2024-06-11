@@ -118,3 +118,6 @@ cloudprovider:
     image: "ubuntu-20.04" # Operating System image to use
     docker_image: "daskdev/dask:latest" # docker image to use
     bootstrap: true # It is assumed that the OS image does not have Docker and needs bootstrapping. Set this to false if using a custom image with Docker already installed.
+
+  ibm:
+  # TODO

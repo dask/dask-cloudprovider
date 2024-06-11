@@ -42,3 +42,8 @@ def __getattr__(name):
             "DigitalOcean cluster managers must be imported from the digitalocean subpackage. "
             f"Please import dask_cloudprovider.digitalocean.{name}"
         )
+    if name in ["IBMCodeEngineCluster"]:
+        raise ImportError(
+            "IBM cluster managers must be imported from the ibm subpackage. "
+            f"Please import dask_cloudprovider.ibm.{name}"
+        )

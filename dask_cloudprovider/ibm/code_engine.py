@@ -16,4 +16,4 @@ class IBMCodeEngineScheduler(SchedulerMixin, IBMCodeEngine):
 class IBMCodeEngineWorker(WorkerMixin, IBMCodeEngine):
 
 
-class IBMCodeEngineVMCluster(VMCluster):
+class IBMCodeEngineCluster(VMCluster):
