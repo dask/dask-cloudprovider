@@ -15,7 +15,7 @@ extras_require = {
     "digitalocean": ["python-digitalocean>=1.15.0"],
     "gcp": ["google-api-python-client>=1.12.5", "google-auth>=1.23.0"],
     "hetzner": ["hcloud>=1.10.0"],
-    "ibm": {"ibm_code_engine_sdk>=3.1.1"}
+    "ibm": {"ibm_code_engine_sdk>=3.1.0"}
 }
 extras_require["all"] = set(pkg for pkgs in extras_require.values() for pkg in pkgs)
 

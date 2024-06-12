@@ -120,4 +120,7 @@ cloudprovider:
     bootstrap: true # It is assumed that the OS image does not have Docker and needs bootstrapping. Set this to false if using a custom image with Docker already installed.
 
   ibm:
-  # TODO
+    api_key: null
+    image: "icr.io/codeengine/helloworld"
+    region: "eu-es"
+    project_id: ""
