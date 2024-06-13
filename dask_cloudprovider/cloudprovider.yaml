@@ -121,6 +121,6 @@ cloudprovider:
 
   ibm:
     api_key: null
-    image: "icr.io/codeengine/helloworld"
+    image: "daskdev/dask:latest"
     region: "eu-es"
     project_id: ""
