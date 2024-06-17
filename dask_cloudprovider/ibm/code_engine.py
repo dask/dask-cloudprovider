@@ -9,10 +9,12 @@ from dask_cloudprovider.generic.vmcluster import (
     WorkerMixin,
 )
 import time
+from distributed.core import Status
 
 try:
     from ibm_code_engine_sdk.code_engine_v2 import CodeEngineV2
     from ibm_cloud_sdk_core.authenticators import IAMAuthenticator
+    from ibm_code_engine_sdk.ibm_cloud_code_engine_v1 import IbmCloudCodeEngineV1
 except ImportError as e:
     msg = (
         "Dask Cloud Provider IBM requirements are not installed.\n\n"
@@ -42,7 +44,7 @@ class IBMCodeEngine(VMInterface):
         self.region = region
         self.project_id = project_id
         self.api_key = api_key
-
+        
         authenticator = IAMAuthenticator(self.api_key, url='https://iam.cloud.ibm.com')
         authenticator.set_disable_ssl_verification(True)  # Disable SSL verification for the authenticator
 
@@ -51,7 +53,6 @@ class IBMCodeEngine(VMInterface):
         self.code_engine_service.set_disable_ssl_verification(True)  # Disable SSL verification for the service instance
 
     async def create_vm(self):
-
         response = self.code_engine_service.create_app(
             project_id=self.project_id,
             image_reference=self.image,
@@ -84,8 +85,35 @@ class IBMCodeEngine(VMInterface):
         )
 
 
+# TODO: Try this new way (use url instead of ip and port)
+# TODO: Create and use a tls certificate
 class IBMCodeEngineScheduler(SchedulerMixin, IBMCodeEngine):
-    pass
+    """Scheduler running in a GCP instance."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    async def start(self):
+        await self.start_scheduler()
+        self.status = Status.running
+
+    async def start_scheduler(self):
+        self.cluster._log(
+            f"Launching cluster with the following configuration: "
+            f"\n  Source Image: {self.image} "
+            f"\n  Region: {self.region} "
+            f"\n  Project id: {self.project_id} "
+        )
+        self.cluster._log("Creating scheduler instance")
+        self.internal_ip, self.external_ip = await self.create_vm()
+        self.address = f"{self.cluster.protocol}://{self.external_ip}:443"
+        await self.wait_for_scheduler()
+
+        # need to reserve internal IP for workers
+        # gcp docker containers can't see resolve ip address
+        self.cluster.scheduler_internal_ip = self.internal_ip
+        self.cluster.scheduler_external_ip = self.external_ip
+        self.cluster.scheduler_port = self.port
 
 
 class IBMCodeEngineWorker(WorkerMixin, IBMCodeEngine):
