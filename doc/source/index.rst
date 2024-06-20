@@ -67,6 +67,7 @@ this code.
 
     aws.rst
     digitalocean.rst
+    fly.rst
     gcp.rst
     azure.rst
     hetzner.rst
