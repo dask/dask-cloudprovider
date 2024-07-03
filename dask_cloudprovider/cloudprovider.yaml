@@ -122,5 +122,5 @@ cloudprovider:
   ibm:
     api_key: null
     image: "daskdev/dask:latest"
-    region: "eu-es"
+    region: "eu-de"
     project_id: ""

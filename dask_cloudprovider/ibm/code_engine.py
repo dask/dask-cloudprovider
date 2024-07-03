@@ -53,19 +53,31 @@ class IBMCodeEngine(VMInterface):
         self.code_engine_service.set_disable_ssl_verification(True)  # Disable SSL verification for the service instance
 
     async def create_vm(self):
+        components = self.command.split()
+        python_command = ' '.join(components[components.index(next(filter(lambda x: x.startswith('python'), components))):])
+
         response = self.code_engine_service.create_app(
             project_id=self.project_id,
             image_reference=self.image,
-            name='my-app',
-            run_commands=['python', '-m', 'distributed.cli.dask_scheduler'],
+            name=self.name,
+            run_commands=python_command.split(),
             image_port=8786,
+            scale_ephemeral_storage_limit="1G",
+            run_env_variables=[
+                {
+                    "type": "literal",
+                    "name": "DASK_INTERNAL_INHERIT_CONFIG",
+                    "key": "DASK_INTERNAL_INHERIT_CONFIG",
+                    "value": dask.config.serialize(dask.config.global_config),
+                }
+            ]
         )
         app = response.get_result()
 
         while True:
             response = self.code_engine_service.get_app(
                 project_id=self.project_id,
-                name='my-app',
+                name=self.name,
             )
             app = response.get_result()
             if app["status"] == "ready":
@@ -81,12 +93,11 @@ class IBMCodeEngine(VMInterface):
     async def destroy_vm(self):
         response = self.code_engine_service.delete_app(
             project_id=self.project_id,
-            name='my-app',
+            name=self.name,
         )
 
 
-# TODO: Try this new way (use url instead of ip and port)
-# TODO: Create and use a tls certificate
+# To connect you have to do it to the address my-app.1i6kkczwe7b5.eu-de.codeengine.appdomain.cloud without specifying port, or specifying 443 for https or 80 for http
 class IBMCodeEngineScheduler(SchedulerMixin, IBMCodeEngine):
     """Scheduler running in a GCP instance."""
 
@@ -94,6 +105,8 @@ class IBMCodeEngineScheduler(SchedulerMixin, IBMCodeEngine):
         super().__init__(*args, **kwargs)
 
     async def start(self):
+        self.cluster.protocol = "tcp"
+        self.port = 443
         await self.start_scheduler()
         self.status = Status.running
 
@@ -104,9 +117,18 @@ class IBMCodeEngineScheduler(SchedulerMixin, IBMCodeEngine):
             f"\n  Region: {self.region} "
             f"\n  Project id: {self.project_id} "
         )
+        print(self.port)
+        print(self.external_address)
         self.cluster._log("Creating scheduler instance")
         self.internal_ip, self.external_ip = await self.create_vm()
-        self.address = f"{self.cluster.protocol}://{self.external_ip}:443"
+        self.address = f"{self.cluster.protocol}://{self.external_ip}:{self.port}"
+        print(self.address)
+        print(self.internal_ip)
+        print(self.external_ip)
+        print(self.external_address)
+        print(self.port)
+        print(self.cluster)
+        
         await self.wait_for_scheduler()
 
         # need to reserve internal IP for workers
@@ -114,7 +136,6 @@ class IBMCodeEngineScheduler(SchedulerMixin, IBMCodeEngine):
         self.cluster.scheduler_internal_ip = self.internal_ip
         self.cluster.scheduler_external_ip = self.external_ip
         self.cluster.scheduler_port = self.port
-
 
 class IBMCodeEngineWorker(WorkerMixin, IBMCodeEngine):
     pass
@@ -127,6 +148,7 @@ class IBMCodeEngineCluster(VMCluster):
         region: str = None,
         project_id: str = None,
         debug: bool = False,
+        security: bool = True,
         **kwargs,
     ):
         self.config = ClusterConfig(dask.config.get("cloudprovider.ibm", {}))
@@ -150,4 +172,4 @@ class IBMCodeEngineCluster(VMCluster):
         }
         self.scheduler_options = {**self.options}
         self.worker_options = {**self.options}
-        super().__init__(debug=debug, **kwargs)
+        super().__init__(security=security, debug=debug, **kwargs)
