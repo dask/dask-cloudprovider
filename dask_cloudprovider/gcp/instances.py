@@ -671,7 +671,7 @@ class GCPCompute:
             credentials, _ = google.auth.default()
 
         # Use the credentials to build a service client
-        return googleapiclient.discovery.build('compute', 'v1', credentials=credentials)
+        return googleapiclient.discovery.build("compute", "v1", credentials=credentials)
 
     def instances(self):
         try:
