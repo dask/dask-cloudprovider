@@ -19,6 +19,7 @@ from distributed.core import Status
 
 try:
     import googleapiclient.discovery
+    import google.auth
     from googleapiclient.errors import HttpError
 except ImportError as e:
     msg = (
@@ -658,38 +659,19 @@ class GCPCompute:
         self._compute = self.refresh_client()
 
     def refresh_client(self):
-        if os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", False):
+        if self.service_account_credentials:
             import google.oauth2.service_account  # google-auth
 
-            creds = google.oauth2.service_account.Credentials.from_service_account_file(
-                os.environ["GOOGLE_APPLICATION_CREDENTIALS"],
-                scopes=["https://www.googleapis.com/auth/cloud-platform"],
-            )
-        elif self.service_account_credentials:
-            import google.oauth2.service_account  # google-auth
-
-            creds = google.oauth2.service_account.Credentials.from_service_account_info(
+            credentials = google.oauth2.service_account.Credentials.from_service_account_info(
                 self.service_account_credentials,
                 scopes=["https://www.googleapis.com/auth/cloud-platform"],
             )
         else:
-            import google.auth.credentials  # google-auth
+            # Obtain Application Default Credentials
+            credentials, _ = google.auth.default()
 
-            path = os.path.join(
-                os.path.expanduser("~"), ".config/gcloud/credentials.db"
-            )
-            if not os.path.exists(path):
-                raise GCPCredentialsError()
-            conn = sqlite3.connect(path)
-            creds_rows = conn.execute("select * from credentials").fetchall()
-            with tmpfile() as f:
-                with open(f, "w") as f_:
-                    # take first row
-                    f_.write(creds_rows[0][1])
-                creds, _ = google.auth.load_credentials_from_file(filename=f)
-        return googleapiclient.discovery.build(
-            "compute", "v1", credentials=creds, requestBuilder=build_request(creds)
-        )
+        # Use the credentials to build a service client
+        return googleapiclient.discovery.build('compute', 'v1', credentials=credentials)
 
     def instances(self):
         try:
