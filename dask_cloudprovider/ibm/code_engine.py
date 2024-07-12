@@ -56,6 +56,9 @@ class IBMCodeEngine(VMInterface):
         components = self.command.split()
         python_command = ' '.join(components[components.index(next(filter(lambda x: x.startswith('python'), components))):])
 
+        """python_command += " --protocol"
+        python_command += " ws"""
+
         response = self.code_engine_service.create_app(
             project_id=self.project_id,
             image_reference=self.image,
@@ -74,7 +77,8 @@ class IBMCodeEngine(VMInterface):
         )
         app = response.get_result()
 
-        while True:
+        # This loop is to wait until the app is ready, it is necessary to get the internal/external URL
+        """while True:
             response = self.code_engine_service.get_app(
                 project_id=self.project_id,
                 name=self.name,
@@ -86,15 +90,19 @@ class IBMCodeEngine(VMInterface):
             time.sleep(1)
 
         internal_url = app["endpoint_internal"].split("//")[1]
-        external_url = app["endpoint"].split("//")[1]
+        external_url = None # app["endpoint"].split("//")[1]"""
 
-        return internal_url, external_url
+        # Tested with interal URL, internal IP and external URL, all fail
+        internal_url = input("Internal URL: ")
+
+        return internal_url, None
 
     async def destroy_vm(self):
         response = self.code_engine_service.delete_app(
             project_id=self.project_id,
             name=self.name,
         )
+        pass
 
 
 # To connect you have to do it to the address my-app.1i6kkczwe7b5.eu-de.codeengine.appdomain.cloud without specifying port, or specifying 443 for https or 80 for http
@@ -105,8 +113,8 @@ class IBMCodeEngineScheduler(SchedulerMixin, IBMCodeEngine):
         super().__init__(*args, **kwargs)
 
     async def start(self):
-        self.cluster.protocol = "tcp"
-        self.port = 443
+        self.cluster.protocol = "ws"        # Tested with "tcp" and "ws", fails
+        self.port = 443                     # Tested with 443 and 8786, fails
         await self.start_scheduler()
         self.status = Status.running
 
@@ -117,22 +125,16 @@ class IBMCodeEngineScheduler(SchedulerMixin, IBMCodeEngine):
             f"\n  Region: {self.region} "
             f"\n  Project id: {self.project_id} "
         )
-        print(self.port)
-        print(self.external_address)
         self.cluster._log("Creating scheduler instance")
         self.internal_ip, self.external_ip = await self.create_vm()
-        self.address = f"{self.cluster.protocol}://{self.external_ip}:{self.port}"
+        self.address = f"{self.cluster.protocol}://{self.internal_ip}:{self.port}"
         print(self.address)
         print(self.internal_ip)
         print(self.external_ip)
-        print(self.external_address)
         print(self.port)
-        print(self.cluster)
         
         await self.wait_for_scheduler()
 
-        # need to reserve internal IP for workers
-        # gcp docker containers can't see resolve ip address
         self.cluster.scheduler_internal_ip = self.internal_ip
         self.cluster.scheduler_external_ip = self.external_ip
         self.cluster.scheduler_port = self.port
