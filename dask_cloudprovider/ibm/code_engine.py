@@ -1,6 +1,9 @@
 import dask
 from dask_cloudprovider.config import ClusterConfig
 import dask.config
+import uuid
+import json
+import shlex
 
 from dask_cloudprovider.generic.vmcluster import (
     VMCluster,
@@ -10,6 +13,7 @@ from dask_cloudprovider.generic.vmcluster import (
 )
 import time
 from distributed.core import Status
+from distributed.security import Security
 
 try:
     from ibm_code_engine_sdk.code_engine_v2 import CodeEngineV2
@@ -55,9 +59,7 @@ class IBMCodeEngine(VMInterface):
     async def create_vm(self):
         components = self.command.split()
         python_command = ' '.join(components[components.index(next(filter(lambda x: x.startswith('python'), components))):])
-
-        """python_command += " --protocol"
-        python_command += " ws"""
+        python_command += ' --protocol ws,tcp'
 
         response = self.code_engine_service.create_app(
             project_id=self.project_id,
@@ -78,7 +80,7 @@ class IBMCodeEngine(VMInterface):
         app = response.get_result()
 
         # This loop is to wait until the app is ready, it is necessary to get the internal/external URL
-        """while True:
+        while True:
             response = self.code_engine_service.get_app(
                 project_id=self.project_id,
                 name=self.name,
@@ -89,13 +91,11 @@ class IBMCodeEngine(VMInterface):
             
             time.sleep(1)
 
+        print("JOB RUNNING: ", app["name"])
         internal_url = app["endpoint_internal"].split("//")[1]
-        external_url = None # app["endpoint"].split("//")[1]"""
+        public_url = app["endpoint"].split("//")[1]
 
-        # Tested with interal URL, internal IP and external URL, all fail
-        internal_url = input("Internal URL: ")
-
-        return internal_url, None
+        return internal_url, public_url
 
     async def destroy_vm(self):
         response = self.code_engine_service.delete_app(
@@ -113,8 +113,8 @@ class IBMCodeEngineScheduler(SchedulerMixin, IBMCodeEngine):
         super().__init__(*args, **kwargs)
 
     async def start(self):
-        self.cluster.protocol = "ws"        # Tested with "tcp" and "ws", fails
-        self.port = 443                     # Tested with 443 and 8786, fails
+        self.cluster.protocol = "wss"
+        self.port = 443
         await self.start_scheduler()
         self.status = Status.running
 
@@ -127,7 +127,7 @@ class IBMCodeEngineScheduler(SchedulerMixin, IBMCodeEngine):
         )
         self.cluster._log("Creating scheduler instance")
         self.internal_ip, self.external_ip = await self.create_vm()
-        self.address = f"{self.cluster.protocol}://{self.internal_ip}:{self.port}"
+        self.address = f"{self.cluster.protocol}://{self.external_ip}:{self.port}"
         print(self.address)
         print(self.internal_ip)
         print(self.external_ip)
@@ -174,4 +174,7 @@ class IBMCodeEngineCluster(VMCluster):
         }
         self.scheduler_options = {**self.options}
         self.worker_options = {**self.options}
-        super().__init__(security=security, debug=debug, **kwargs)
+
+        # https://letsencrypt.org/certificates/ --> ISRG Root X1
+        sec = Security(require_encryption=False, tls_ca_file="-----BEGIN CERTIFICATE-----\nMIIFazCCA1OgAwIBAgIRAIIQz7DSQONZRGPgu2OCiwAwDQYJKoZIhvcNAQELBQAw\nTzELMAkGA1UEBhMCVVMxKTAnBgNVBAoTIEludGVybmV0IFNlY3VyaXR5IFJlc2Vh\ncmNoIEdyb3VwMRUwEwYDVQQDEwxJU1JHIFJvb3QgWDEwHhcNMTUwNjA0MTEwNDM4\nWhcNMzUwNjA0MTEwNDM4WjBPMQswCQYDVQQGEwJVUzEpMCcGA1UEChMgSW50ZXJu\nZXQgU2VjdXJpdHkgUmVzZWFyY2ggR3JvdXAxFTATBgNVBAMTDElTUkcgUm9vdCBY\nMTCCAiIwDQYJKoZIhvcNAQEBBQADggIPADCCAgoCggIBAK3oJHP0FDfzm54rVygc\nh77ct984kIxuPOZXoHj3dcKi/vVqbvYATyjb3miGbESTtrFj/RQSa78f0uoxmyF+\n0TM8ukj13Xnfs7j/EvEhmkvBioZxaUpmZmyPfjxwv60pIgbz5MDmgK7iS4+3mX6U\nA5/TR5d8mUgjU+g4rk8Kb4Mu0UlXjIB0ttov0DiNewNwIRt18jA8+o+u3dpjq+sW\nT8KOEUt+zwvo/7V3LvSye0rgTBIlDHCNAymg4VMk7BPZ7hm/ELNKjD+Jo2FR3qyH\nB5T0Y3HsLuJvW5iB4YlcNHlsdu87kGJ55tukmi8mxdAQ4Q7e2RCOFvu396j3x+UC\nB5iPNgiV5+I3lg02dZ77DnKxHZu8A/lJBdiB3QW0KtZB6awBdpUKD9jf1b0SHzUv\nKBds0pjBqAlkd25HN7rOrFleaJ1/ctaJxQZBKT5ZPt0m9STJEadao0xAH0ahmbWn\nOlFuhjuefXKnEgV4We0+UXgVCwOPjdAvBbI+e0ocS3MFEvzG6uBQE3xDk3SzynTn\njh8BCNAw1FtxNrQHusEwMFxIt4I7mKZ9YIqioymCzLq9gwQbooMDQaHWBfEbwrbw\nqHyGO0aoSCqI3Haadr8faqU9GY/rOPNk3sgrDQoo//fb4hVC1CLQJ13hef4Y53CI\nrU7m2Ys6xt0nUW7/vGT1M0NPAgMBAAGjQjBAMA4GA1UdDwEB/wQEAwIBBjAPBgNV\nHRMBAf8EBTADAQH/MB0GA1UdDgQWBBR5tFnme7bl5AFzgAiIyBpY9umbbjANBgkq\nhkiG9w0BAQsFAAOCAgEAVR9YqbyyqFDQDLHYGmkgJykIrGF1XIpu+ILlaS/V9lZL\nubhzEFnTIZd+50xx+7LSYK05qAvqFyFWhfFQDlnrzuBZ6brJFe+GnY+EgPbk6ZGQ\n3BebYhtF8GaV0nxvwuo77x/Py9auJ/GpsMiu/X1+mvoiBOv/2X/qkSsisRcOj/KK\nNFtY2PwByVS5uCbMiogziUwthDyC3+6WVwW6LLv3xLfHTjuCvjHIInNzktHCgKQ5\nORAzI4JMPJ+GslWYHb4phowim57iaztXOoJwTdwJx4nLCgdNbOhdjsnvzqvHu7Ur\nTkXWStAmzOVyyghqpZXjFaH3pO3JLF+l+/+sKAIuvtd7u+Nxe5AW0wdeRlN8NwdC\njNPElpzVmbUq4JUagEiuTDkHzsxHpFKVK7q4+63SM1N95R1NbdWhscdCb+ZAJzVc\noyi3B43njTOQ5yOf+1CceWxG1bQVs5ZufpsMljq4Ui0/1lvh+wjChP4kqKOJ2qxq\n4RgqsahDYVvTH9w7jXbyLeiNdd8XM2w9U/t7y0Ff/9yi0GE44Za4rF2LN9d11TPA\nmRGunUHBcnWEvgJBQl9nJEiU0Zsnvgc/ubhPgXRR4Xq37Z0j4r7g1SgEEzwxA57d\nemyPxgcYxn/eR44/KJ4EBs+lVDR3veyJm+kXQ99b21/+jh5Xos1AnX5iItreGCc=\n-----END CERTIFICATE-----")
+        super().__init__(security=sec, debug=debug, **kwargs)
