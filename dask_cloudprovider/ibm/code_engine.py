@@ -1,9 +1,7 @@
 import dask
 from dask_cloudprovider.config import ClusterConfig
 import dask.config
-import uuid
 import json
-import shlex
 
 from dask_cloudprovider.generic.vmcluster import (
     VMCluster,
@@ -18,7 +16,6 @@ from distributed.security import Security
 try:
     from ibm_code_engine_sdk.code_engine_v2 import CodeEngineV2
     from ibm_cloud_sdk_core.authenticators import IAMAuthenticator
-    from ibm_code_engine_sdk.ibm_cloud_code_engine_v1 import IbmCloudCodeEngineV1
 except ImportError as e:
     msg = (
         "Dask Cloud Provider IBM requirements are not installed.\n\n"
@@ -62,8 +59,6 @@ class IBMCodeEngine(VMInterface):
             python_command = ' '.join(components[components.index(next(filter(lambda x: x.startswith('python'), components))):])
             python_command += ' --protocol ws,tcp --port 8786,8001'
             python_command = python_command.split()
-        
-            print("Creating scheduler: ", self.name)
 
             response = self.code_engine_service.create_app(
                 project_id=self.project_id,
@@ -71,7 +66,6 @@ class IBMCodeEngine(VMInterface):
                 name=self.name,
                 run_commands=python_command,
                 image_port=8786,
-                scale_ephemeral_storage_limit="1G",
                 scale_cpu_limit="0.25",
                 scale_min_instances=1,
                 scale_memory_limit="1G",
@@ -84,7 +78,6 @@ class IBMCodeEngine(VMInterface):
                     }
                 ]
             )
-            app = response.get_result()
 
             # This loop is to wait until the app is ready, it is necessary to get the internal/external URL
             while True:
@@ -98,9 +91,6 @@ class IBMCodeEngine(VMInterface):
                 
                 time.sleep(1)
 
-            print("JOB RUNNING")
-            print(app['name'])
-
             internal_url = app["endpoint_internal"].split("//")[1]
             public_url = app["endpoint"].split("//")[1]
 
@@ -108,8 +98,6 @@ class IBMCodeEngine(VMInterface):
 
         else:
             python_command = self.command
-
-            print("Creating worker: ", self.name)
 
             self.code_engine_service.create_config_map(
                 project_id=self.project_id,
@@ -124,7 +112,6 @@ class IBMCodeEngine(VMInterface):
                 image_reference=self.image,
                 name=self.name,
                 run_commands=python_command,
-                scale_ephemeral_storage_limit="1G",
                 scale_cpu_limit="0.25",
                 scale_memory_limit="1G",
                 run_env_variables=[
@@ -136,12 +123,13 @@ class IBMCodeEngine(VMInterface):
                     }
                 ]
             )
-            app = response.get_result()
 
             return None, None
         
 
     async def destroy_vm(self):
+        self.cluster._log(f"Deleting Instance: {self.name}")
+
         if "worker" in self.name:
             response = self.code_engine_service.delete_job_run(
                 project_id=self.project_id,
@@ -152,30 +140,24 @@ class IBMCodeEngine(VMInterface):
                 project_id=self.project_id,
                 name=self.name,
             )
-        
-        print("DELETED: ", self.name)
 
-
-# To connect you have to do it to the address my-app.1i6kkczwe7b5.eu-de.codeengine.appdomain.cloud without specifying port, or specifying 443 for https or 80 for http
 class IBMCodeEngineScheduler(SchedulerMixin, IBMCodeEngine):
     """Scheduler running in a GCP instance."""
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
-    async def start(self):
         self.cluster.protocol = "wss"
         self.port = 443
-        await self.start_scheduler()
 
-    async def start_scheduler(self):
+    async def start(self):
         self.cluster._log(
             f"Launching cluster with the following configuration: "
             f"\n  Source Image: {self.image} "
             f"\n  Region: {self.region} "
             f"\n  Project id: {self.project_id} "
         )
-        self.cluster._log("Creating scheduler instance")
+        self.cluster._log(f"Creating scheduler instance {self.name}")
+
         self.internal_ip, self.external_ip = await self.create_vm()
         self.address = f"{self.cluster.protocol}://{self.external_ip}:{self.port}"
         
@@ -216,6 +198,11 @@ class IBMCodeEngineWorker(WorkerMixin, IBMCodeEngine):
                 }
             ),
         ]
+
+    async def start(self):
+        self.cluster._log(f"Creating worker instance {self.name}")
+        self.internal_ip, self.external_ip = await self.create_vm()
+        self.status = Status.running
 
 class IBMCodeEngineCluster(VMCluster):
     def __init__(
