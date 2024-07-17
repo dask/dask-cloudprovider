@@ -57,52 +57,103 @@ class IBMCodeEngine(VMInterface):
         self.code_engine_service.set_disable_ssl_verification(True)  # Disable SSL verification for the service instance
 
     async def create_vm(self):
-        components = self.command.split()
-        python_command = ' '.join(components[components.index(next(filter(lambda x: x.startswith('python'), components))):])
-        python_command += ' --protocol ws,tcp'
+        if type(self.command) is not list:
+            components = self.command.split()
+            python_command = ' '.join(components[components.index(next(filter(lambda x: x.startswith('python'), components))):])
+            python_command += ' --protocol ws,tcp --port 8786,8001'
+            python_command = python_command.split()
+        
+            print("Creating scheduler: ", self.name)
 
-        response = self.code_engine_service.create_app(
-            project_id=self.project_id,
-            image_reference=self.image,
-            name=self.name,
-            run_commands=python_command.split(),
-            image_port=8786,
-            scale_ephemeral_storage_limit="1G",
-            run_env_variables=[
-                {
-                    "type": "literal",
-                    "name": "DASK_INTERNAL_INHERIT_CONFIG",
-                    "key": "DASK_INTERNAL_INHERIT_CONFIG",
-                    "value": dask.config.serialize(dask.config.global_config),
+            response = self.code_engine_service.create_app(
+                project_id=self.project_id,
+                image_reference=self.image,
+                name=self.name,
+                run_commands=python_command,
+                image_port=8786,
+                scale_ephemeral_storage_limit="1G",
+                scale_cpu_limit="0.25",
+                scale_min_instances=1,
+                scale_memory_limit="1G",
+                run_env_variables=[
+                    {
+                        "type": "literal",
+                        "name": "DASK_INTERNAL_INHERIT_CONFIG",
+                        "key": "DASK_INTERNAL_INHERIT_CONFIG",
+                        "value": dask.config.serialize(dask.config.global_config),
+                    }
+                ]
+            )
+            app = response.get_result()
+
+            # This loop is to wait until the app is ready, it is necessary to get the internal/external URL
+            while True:
+                response = self.code_engine_service.get_app(
+                    project_id=self.project_id,
+                    name=self.name,
+                )
+                app = response.get_result()
+                if app["status"] == "ready":
+                    break
+                
+                time.sleep(1)
+
+            print("JOB RUNNING")
+            print(app['name'])
+
+            internal_url = app["endpoint_internal"].split("//")[1]
+            public_url = app["endpoint"].split("//")[1]
+
+            return internal_url, public_url
+
+        else:
+            python_command = self.command
+
+            print("Creating worker: ", self.name)
+
+            self.code_engine_service.create_config_map(
+                project_id=self.project_id,
+                name=self.name,
+                data={
+                    "DASK_INTERNAL_INHERIT_CONFIG": dask.config.serialize(dask.config.global_config),
                 }
-            ]
-        )
-        app = response.get_result()
+            )
 
-        # This loop is to wait until the app is ready, it is necessary to get the internal/external URL
-        while True:
-            response = self.code_engine_service.get_app(
+            response = self.code_engine_service.create_job_run(
+                project_id=self.project_id,
+                image_reference=self.image,
+                name=self.name,
+                run_commands=python_command,
+                scale_ephemeral_storage_limit="1G",
+                scale_cpu_limit="0.25",
+                scale_memory_limit="1G",
+                run_env_variables=[
+                    {
+                        "type": "config_map_key_reference",
+                        "reference": self.name,
+                        "name": "DASK_INTERNAL_INHERIT_CONFIG",
+                        "key": "DASK_INTERNAL_INHERIT_CONFIG",
+                    }
+                ]
+            )
+            app = response.get_result()
+
+            return None, None
+        
+
+    async def destroy_vm(self):
+        if "worker" in self.name:
+            response = self.code_engine_service.delete_job_run(
                 project_id=self.project_id,
                 name=self.name,
             )
-            app = response.get_result()
-            if app["status"] == "ready":
-                break
-            
-            time.sleep(1)
-
-        print("JOB RUNNING: ", app["name"])
-        internal_url = app["endpoint_internal"].split("//")[1]
-        public_url = app["endpoint"].split("//")[1]
-
-        return internal_url, public_url
-
-    async def destroy_vm(self):
-        response = self.code_engine_service.delete_app(
-            project_id=self.project_id,
-            name=self.name,
-        )
-        pass
+        else:
+            response = self.code_engine_service.delete_app(
+                project_id=self.project_id,
+                name=self.name,
+            )
+        
+        print("DELETED: ", self.name)
 
 
 # To connect you have to do it to the address my-app.1i6kkczwe7b5.eu-de.codeengine.appdomain.cloud without specifying port, or specifying 443 for https or 80 for http
@@ -116,7 +167,6 @@ class IBMCodeEngineScheduler(SchedulerMixin, IBMCodeEngine):
         self.cluster.protocol = "wss"
         self.port = 443
         await self.start_scheduler()
-        self.status = Status.running
 
     async def start_scheduler(self):
         self.cluster._log(
@@ -128,20 +178,44 @@ class IBMCodeEngineScheduler(SchedulerMixin, IBMCodeEngine):
         self.cluster._log("Creating scheduler instance")
         self.internal_ip, self.external_ip = await self.create_vm()
         self.address = f"{self.cluster.protocol}://{self.external_ip}:{self.port}"
-        print(self.address)
-        print(self.internal_ip)
-        print(self.external_ip)
-        print(self.port)
         
         await self.wait_for_scheduler()
 
         self.cluster.scheduler_internal_ip = self.internal_ip
         self.cluster.scheduler_external_ip = self.external_ip
         self.cluster.scheduler_port = self.port
+        self.status = Status.running
 
 class IBMCodeEngineWorker(WorkerMixin, IBMCodeEngine):
-    pass
+    def __init__(
+        self, 
+        *args, 
+        worker_class: str = "distributed.cli.Nanny",
+        worker_options: dict = {}, 
+        **kwargs
+    ):
+        super().__init__(*args, **kwargs)
+        self.worker_class = worker_class
+        self.worker_options = worker_options
 
+        internal_scheduler = f"ws://{self.cluster.scheduler_internal_ip}:80"
+
+        self.command = [
+            "python",
+            "-m",
+            "distributed.cli.dask_spec",
+            internal_scheduler,
+            "--spec",
+            json.dumps(
+                {
+                    "cls": self.worker_class,
+                    "opts": {
+                        **worker_options,
+                        "name": self.name,
+                    },
+                }
+            ),
+        ]
 
 class IBMCodeEngineCluster(VMCluster):
     def __init__(
