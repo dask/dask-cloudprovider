@@ -1,15 +1,14 @@
-import dask
-from dask_cloudprovider.config import ClusterConfig
-import dask.config
 import json
+import time
 
+import dask
 from dask_cloudprovider.generic.vmcluster import (
     VMCluster,
     VMInterface,
     SchedulerMixin,
     WorkerMixin,
 )
-import time
+
 from distributed.core import Status
 from distributed.security import Security
 
@@ -57,7 +56,7 @@ class IBMCodeEngine(VMInterface):
         if type(self.command) is not list:
             components = self.command.split()
             python_command = ' '.join(components[components.index(next(filter(lambda x: x.startswith('python'), components))):])
-            python_command += ' --protocol ws,tcp --port 8786,8001'
+            python_command += ' --protocol ws --port 8786'
             python_command = python_command.split()
 
             response = self.code_engine_service.create_app(
@@ -66,9 +65,10 @@ class IBMCodeEngine(VMInterface):
                 name=self.name,
                 run_commands=python_command,
                 image_port=8786,
-                scale_cpu_limit="0.25",
+                scale_cpu_limit=self.cpu,
                 scale_min_instances=1,
-                scale_memory_limit="1G",
+                scale_memory_limit=self.memory,
+                scale_request_timeout=self.cluster.scheduler_timeout,
                 run_env_variables=[
                     {
                         "type": "literal",
@@ -112,8 +112,8 @@ class IBMCodeEngine(VMInterface):
                 image_reference=self.image,
                 name=self.name,
                 run_commands=python_command,
-                scale_cpu_limit="0.25",
-                scale_memory_limit="1G",
+                scale_cpu_limit=self.cpu,
+                scale_memory_limit=self.memory,
                 run_env_variables=[
                     {
                         "type": "config_map_key_reference",
@@ -148,6 +148,8 @@ class IBMCodeEngineScheduler(SchedulerMixin, IBMCodeEngine):
         super().__init__(*args, **kwargs)
         self.cluster.protocol = "wss"
         self.port = 443
+        self.cpu = self.cluster.scheduler_cpu
+        self.memory = self.cluster.scheduler_mem
 
     async def start(self):
         self.cluster._log(
@@ -155,6 +157,11 @@ class IBMCodeEngineScheduler(SchedulerMixin, IBMCodeEngine):
             f"\n  Source Image: {self.image} "
             f"\n  Region: {self.region} "
             f"\n  Project id: {self.project_id} "
+            f"\n  Scheduler CPU: {self.cpu} "
+            f"\n  Scheduler Memory: {self.memory} "
+            f"\n  Scheduler Timeout: {self.cluster.scheduler_timeout} "
+            f"\n  Worker CPU: {self.cluster.worker_cpu} "
+            f"\n  Worker Memory: {self.cluster.worker_mem} "
         )
         self.cluster._log(f"Creating scheduler instance {self.name}")
 
@@ -179,6 +186,8 @@ class IBMCodeEngineWorker(WorkerMixin, IBMCodeEngine):
         super().__init__(*args, **kwargs)
         self.worker_class = worker_class
         self.worker_options = worker_options
+        self.cpu = self.cluster.worker_cpu
+        self.memory = self.cluster.worker_mem
 
         internal_scheduler = f"ws://{self.cluster.scheduler_internal_ip}:80"
 
@@ -210,11 +219,16 @@ class IBMCodeEngineCluster(VMCluster):
         image: str = None,
         region: str = None,
         project_id: str = None,
+        scheduler_cpu: str = None,
+        scheduler_mem: str = None,
+        scheduler_timeout: int = None,
+        worker_cpu: str = None,
+        worker_mem: str = None,
         debug: bool = False,
         security: bool = True,
         **kwargs,
     ):
-        self.config = ClusterConfig(dask.config.get("cloudprovider.ibm", {}))
+        self.config = dask.config.get("cloudprovider.ibm", {})
         self.scheduler_class = IBMCodeEngineScheduler
         self.worker_class = IBMCodeEngineWorker
         
@@ -222,6 +236,11 @@ class IBMCodeEngineCluster(VMCluster):
         self.region = region or self.config.get("region")
         self.project_id = project_id or self.config.get("project_id")
         api_key = self.config.get("api_key")
+        self.scheduler_cpu = scheduler_cpu or self.config.get("scheduler_cpu")
+        self.scheduler_mem = scheduler_mem or self.config.get("scheduler_mem")
+        self.scheduler_timeout = scheduler_timeout or self.config.get("scheduler_timeout")
+        self.worker_cpu = worker_cpu or self.config.get("worker_cpu")
+        self.worker_mem = worker_mem or self.config.get("worker_mem")
 
         self.debug = debug
         
@@ -231,6 +250,11 @@ class IBMCodeEngineCluster(VMCluster):
             "image": self.image,
             "region": self.region,
             "project_id": self.project_id,
+            "scheduler_cpu": self.scheduler_cpu,
+            "scheduler_mem": self.scheduler_mem,
+            "scheduler_timeout": self.scheduler_timeout,
+            "worker_cpu": self.worker_cpu,
+            "worker_mem": self.worker_mem,
             "api_key": api_key,
         }
         self.scheduler_options = {**self.options}
