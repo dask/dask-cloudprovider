@@ -1,5 +1,6 @@
 import json
 import time
+import urllib3
 
 import dask
 from dask_cloudprovider.generic.vmcluster import (
@@ -25,6 +26,8 @@ except ImportError as e:
     raise ImportError(msg) from e
 
 
+urllib3.disable_warnings()
+
 class IBMCodeEngine(VMInterface):
     def __init__(
         self,
@@ -33,6 +36,11 @@ class IBMCodeEngine(VMInterface):
         image: str = None,
         region: str = None,
         project_id: str = None,
+        scheduler_cpu: str = None,
+        scheduler_mem: str = None,
+        scheduler_timeout: int = None,
+        worker_cpu: str = None,
+        worker_mem: str = None,
         api_key: str = None,
         *args,
         **kwargs,
@@ -43,6 +51,11 @@ class IBMCodeEngine(VMInterface):
         self.image = image
         self.region = region
         self.project_id = project_id
+        self.scheduler_cpu = scheduler_cpu
+        self.scheduler_mem = scheduler_mem
+        self.scheduler_timeout = scheduler_timeout
+        self.worker_cpu = worker_cpu
+        self.worker_mem = worker_mem
         self.api_key = api_key
         
         authenticator = IAMAuthenticator(self.api_key, url='https://iam.cloud.ibm.com')
@@ -53,17 +66,13 @@ class IBMCodeEngine(VMInterface):
         self.code_engine_service.set_disable_ssl_verification(True)  # Disable SSL verification for the service instance
 
     async def create_vm(self):
-        if type(self.command) is not list:
-            components = self.command.split()
-            python_command = ' '.join(components[components.index(next(filter(lambda x: x.startswith('python'), components))):])
-            python_command += ' --protocol ws --port 8786'
-            python_command = python_command.split()
-
+        # Deploy a scheduler
+        if "scheduler" in self.name:
             response = self.code_engine_service.create_app(
                 project_id=self.project_id,
                 image_reference=self.image,
                 name=self.name,
-                run_commands=python_command,
+                run_commands=self.command,
                 image_port=8786,
                 scale_cpu_limit=self.cpu,
                 scale_min_instances=1,
@@ -79,7 +88,7 @@ class IBMCodeEngine(VMInterface):
                 ]
             )
 
-            # This loop is to wait until the app is ready, it is necessary to get the internal/external URL
+            # This loop waits for the app to be ready, then returns the internal and public URLs
             while True:
                 response = self.code_engine_service.get_app(
                     project_id=self.project_id,
@@ -96,9 +105,8 @@ class IBMCodeEngine(VMInterface):
 
             return internal_url, public_url
 
+        # Deploy a worker
         else:
-            python_command = self.command
-
             self.code_engine_service.create_config_map(
                 project_id=self.project_id,
                 name=self.name,
@@ -111,7 +119,7 @@ class IBMCodeEngine(VMInterface):
                 project_id=self.project_id,
                 image_reference=self.image,
                 name=self.name,
-                run_commands=python_command,
+                run_commands=self.command,
                 scale_cpu_limit=self.cpu,
                 scale_memory_limit=self.memory,
                 run_env_variables=[
@@ -124,19 +132,20 @@ class IBMCodeEngine(VMInterface):
                 ]
             )
 
-            return None, None
-        
-
     async def destroy_vm(self):
         self.cluster._log(f"Deleting Instance: {self.name}")
 
-        if "worker" in self.name:
-            response = self.code_engine_service.delete_job_run(
+        if "scheduler" in self.name:
+            response = self.code_engine_service.delete_app(
                 project_id=self.project_id,
                 name=self.name,
             )
         else:
-            response = self.code_engine_service.delete_app(
+            response = self.code_engine_service.delete_job_run(
+                project_id=self.project_id,
+                name=self.name,
+            )
+            response = self.code_engine_service.delete_config_map(
                 project_id=self.project_id,
                 name=self.name,
             )
@@ -150,6 +159,14 @@ class IBMCodeEngineScheduler(SchedulerMixin, IBMCodeEngine):
         self.port = 443
         self.cpu = self.cluster.scheduler_cpu
         self.memory = self.cluster.scheduler_mem
+
+        self.command = [
+            "python",
+            "-m",
+            "distributed.cli.dask_scheduler",
+            "--protocol",
+            "ws"
+        ]
 
     async def start(self):
         self.cluster._log(
@@ -210,7 +227,7 @@ class IBMCodeEngineWorker(WorkerMixin, IBMCodeEngine):
 
     async def start(self):
         self.cluster._log(f"Creating worker instance {self.name}")
-        self.internal_ip, self.external_ip = await self.create_vm()
+        await self.create_vm()
         self.status = Status.running
 
 class IBMCodeEngineCluster(VMCluster):
@@ -225,7 +242,6 @@ class IBMCodeEngineCluster(VMCluster):
         worker_cpu: str = None,
         worker_mem: str = None,
         debug: bool = False,
-        security: bool = True,
         **kwargs,
     ):
         self.config = dask.config.get("cloudprovider.ibm", {})
