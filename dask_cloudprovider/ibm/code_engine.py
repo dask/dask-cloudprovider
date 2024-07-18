@@ -28,6 +28,7 @@ except ImportError as e:
 
 urllib3.disable_warnings()
 
+
 class IBMCodeEngine(VMInterface):
     def __init__(
         self,
@@ -42,10 +43,9 @@ class IBMCodeEngine(VMInterface):
         worker_cpu: str = None,
         worker_mem: str = None,
         api_key: str = None,
-        *args,
         **kwargs,
     ):
-        super().__init__(*args, **kwargs)
+        super().__init__(**kwargs)
         self.cluster = cluster
         self.config = config
         self.image = image
@@ -57,7 +57,7 @@ class IBMCodeEngine(VMInterface):
         self.worker_cpu = worker_cpu
         self.worker_mem = worker_mem
         self.api_key = api_key
-        
+
         authenticator = IAMAuthenticator(self.api_key, url='https://iam.cloud.ibm.com')
         authenticator.set_disable_ssl_verification(True)  # Disable SSL verification for the authenticator
 
@@ -66,9 +66,10 @@ class IBMCodeEngine(VMInterface):
         self.code_engine_service.set_disable_ssl_verification(True)  # Disable SSL verification for the service instance
 
     async def create_vm(self):
-        # Deploy a scheduler
+        # Deploy a scheduler on a Code Engine application
+        # It allows listening on a specific port and exposing it to the public
         if "scheduler" in self.name:
-            response = self.code_engine_service.create_app(
+            self.code_engine_service.create_app(
                 project_id=self.project_id,
                 image_reference=self.image,
                 name=self.name,
@@ -97,15 +98,15 @@ class IBMCodeEngine(VMInterface):
                 app = response.get_result()
                 if app["status"] == "ready":
                     break
-                
-                time.sleep(1)
+
+                time.sleep(0.5)
 
             internal_url = app["endpoint_internal"].split("//")[1]
             public_url = app["endpoint"].split("//")[1]
 
             return internal_url, public_url
 
-        # Deploy a worker
+        # Deploy a worker on a Code Engine job run
         else:
             self.code_engine_service.create_config_map(
                 project_id=self.project_id,
@@ -115,7 +116,7 @@ class IBMCodeEngine(VMInterface):
                 }
             )
 
-            response = self.code_engine_service.create_job_run(
+            self.code_engine_service.create_job_run(
                 project_id=self.project_id,
                 image_reference=self.image,
                 name=self.name,
@@ -136,27 +137,26 @@ class IBMCodeEngine(VMInterface):
         self.cluster._log(f"Deleting Instance: {self.name}")
 
         if "scheduler" in self.name:
-            response = self.code_engine_service.delete_app(
+            self.code_engine_service.delete_app(
                 project_id=self.project_id,
                 name=self.name,
             )
         else:
-            response = self.code_engine_service.delete_job_run(
+            self.code_engine_service.delete_job_run(
                 project_id=self.project_id,
                 name=self.name,
             )
-            response = self.code_engine_service.delete_config_map(
+            self.code_engine_service.delete_config_map(
                 project_id=self.project_id,
                 name=self.name,
             )
+
 
 class IBMCodeEngineScheduler(SchedulerMixin, IBMCodeEngine):
     """Scheduler running in a GCP instance."""
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.cluster.protocol = "wss"
-        self.port = 443
         self.cpu = self.cluster.scheduler_cpu
         self.memory = self.cluster.scheduler_mem
 
@@ -182,9 +182,11 @@ class IBMCodeEngineScheduler(SchedulerMixin, IBMCodeEngine):
         )
         self.cluster._log(f"Creating scheduler instance {self.name}")
 
+        # It must use the external URL with the "wss" protocol and port 443 to establish a
+        # secure WebSocket connection between the client and the scheduler.
         self.internal_ip, self.external_ip = await self.create_vm()
-        self.address = f"{self.cluster.protocol}://{self.external_ip}:{self.port}"
-        
+        self.address = f"wss://{self.external_ip}:443"
+
         await self.wait_for_scheduler()
 
         self.cluster.scheduler_internal_ip = self.internal_ip
@@ -192,12 +194,13 @@ class IBMCodeEngineScheduler(SchedulerMixin, IBMCodeEngine):
         self.cluster.scheduler_port = self.port
         self.status = Status.running
 
+
 class IBMCodeEngineWorker(WorkerMixin, IBMCodeEngine):
     def __init__(
-        self, 
-        *args, 
+        self,
+        *args,
         worker_class: str = "distributed.cli.Nanny",
-        worker_options: dict = {}, 
+        worker_options: dict = {},
         **kwargs
     ):
         super().__init__(*args, **kwargs)
@@ -206,6 +209,7 @@ class IBMCodeEngineWorker(WorkerMixin, IBMCodeEngine):
         self.cpu = self.cluster.worker_cpu
         self.memory = self.cluster.worker_mem
 
+        # On this case, the worker must connect to the scheduler internal URL with the "ws" protocol and port 80
         internal_scheduler = f"ws://{self.cluster.scheduler_internal_ip}:80"
 
         self.command = [
@@ -230,7 +234,128 @@ class IBMCodeEngineWorker(WorkerMixin, IBMCodeEngine):
         await self.create_vm()
         self.status = Status.running
 
+
 class IBMCodeEngineCluster(VMCluster):
+    """Cluster running on IBM Code Engine.
+
+    This cluster manager builds a Dask cluster running on IBM Code Engine.
+
+    When configuring your cluster, you may find it useful to refer to the IBM Cloud documentation for available options.
+
+    https://cloud.ibm.com/docs/codeengine
+
+    Parameters
+    ----------
+    image: str
+        The Docker image to run on all instances. This image must have a valid Python environment and have ``dask``
+        installed in order for the ``dask-scheduler`` and ``dask-worker`` commands to be available.
+    region: str
+        The IBM Cloud region to launch your cluster in.
+
+        See: https://cloud.ibm.com/docs/codeengine?topic=codeengine-regions
+    project_id: str
+        Your IBM Cloud project ID. This must be set either here or in your Dask config.
+    scheduler_cpu: str
+        The amount of CPU to allocate to the scheduler.
+
+        See: https://cloud.ibm.com/docs/codeengine?topic=codeengine-mem-cpu-combo
+    scheduler_mem: str
+        The amount of memory to allocate to the scheduler.
+
+        See: https://cloud.ibm.com/docs/codeengine?topic=codeengine-mem-cpu-combo
+    scheduler_timeout: int
+        The timeout for the scheduler in seconds.
+    worker_cpu: str
+        The amount of CPU to allocate to each worker.
+
+        See: https://cloud.ibm.com/docs/codeengine?topic=codeengine-mem-cpu-combo
+    worker_mem: str
+        The amount of memory to allocate to each worker.
+
+        See: https://cloud.ibm.com/docs/codeengine?topic=codeengine-mem-cpu-combo
+    debug: bool, optional
+        More information will be printed when constructing clusters to enable debugging.
+
+    Notes
+    -----
+
+    **Credentials**
+
+    In order to use the IBM Cloud API, you will need to set up an API key. You can create an API key in the IBM Cloud
+    console.
+
+    The best practice way of doing this is to pass an API key to be used by workers. You can set this API key as an
+    environment variable. Here is a small example to help you do that.
+
+    To expose your IBM API KEY, use this command:
+    export DASK_CLOUDPROVIDER__IBM__API_KEY=xxxxx
+
+    **Certificates**
+
+    This backend will need to use a Let's Encrypt certificate (ISRG Root X1) to connect the client to the scheduler
+    between websockets. More information can be found here: https://letsencrypt.org/certificates/
+
+    Examples
+    --------
+
+    Create the cluster.
+
+    >>> from dask_cloudprovider.ibm import IBMCodeEngineCluster
+    >>> cluster = IBMCodeEngineCluster(n_workers=1)
+    Launching cluster with the following configuration:
+        Source Image: daskdev/dask:latest
+        Region: eu-de
+        Project id: f21626f6-54f7-4065-a038-75c8b9a0d2e0
+        Scheduler CPU: 0.25
+        Scheduler Memory: 1G
+        Scheduler Timeout: 600
+        Worker CPU: 2
+        Worker Memory: 4G
+    Creating scheduler dask-xxxxxxxx-scheduler
+    Waiting for scheduler to run at dask-xxxxxxxx-scheduler.xxxxxxxxxxxx.xx-xx.codeengine.appdomain.cloud:443
+    Scheduler is running
+    Creating worker instance dask-xxxxxxxx-worker-xxxxxxxx
+
+    >>> from dask.distributed import Client
+    >>> client = Client(cluster)
+
+    Do some work.
+
+    >>> import dask.array as da
+    >>> arr = da.random.random((1000, 1000), chunks=(100, 100))
+    >>> arr.mean().compute()
+    0.5001550986751964
+
+    Close the cluster
+
+    >>> cluster.close()
+    Deleting Instance: dask-xxxxxxxx-worker-xxxxxxxx
+    Deleting Instance: dask-xxxxxxxx-scheduler
+
+    You can also do this all in one go with context managers to ensure the cluster is created and cleaned up.
+
+    >>> with IBMCodeEngineCluster(n_workers=1) as cluster:
+    ...     with Client(cluster) as client:
+    ...         print(da.random.random((1000, 1000), chunks=(100, 100)).mean().compute())
+    Launching cluster with the following configuration:
+        Source Image: daskdev/dask:latest
+        Region: eu-de
+        Project id: f21626f6-54f7-4065-a038-75c8b9a0d2e0
+        Scheduler CPU: 0.25
+        Scheduler Memory: 1G
+        Scheduler Timeout: 600
+        Worker CPU: 2
+        Worker Memory: 4G
+    Creating scheduler dask-xxxxxxxx-scheduler
+    Waiting for scheduler to run at dask-xxxxxxxx-scheduler.xxxxxxxxxxxx.xx-xx.codeengine.appdomain.cloud:443
+    Scheduler is running
+    Creating worker instance dask-xxxxxxxx-worker-xxxxxxxx
+    0.5000812282861661
+    Deleting Instance: dask-xxxxxxxx-worker-xxxxxxxx
+    Deleting Instance: dask-xxxxxxxx-scheduler
+
+    """
+
     def __init__(
         self,
         image: str = None,
@@ -247,7 +372,7 @@ class IBMCodeEngineCluster(VMCluster):
         self.config = dask.config.get("cloudprovider.ibm", {})
         self.scheduler_class = IBMCodeEngineScheduler
         self.worker_class = IBMCodeEngineWorker
-        
+
         self.image = image or self.config.get("image")
         self.region = region or self.config.get("region")
         self.project_id = project_id or self.config.get("project_id")
@@ -259,7 +384,7 @@ class IBMCodeEngineCluster(VMCluster):
         self.worker_mem = worker_mem or self.config.get("worker_mem")
 
         self.debug = debug
-        
+
         self.options = {
             "cluster": self,
             "config": self.config,
