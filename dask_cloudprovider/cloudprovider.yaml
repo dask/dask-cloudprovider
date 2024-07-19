@@ -129,4 +129,5 @@ cloudprovider:
     scheduler_timeout: 600 # seconds
     worker_cpu: "2.0"
     worker_mem: 8G
+    worker_threads: 1
     

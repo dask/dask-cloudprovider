@@ -42,6 +42,7 @@ class IBMCodeEngine(VMInterface):
         scheduler_timeout: int = None,
         worker_cpu: str = None,
         worker_mem: str = None,
+        worker_threads: int = None,
         api_key: str = None,
         **kwargs,
     ):
@@ -56,6 +57,7 @@ class IBMCodeEngine(VMInterface):
         self.scheduler_timeout = scheduler_timeout
         self.worker_cpu = worker_cpu
         self.worker_mem = worker_mem
+        self.worker_threads = worker_threads
         self.api_key = api_key
 
         authenticator = IAMAuthenticator(self.api_key, url='https://iam.cloud.ibm.com')
@@ -77,6 +79,7 @@ class IBMCodeEngine(VMInterface):
                 image_port=8786,
                 scale_cpu_limit=self.cpu,
                 scale_min_instances=1,
+                scale_concurrency=1000,
                 scale_memory_limit=self.memory,
                 scale_request_timeout=self.cluster.scheduler_timeout,
                 run_env_variables=[
@@ -87,6 +90,15 @@ class IBMCodeEngine(VMInterface):
                         "value": dask.config.serialize(dask.config.global_config),
                     }
                 ]
+            )
+
+            # Create a ConfigMap with the Dask configuration once time
+            self.code_engine_service.create_config_map(
+                project_id=self.project_id,
+                name=self.cluster.uuid,
+                data={
+                    "DASK_INTERNAL_INHERIT_CONFIG": dask.config.serialize(dask.config.global_config),
+                }
             )
 
             # This loop waits for the app to be ready, then returns the internal and public URLs
@@ -108,14 +120,6 @@ class IBMCodeEngine(VMInterface):
 
         # Deploy a worker on a Code Engine job run
         else:
-            self.code_engine_service.create_config_map(
-                project_id=self.project_id,
-                name=self.name,
-                data={
-                    "DASK_INTERNAL_INHERIT_CONFIG": dask.config.serialize(dask.config.global_config),
-                }
-            )
-
             self.code_engine_service.create_job_run(
                 project_id=self.project_id,
                 image_reference=self.image,
@@ -126,7 +130,7 @@ class IBMCodeEngine(VMInterface):
                 run_env_variables=[
                     {
                         "type": "config_map_key_reference",
-                        "reference": self.name,
+                        "reference": self.cluster.uuid,
                         "name": "DASK_INTERNAL_INHERIT_CONFIG",
                         "key": "DASK_INTERNAL_INHERIT_CONFIG",
                     }
@@ -148,7 +152,7 @@ class IBMCodeEngine(VMInterface):
             )
             self.code_engine_service.delete_config_map(
                 project_id=self.project_id,
-                name=self.name,
+                name=self.cluster.uuid,
             )
 
 
@@ -179,6 +183,7 @@ class IBMCodeEngineScheduler(SchedulerMixin, IBMCodeEngine):
             f"\n  Scheduler Timeout: {self.cluster.scheduler_timeout} "
             f"\n  Worker CPU: {self.cluster.worker_cpu} "
             f"\n  Worker Memory: {self.cluster.worker_mem} "
+            f"\n  Worker Threads: {self.cluster.worker_threads} "
         )
         self.cluster._log(f"Creating scheduler instance {self.name}")
 
@@ -224,6 +229,7 @@ class IBMCodeEngineWorker(WorkerMixin, IBMCodeEngine):
                     "opts": {
                         **worker_options,
                         "name": self.name,
+                        "nthreads": self.cluster.worker_threads,
                     },
                 }
             ),
@@ -273,6 +279,8 @@ class IBMCodeEngineCluster(VMCluster):
         The amount of memory to allocate to each worker.
 
         See: https://cloud.ibm.com/docs/codeengine?topic=codeengine-mem-cpu-combo
+    worker_threads: int
+        The number of threads to use on each worker.
     debug: bool, optional
         More information will be printed when constructing clusters to enable debugging.
 
@@ -366,6 +374,7 @@ class IBMCodeEngineCluster(VMCluster):
         scheduler_timeout: int = None,
         worker_cpu: str = None,
         worker_mem: str = None,
+        worker_threads: int = 1,
         debug: bool = False,
         **kwargs,
     ):
@@ -382,6 +391,7 @@ class IBMCodeEngineCluster(VMCluster):
         self.scheduler_timeout = scheduler_timeout or self.config.get("scheduler_timeout")
         self.worker_cpu = worker_cpu or self.config.get("worker_cpu")
         self.worker_mem = worker_mem or self.config.get("worker_mem")
+        self.worker_threads = worker_threads or self.config.get("worker_threads")
 
         self.debug = debug
 
@@ -396,6 +406,7 @@ class IBMCodeEngineCluster(VMCluster):
             "scheduler_timeout": self.scheduler_timeout,
             "worker_cpu": self.worker_cpu,
             "worker_mem": self.worker_mem,
+            "worker_threads": self.worker_threads,
             "api_key": api_key,
         }
         self.scheduler_options = {**self.options}
