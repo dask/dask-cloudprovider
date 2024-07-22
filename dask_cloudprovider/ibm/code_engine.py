@@ -150,10 +150,13 @@ class IBMCodeEngine(VMInterface):
                 project_id=self.project_id,
                 name=self.name,
             )
-            self.code_engine_service.delete_config_map(
-                project_id=self.project_id,
-                name=self.cluster.uuid,
-            )
+            try:
+                self.code_engine_service.delete_config_map(
+                    project_id=self.project_id,
+                    name=self.cluster.uuid,
+                )
+            except Exception:
+                pass
 
 
 class IBMCodeEngineScheduler(SchedulerMixin, IBMCodeEngine):
