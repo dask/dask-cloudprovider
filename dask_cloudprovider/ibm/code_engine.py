@@ -1,6 +1,8 @@
 import json
 import time
 import urllib3
+import threading
+import random
 
 import dask
 from dask_cloudprovider.generic.vmcluster import (
@@ -120,22 +122,39 @@ class IBMCodeEngine(VMInterface):
 
         # Deploy a worker on a Code Engine job run
         else:
-            self.code_engine_service.create_job_run(
-                project_id=self.project_id,
-                image_reference=self.image,
-                name=self.name,
-                run_commands=self.command,
-                scale_cpu_limit=self.cpu,
-                scale_memory_limit=self.memory,
-                run_env_variables=[
-                    {
-                        "type": "config_map_key_reference",
-                        "reference": self.cluster.uuid,
-                        "name": "DASK_INTERNAL_INHERIT_CONFIG",
-                        "key": "DASK_INTERNAL_INHERIT_CONFIG",
-                    }
-                ]
-            )
+            def create_job_run_thread():
+                retry_delay = 1
+
+                # Add an exponential sleep to avoid overloading the Code Engine API
+                for attempt in range(5):
+                    try:
+                        self.code_engine_service.create_job_run(
+                            project_id=self.project_id,
+                            image_reference=self.image,
+                            name=self.name,
+                            run_commands=self.command,
+                            scale_cpu_limit=self.cpu,
+                            scale_memory_limit=self.memory,
+                            run_env_variables=[
+                                {
+                                    "type": "config_map_key_reference",
+                                    "reference": self.cluster.uuid,
+                                    "name": "DASK_INTERNAL_INHERIT_CONFIG",
+                                    "key": "DASK_INTERNAL_INHERIT_CONFIG",
+                                }
+                            ]
+                        )
+                        return
+                    except Exception:
+                        time.sleep(retry_delay)
+                        retry_delay *= 2
+                        retry_delay += random.uniform(0, 1)
+
+                raise Exception("Maximum retry attempts reached")
+
+            # Create a thread to create multiples job runs in parallel
+            job_run_thread = threading.Thread(target=create_job_run_thread)
+            job_run_thread.start()
 
     async def destroy_vm(self):
         self.cluster._log(f"Deleting Instance: {self.name}")
