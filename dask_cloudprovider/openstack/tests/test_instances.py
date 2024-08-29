@@ -6,8 +6,12 @@ from distributed.core import Status
 
 # Optional: Skips tests if OpenStack credentials are not set
 async def skip_without_credentials(config):
-    if config.get("auth_url") is None or config.get("application_credential_secret") is None:
-        pytest.skip("""
+    if (
+        config.get("auth_url") is None
+        or config.get("application_credential_secret") is None
+    ):
+        pytest.skip(
+            """
         You must configure OpenStack credentials to run this test.
         
         Set this in your config file or environment variables:
@@ -18,7 +22,8 @@ async def skip_without_credentials(config):
             auth_url: "your_auth_url"
             application_credential_id: "your_app_cred_id"
             application_credential_secret: "your_app_cred_secret"
-        """)
+        """
+    )
 
 @pytest.fixture
 async def config():
@@ -43,10 +48,12 @@ async def test_create_cluster(cluster):
     cluster.scale(1)
     await cluster
     assert len(cluster.workers) == 1
-    
+
     async with Client(cluster, asynchronous=True) as client:
+
         def inc(x):
             return x + 1
+
         assert await client.submit(inc, 10).result() == 11
 
 @pytest.mark.asyncio

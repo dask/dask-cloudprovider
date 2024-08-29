@@ -16,7 +16,7 @@ except ImportError as e:
     msg = (
         "Dask Cloud Provider OpenStack requirements are not installed.\n\n"
         "Please pip install as follows:\n\n"
-        '  pip install "openstacksdk" ' 
+        '  pip install "openstacksdk" '
     )
     raise ImportError(msg) from e
 
@@ -31,7 +31,7 @@ class OpenStackInstance(VMInterface):
         docker_image: str = None,
         env_vars: str = None,
         extra_bootstrap: str = None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
         self.instance = None
@@ -48,26 +48,28 @@ class OpenStackInstance(VMInterface):
     async def create_vm(self):
         conn = connection.Connection(
             region_name=self.region,
-            auth_url=self.config['auth_url'],
-            application_credential_id=self.config['application_credential_id'],
-            application_credential_secret=self.config['application_credential_secret'],
-            compute_api_version='2',
-            identity_interface='public',
-            auth_type="v3applicationcredential"
+            auth_url=self.config["auth_url"],
+            application_credential_id=self.config["application_credential_id"],
+            application_credential_secret=self.config["application_credential_secret"],
+            compute_api_version="2",
+            identity_interface="public",
+            auth_type="v3applicationcredential",
         )
 
         self.instance = conn.create_server(
             name=self.name,
-            image=self.image, 
-            flavor=self.size,               # Changed 'flavor_id' to 'flavor'
-            key_name=self.config['keypair_name'],  # Add the keypair name here
-            nics=[{'net-id': self.config['network_id']}],  # Changed from 'networks' to 'nics'
+            image=self.image,
+            flavor=self.size,  # Changed 'flavor_id' to 'flavor'
+            key_name=self.config["keypair_name"],  # Add the keypair name here
+            nics=[
+                {"net-id": self.config["network_id"]}
+            ],  # Changed from 'networks' to 'nics'
             userdata=self.cluster.render_process_cloud_init(self),
-            security_groups=[self.config['security_group']],
+            security_groups=[self.config["security_group"]],
         )
         
         # Wait for the instance to be up and running
-        while self.instance.status.lower() != 'active':
+        while self.instance.status.lower() != "active":
             await asyncio.sleep(0.1)
             self.instance = conn.compute.get_server(self.instance.id)
 
@@ -81,7 +83,8 @@ class OpenStackInstance(VMInterface):
             self.external_ip = await self.get_external_ip(conn)
 
         self.cluster._log(
-            f"{self.name}\n\tInternal IP: {self.internal_ip}\n\tExternal IP: {self.external_ip if self.external_ip else 'None'}"
+            f"{self.name}\n\tInternal IP: {self.internal_ip}\n\tExternal IP: "
+            f"{self.external_ip if self.external_ip else 'None'}"
         )
         return self.internal_ip, self.external_ip
 
@@ -90,8 +93,8 @@ class OpenStackInstance(VMInterface):
         instance = conn.compute.get_server(self.instance.id)
         for network in instance.addresses.values():
             for addr in network:
-                if addr['OS-EXT-IPS:type'] == 'fixed':
-                    return addr['addr']
+                if addr["OS-EXT-IPS:type"] == "fixed":
+                    return addr["addr"]
         return None
 
     async def get_external_ip(self, conn):
@@ -99,8 +102,8 @@ class OpenStackInstance(VMInterface):
         instance = conn.compute.get_server(self.instance.id)
         for network in instance.addresses.values():
             for addr in network:
-                if addr['OS-EXT-IPS:type'] == 'floating':
-                    return addr['addr']
+                if addr["OS-EXT-IPS:type"] == "floating":
+                    return addr["addr"]
         return None
 
     async def create_and_assign_floating_ip(self, conn):
@@ -108,14 +111,15 @@ class OpenStackInstance(VMInterface):
         try:
             # Create a floating IP
             floating_ip = await self.cluster.call_async(
-                conn.network.create_ip, floating_network_id=self.config['external_network_id']
+                conn.network.create_ip, 
+                floating_network_id=self.config["external_network_id"]
             )
 
             # Assign the floating IP to the server
             await self.cluster.call_async(
-                conn.compute.add_floating_ip_to_server, 
-                server=self.instance.id, 
-                address=floating_ip.floating_ip_address
+                conn.compute.add_floating_ip_to_server,
+                server=self.instance.id,
+                address=floating_ip.floating_ip_address,
             )
 
             return floating_ip.floating_ip_address
@@ -126,16 +130,18 @@ class OpenStackInstance(VMInterface):
     async def destroy_vm(self):
         conn = connection.Connection(
             region_name=self.region,
-            auth_url=self.config['auth_url'],
-            application_credential_id=self.config['application_credential_id'],
-            application_credential_secret=self.config['application_credential_secret'],
-            compute_api_version='2',
-            identity_interface='public',
-            auth_type="v3applicationcredential"
+            auth_url=self.config["auth_url"],
+            application_credential_id=self.config["application_credential_id"],
+            application_credential_secret=self.config["application_credential_secret"],
+            compute_api_version="2",
+            identity_interface="public",
+            auth_type="v3applicationcredential",
         )
 
         # Handle floating IP disassociation and deletion if applicable
-        if self.config.get('create_floating_ip', False):  # Checks if floating IPs were configured to be created
+        if self.config.get(
+            "create_floating_ip", False
+        ):  # Checks if floating IPs were configured to be created
             try:
                 # Retrieve all floating IPs associated with the instance
                 floating_ips = conn.network.ips(port_id=self.instance.id)
@@ -145,7 +151,9 @@ class OpenStackInstance(VMInterface):
                     conn.network.delete_ip(ip.id)
                     self.cluster._log(f"Deleted floating IP {ip.floating_ip_address}")
             except Exception as e:
-                self.cluster._log(f"Failed to clean up floating IPs for instance {self.name}: {str(e)}")
+                self.cluster._log(
+                    f"Failed to clean up floating IPs for instance {self.name}: {str(e)}"
+                )
                 return  # Exit if floating IP cleanup fails
 
         # Then, attempt to delete the instance
@@ -157,7 +165,7 @@ class OpenStackInstance(VMInterface):
             else:
                 self.cluster._log(f"Instance {self.name} not found or already deleted.")
         except Exception as e:
-            self.cluster._log(f"Failed to terminate instance {self.name}: {str(e)}") 
+            self.cluster._log(f"Failed to terminate instance {self.name}: {str(e)}")
 
     async def start_vm(self):
         # Code to start the instance
@@ -177,7 +185,7 @@ class OpenStackScheduler(SchedulerMixin, OpenStackInstance):
         await self.start_scheduler()
         self.status = Status.running
 
-    async def start_scheduler(self):      
+    async def start_scheduler(self): 
 
         self.cluster._log(
             f"Launching cluster with the following configuration: "
@@ -213,7 +221,7 @@ class OpenStackCluster(VMCluster):
 
     This cluster manager constructs a Dask cluster running on generic Openstack cloud
 
-    When configuring your cluster you may find it useful to install the 'python-openstackclient' 
+    When configuring your cluster you may find it useful to install the 'python-openstackclient'
     client for querying the Openstack APIs for available options.
 
     https://github.com/openstack/python-openstackclient
@@ -222,12 +230,12 @@ class OpenStackCluster(VMCluster):
     ----------
     
     region: str
-        The name of the region where resources will be allocated in OpenStack. 
-        Typically set to 'default' unless specified in your cloud configuration. 
+        The name of the region where resources will be allocated in OpenStack.
+        Typically set to 'default' unless specified in your cloud configuration.
          
         List available regions using: `openstack region list`.
     auth_url: str
-        The authentication URL for the OpenStack Identity service (Keystone). 
+        The authentication URL for the OpenStack Identity service (Keystone).
         Example: https://cloud.example.com:5000
     application_credential_id: str
          The application credential id created in OpenStack.
@@ -236,39 +244,39 @@ class OpenStackCluster(VMCluster):
     application_credential_secret: str
         The secret associated with the application credential ID for authentication.
     auth_type: str
-        The type of authentication used, typically "v3applicationcredential" for 
+        The type of authentication used, typically "v3applicationcredential" for
         using OpenStack application credentials.
     network_id: str
-        The unique identifier for the internal/private network in OpenStack where the cluster 
-        VMs will be connected. 
+        The unique identifier for the internal/private network in OpenStack where the cluster
+        VMs will be connected.
         
-        List available networks using: `openstack network list` 
+        List available networks using: `openstack network list`
     image: str
-        The OS image name or id to use for the VM. Dask Cloudprovider will boostrap Ubuntu 
-        based images automatically. Other images require Docker and for GPUs 
+        The OS image name or id to use for the VM. Dask Cloudprovider will boostrap Ubuntu
+        based images automatically. Other images require Docker and for GPUs
         the NVIDIA Drivers and NVIDIA Docker.
         
-        List available images using: `openstack image list` 
+        List available images using: `openstack image list`
     keypair_name: str
         The name of the SSH keypair used for instance access. Ensure you have created a keypair
-        or use an existing one. 
+        or use an existing one.
         
         List available keypairs using: `openstack keypair list`
     security_group: str
-        The security group name that defines firewall rules for instances.  
+        The security group name that defines firewall rules for instances.
         
         The default is `default`. Please ensure the follwing accesses are configured:
             - egress 0.0.0.0/0 on all ports for downloading docker images and general data access
             - ingress <internal-cidr>/8 on all ports for internal communication of workers
             - ingress 0.0.0.0/0 on 8786-8787 for external accessibility of the dashboard/scheduler
-            - (optional) ingress 0.0.0.0./0 on 22 for ssh access 
+            - (optional) ingress 0.0.0.0./0 on 22 for ssh access
         
         List available security groups using: `openstack security group list`
     create_floating_ip: bool
         Specifies whether to assign a floating IP to each instance, enabling external
         access. Set to `True` if external connectivity is needed.
     external_network_id: str
-        The ID of the external network used for assigning floating IPs. 
+        The ID of the external network used for assigning floating IPs.
         
         List available external networks using: `openstack network list --external`
     n_workers: int (optional)
@@ -302,11 +310,11 @@ class OpenStackCluster(VMCluster):
 
     >>> from dask_cloudprovider.openstack import OpenStackCluster
     >>> cluster = OpenStackCluster(n_workers=1)
-    Launching cluster with the following configuration: 
-        OS Image: ubuntu-22-04 
-        Flavor: 4vcpu-8gbram-50gbdisk 
-        Docker Image: daskdev/dask:latest 
-        Security Group: all-open 
+    Launching cluster with the following configuration:
+        OS Image: ubuntu-22-04
+        Flavor: 4vcpu-8gbram-50gbdisk
+        Docker Image: daskdev/dask:latest
+        Security Group: all-open
     Creating scheduler instance
         dask-9b85a5f8-scheduler
 	        Internal IP: 10.0.30.148
