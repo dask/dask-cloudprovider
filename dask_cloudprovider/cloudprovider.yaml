@@ -118,3 +118,18 @@ cloudprovider:
     image: "ubuntu-20.04" # Operating System image to use
     docker_image: "daskdev/dask:latest" # docker image to use
     bootstrap: true # It is assumed that the OS image does not have Docker and needs bootstrapping. Set this to false if using a custom image with Docker already installed.
+
+  openstack:
+    region: "RegionOne" # The name of the region where resources will be allocated in OpenStack. List available regions using: `openstack region list`.
+    size: null # Openstack flavors define the compute, memory, and storage capacity of computing instances. List available flavors using: `openstack flavor list`
+    auth_url: null # The authentication URL for the OpenStack Identity service (Keystone). Example: https://cloud.example.com:5000
+    application_credential_id: null # The application credential id created in OpenStack. Create application credentials using: openstack application credential create
+    application_credential_secret: null # The secret associated with the application credential ID for authentication.
+    auth_type: "v3applicationcredential" # The type of authentication used, typically "v3applicationcredential" for using OpenStack application credentials.
+    network_id: null # The unique identifier for the internal/private network in OpenStack where the cluster VMs will be connected. List available networks using: `openstack network list`
+    image: null # The OS image name or id to use for the VM. List available images using: `openstack image list` 
+    keypair_name: null # The name of the SSH keypair used for instance access. Ensure you have created a keypair or use an existing one. List available keypairs using: `openstack keypair list`
+    security_group: null # The security group name that defines firewall rules for instances.  List available security groups using: `openstack security group list`
+    external_network_id: null # The ID of the external network used for assigning floating IPs. List available external networks using: `openstack network list --external`
+    create_floating_ip: false # Specifies whether to assign a floating IP to each instance, enabling external access. Set to `True` if external connectivity is needed.
+    docker_image: "daskdev/dask:latest" # docker image to use
