@@ -4,6 +4,7 @@ import uuid
 import json
 
 import sqlite3
+from typing import Optional, Any, Dict
 
 import dask
 from dask.utils import tmpfile
@@ -106,7 +107,6 @@ class GCPInstance(VMInterface):
         self.instance_labels = _instance_labels
 
         self.general_zone = "-".join(self.zone.split("-")[:2])  # us-east1-c -> us-east1
-
         self.service_account = service_account or self.config.get("service_account")
 
     def create_gcp_config(self):
@@ -494,6 +494,8 @@ class GCPCluster(VMCluster):
     service_account: str
         Service account that all VMs will run under.
         Defaults to the default Compute Engine service account for your GCP project.
+    service_account_credentials: Optional[Dict[str, Any]]
+        Service account credentials to create the compute engine Vms
 
     Examples
     --------
@@ -587,9 +589,10 @@ class GCPCluster(VMCluster):
         debug=False,
         instance_labels=None,
         service_account=None,
+        service_account_credentials: Optional[Dict[str, Any]] = None,
         **kwargs,
     ):
-        self.compute = GCPCompute()
+        self.compute = GCPCompute(service_account_credentials)
 
         self.config = dask.config.get("cloudprovider.gcp", {})
         self.auto_shutdown = (
@@ -641,9 +644,17 @@ class GCPCluster(VMCluster):
 
 
 class GCPCompute:
-    """Wrapper for the ``googleapiclient`` compute object."""
+    """
+    Wrapper for the ``googleapiclient`` compute object.
 
-    def __init__(self):
+    Attributes
+    ----------
+    service_account_credentials: Optional[dict]
+        Service account credentials to create the compute engine Vms
+    """
+
+    def __init__(self, service_account_credentials: Optional[dict[str, Any]] = None):
+        self.service_account_credentials = service_account_credentials or {}
         self._compute = self.refresh_client()
 
     def refresh_client(self):
@@ -652,6 +663,13 @@ class GCPCompute:
 
             creds = google.oauth2.service_account.Credentials.from_service_account_file(
                 os.environ["GOOGLE_APPLICATION_CREDENTIALS"],
+                scopes=["https://www.googleapis.com/auth/cloud-platform"],
+            )
+        elif self.service_account_credentials:
+            import google.oauth2.service_account  # google-auth
+
+            creds = google.oauth2.service_account.Credentials.from_service_account_info(
+                self.service_account_credentials,
                 scopes=["https://www.googleapis.com/auth/cloud-platform"],
             )
         else:
