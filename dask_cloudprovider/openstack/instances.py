@@ -67,7 +67,7 @@ class OpenStackInstance(VMInterface):
             userdata=self.cluster.render_process_cloud_init(self),
             security_groups=[self.config["security_group"]],
         )
-        
+
         # Wait for the instance to be up and running
         while self.instance.status.lower() != "active":
             await asyncio.sleep(0.1)
@@ -111,8 +111,8 @@ class OpenStackInstance(VMInterface):
         try:
             # Create a floating IP
             floating_ip = await self.cluster.call_async(
-                conn.network.create_ip, 
-                floating_network_id=self.config["external_network_id"]
+                conn.network.create_ip,
+                floating_network_id=self.config["external_network_id"],
             )
 
             # Assign the floating IP to the server
@@ -126,7 +126,7 @@ class OpenStackInstance(VMInterface):
         except Exception as e:
             self.cluster._log(f"Failed to create or assign floating IP: {str(e)}")
             return None
-    
+
     async def destroy_vm(self):
         conn = connection.Connection(
             region_name=self.region,
@@ -185,7 +185,7 @@ class OpenStackScheduler(SchedulerMixin, OpenStackInstance):
         await self.start_scheduler()
         self.status = Status.running
 
-    async def start_scheduler(self): 
+    async def start_scheduler(self):
 
         self.cluster._log(
             f"Launching cluster with the following configuration: "
@@ -215,7 +215,6 @@ class OpenStackScheduler(SchedulerMixin, OpenStackInstance):
 class OpenStackWorker(WorkerMixin, OpenStackInstance):
     """Worker running on a OpenStack Instance."""
 
-
 class OpenStackCluster(VMCluster):
     """Cluster running on Openstack VM Instances
 
@@ -228,18 +227,18 @@ class OpenStackCluster(VMCluster):
 
     Parameters
     ----------
-    
+
     region: str
         The name of the region where resources will be allocated in OpenStack.
         Typically set to 'default' unless specified in your cloud configuration.
-         
+
         List available regions using: `openstack region list`.
     auth_url: str
         The authentication URL for the OpenStack Identity service (Keystone).
         Example: https://cloud.example.com:5000
     application_credential_id: str
          The application credential id created in OpenStack.
-        
+
          Create application credentials using: openstack application credential create
     application_credential_secret: str
         The secret associated with the application credential ID for authentication.
@@ -249,35 +248,35 @@ class OpenStackCluster(VMCluster):
     network_id: str
         The unique identifier for the internal/private network in OpenStack where the cluster
         VMs will be connected.
-        
+
         List available networks using: `openstack network list`
     image: str
         The OS image name or id to use for the VM. Dask Cloudprovider will boostrap Ubuntu
         based images automatically. Other images require Docker and for GPUs
         the NVIDIA Drivers and NVIDIA Docker.
-        
+
         List available images using: `openstack image list`
     keypair_name: str
         The name of the SSH keypair used for instance access. Ensure you have created a keypair
         or use an existing one.
-        
+
         List available keypairs using: `openstack keypair list`
     security_group: str
         The security group name that defines firewall rules for instances.
-        
+
         The default is `default`. Please ensure the follwing accesses are configured:
             - egress 0.0.0.0/0 on all ports for downloading docker images and general data access
             - ingress <internal-cidr>/8 on all ports for internal communication of workers
             - ingress 0.0.0.0/0 on 8786-8787 for external accessibility of the dashboard/scheduler
             - (optional) ingress 0.0.0.0./0 on 22 for ssh access
-        
+
         List available security groups using: `openstack security group list`
     create_floating_ip: bool
         Specifies whether to assign a floating IP to each instance, enabling external
         access. Set to `True` if external connectivity is needed.
     external_network_id: str
         The ID of the external network used for assigning floating IPs.
-        
+
         List available external networks using: `openstack network list --external`
     n_workers: int (optional)
         Number of workers to initialise the cluster with. Defaults to ``0``.
@@ -366,5 +365,5 @@ class OpenStackCluster(VMCluster):
 
         if "extra_bootstrap" not in kwargs:
             kwargs["extra_bootstrap"] = self.config.get("extra_bootstrap")
-        
+
         super().__init__(debug=debug, **kwargs)

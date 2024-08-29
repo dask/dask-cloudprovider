@@ -13,9 +13,9 @@ async def skip_without_credentials(config):
         pytest.skip(
             """
         You must configure OpenStack credentials to run this test.
-        
+
         Set this in your config file or environment variables:
-        
+
         # cloudprovider.yaml
         cloudprovider:
           openstack:
@@ -23,7 +23,7 @@ async def skip_without_credentials(config):
             application_credential_id: "your_app_cred_id"
             application_credential_secret: "your_app_cred_secret"
         """
-    )
+        )
 
 @pytest.fixture
 async def config():
