@@ -188,7 +188,6 @@ class OpenStackScheduler(SchedulerMixin, OpenStackInstance):
         self.status = Status.running
 
     async def start_scheduler(self):
-
         self.cluster._log(
             f"Launching cluster with the following configuration: "
             f"\n  OS Image: {self.image} "

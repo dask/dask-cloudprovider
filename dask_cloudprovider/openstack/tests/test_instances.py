@@ -30,7 +30,6 @@ async def skip_without_credentials(config):
 
 @pytest.fixture
 async def config():
-
     return dask.config.get("cloudprovider.openstack", {})
 
 
@@ -60,7 +59,6 @@ async def test_create_cluster(cluster):
     async with Client(cluster, asynchronous=True) as client:
 
         def inc(x):
-
             return x + 1
 
         assert await client.submit(inc, 10).result() == 11
