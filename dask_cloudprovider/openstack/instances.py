@@ -20,6 +20,7 @@ except ImportError as e:
     )
     raise ImportError(msg) from e
 
+
 class OpenStackInstance(VMInterface):
     def __init__(
         self,
@@ -175,6 +176,7 @@ class OpenStackInstance(VMInterface):
         # Code to stop the instance
         pass  # Placeholder to ensure correct indentation
 
+
 class OpenStackScheduler(SchedulerMixin, OpenStackInstance):
     """Scheduler running on an OpenStack Instance."""
 
@@ -212,8 +214,10 @@ class OpenStackScheduler(SchedulerMixin, OpenStackInstance):
         self.cluster.scheduler_external_ip = self.external_ip
         self.cluster.scheduler_port = self.port
 
+
 class OpenStackWorker(WorkerMixin, OpenStackInstance):
     """Worker running on a OpenStack Instance."""
+
 
 class OpenStackCluster(VMCluster):
     """Cluster running on Openstack VM Instances
@@ -316,8 +320,8 @@ class OpenStackCluster(VMCluster):
         Security Group: all-open
     Creating scheduler instance
         dask-9b85a5f8-scheduler
-	        Internal IP: 10.0.30.148
-	        External IP: None
+                Internal IP: 10.0.30.148
+                External IP: None
     Waiting for scheduler to run at 10.0.30.148:8786
     Scheduler is running
     Creating worker instance

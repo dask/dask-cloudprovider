@@ -5,6 +5,8 @@ from dask.distributed import Client
 from distributed.core import Status
 
 # Optional: Skips tests if OpenStack credentials are not set
+
+
 async def skip_without_credentials(config):
     if (
         config.get("auth_url") is None
@@ -25,21 +27,27 @@ async def skip_without_credentials(config):
         """
         )
 
+
 @pytest.fixture
 async def config():
+
     return dask.config.get("cloudprovider.openstack", {})
+
 
 @pytest.fixture
 @pytest.mark.external
 async def cluster(config):
     await skip_without_credentials(config)
+
     async with OpenStackCluster(asynchronous=True) as cluster:
         yield cluster
+
 
 @pytest.mark.asyncio
 async def test_init():
     cluster = OpenStackCluster(asynchronous=True)
     assert cluster.status == Status.created
+
 
 @pytest.mark.asyncio
 @pytest.mark.timeout(600)
@@ -52,9 +60,11 @@ async def test_create_cluster(cluster):
     async with Client(cluster, asynchronous=True) as client:
 
         def inc(x):
+
             return x + 1
 
         assert await client.submit(inc, 10).result() == 11
+
 
 @pytest.mark.asyncio
 async def test_get_cloud_init():
