@@ -70,6 +70,7 @@ this code.
     gcp.rst
     azure.rst
     hetzner.rst
+    openstack.rst
 
 .. toctree::
     :maxdepth: 2
