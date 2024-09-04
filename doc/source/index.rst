@@ -71,6 +71,7 @@ this code.
     azure.rst
     hetzner.rst
     ibm.rst
+    openstack.rst
 
 .. toctree::
     :maxdepth: 2
