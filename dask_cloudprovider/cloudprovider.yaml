@@ -122,7 +122,7 @@ cloudprovider:
   ibm:
     api_key: null
     image: "daskdev/dask:latest"
-    region: null
+    region: us-east
     project_id: null
     scheduler_cpu: "1.0"
     scheduler_mem: 4G
