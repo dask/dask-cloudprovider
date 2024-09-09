@@ -119,6 +119,18 @@ cloudprovider:
     docker_image: "daskdev/dask:latest" # docker image to use
     bootstrap: true # It is assumed that the OS image does not have Docker and needs bootstrapping. Set this to false if using a custom image with Docker already installed.
 
+  ibm:
+    api_key: null
+    image: "ghcr.io/dask/dask:latest"
+    region: us-east
+    project_id: null
+    scheduler_cpu: "1.0"
+    scheduler_mem: 4G
+    scheduler_timeout: 600 # seconds
+    worker_cpu: "2.0"
+    worker_mem: 8G
+    worker_threads: 1
+
   openstack:
     region: "RegionOne" # The name of the region where resources will be allocated in OpenStack. List available regions using: `openstack region list`.
     size: null # Openstack flavors define the compute, memory, and storage capacity of computing instances. List available flavors using: `openstack flavor list`
