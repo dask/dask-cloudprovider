@@ -3,7 +3,7 @@ Dask Cloud Provider
 ===================
 
 
-.. image:: https://github.com/dask/dask-cloudprovider/workflows/CI/badge.svg
+.. image:: https://github.com/dask/dask-cloudprovider/actions/workflows/ci.yml/badge.svg
    :target: https://github.com/dask/dask-cloudprovider/actions?query=workflow%3ACI
    :alt: Build Status
 
