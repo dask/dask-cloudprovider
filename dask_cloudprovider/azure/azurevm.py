@@ -445,7 +445,7 @@ class AzureVMCluster(VMCluster):
     ...                          security_group="<security group>",
     ...                          n_workers=1,
     ...                          vm_size="Standard_NC12s_v3",  # Or any NVIDIA GPU enabled size
-    ...                          docker_image="rapidsai/rapidsai:cuda11.0-runtime-ubuntu18.04-py3.8",
+    ...                          docker_image="rapidsai/rapidsai:cuda11.0-runtime-ubuntu18.04-py3.9",
     ...                          worker_class="dask_cuda.CUDAWorker")
     >>> from dask.distributed import Client
     >>> client = Client(cluster)
