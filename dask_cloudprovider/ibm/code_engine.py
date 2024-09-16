@@ -62,12 +62,18 @@ class IBMCodeEngine(VMInterface):
         self.worker_threads = worker_threads
         self.api_key = api_key
 
-        authenticator = IAMAuthenticator(self.api_key, url='https://iam.cloud.ibm.com')
-        authenticator.set_disable_ssl_verification(True)  # Disable SSL verification for the authenticator
+        authenticator = IAMAuthenticator(self.api_key, url="https://iam.cloud.ibm.com")
+        authenticator.set_disable_ssl_verification(
+            True
+        )  # Disable SSL verification for the authenticator
 
         self.code_engine_service = CodeEngineV2(authenticator=authenticator)
-        self.code_engine_service.set_service_url('https://api.' + self.region + '.codeengine.cloud.ibm.com/v2')
-        self.code_engine_service.set_disable_ssl_verification(True)  # Disable SSL verification for the service instance
+        self.code_engine_service.set_service_url(
+            "https://api." + self.region + ".codeengine.cloud.ibm.com/v2"
+        )
+        self.code_engine_service.set_disable_ssl_verification(
+            True
+        )  # Disable SSL verification for the service instance
 
     async def create_vm(self):
         # Deploy a scheduler on a Code Engine application
@@ -91,7 +97,7 @@ class IBMCodeEngine(VMInterface):
                         "key": "DASK_INTERNAL_INHERIT_CONFIG",
                         "value": dask.config.serialize(dask.config.global_config),
                     }
-                ]
+                ],
             )
 
             # Create a ConfigMap with the Dask configuration once time
@@ -99,11 +105,13 @@ class IBMCodeEngine(VMInterface):
                 project_id=self.project_id,
                 name=self.cluster.uuid,
                 data={
-                    "DASK_INTERNAL_INHERIT_CONFIG": dask.config.serialize(dask.config.global_config),
-                }
+                    "DASK_INTERNAL_INHERIT_CONFIG": dask.config.serialize(
+                        dask.config.global_config
+                    ),
+                },
             )
 
-            # This loop waits for the app to be ready, then returns the internal and public URLs
+            # This loop waits for the app to be ready, then returns the internal and public URLs
             while True:
                 response = self.code_engine_service.get_app(
                     project_id=self.project_id,
@@ -122,6 +130,7 @@ class IBMCodeEngine(VMInterface):
 
         # Deploy a worker on a Code Engine job run
         else:
+
             def create_job_run_thread():
                 retry_delay = 1
 
@@ -142,7 +151,7 @@ class IBMCodeEngine(VMInterface):
                                     "name": "DASK_INTERNAL_INHERIT_CONFIG",
                                     "key": "DASK_INTERNAL_INHERIT_CONFIG",
                                 }
-                            ]
+                            ],
                         )
                         return
                     except Exception:
@@ -191,7 +200,7 @@ class IBMCodeEngineScheduler(SchedulerMixin, IBMCodeEngine):
             "-m",
             "distributed.cli.dask_scheduler",
             "--protocol",
-            "ws"
+            "ws",
         ]
 
     async def start(self):
@@ -228,7 +237,7 @@ class IBMCodeEngineWorker(WorkerMixin, IBMCodeEngine):
         *args,
         worker_class: str = "distributed.cli.Nanny",
         worker_options: dict = {},
-        **kwargs
+        **kwargs,
     ):
         super().__init__(*args, **kwargs)
         self.worker_class = worker_class
@@ -410,7 +419,9 @@ class IBMCodeEngineCluster(VMCluster):
         api_key = self.config.get("api_key")
         self.scheduler_cpu = scheduler_cpu or self.config.get("scheduler_cpu")
         self.scheduler_mem = scheduler_mem or self.config.get("scheduler_mem")
-        self.scheduler_timeout = scheduler_timeout or self.config.get("scheduler_timeout")
+        self.scheduler_timeout = scheduler_timeout or self.config.get(
+            "scheduler_timeout"
+        )
         self.worker_cpu = worker_cpu or self.config.get("worker_cpu")
         self.worker_mem = worker_mem or self.config.get("worker_mem")
         self.worker_threads = worker_threads or self.config.get("worker_threads")
@@ -434,6 +445,41 @@ class IBMCodeEngineCluster(VMCluster):
         self.scheduler_options = {**self.options}
         self.worker_options = {**self.options}
 
-        # https://letsencrypt.org/certificates/ --> ISRG Root X1
-        sec = Security(require_encryption=False, tls_ca_file="-----BEGIN CERTIFICATE-----\nMIIFazCCA1OgAwIBAgIRAIIQz7DSQONZRGPgu2OCiwAwDQYJKoZIhvcNAQELBQAw\nTzELMAkGA1UEBhMCVVMxKTAnBgNVBAoTIEludGVybmV0IFNlY3VyaXR5IFJlc2Vh\ncmNoIEdyb3VwMRUwEwYDVQQDEwxJU1JHIFJvb3QgWDEwHhcNMTUwNjA0MTEwNDM4\nWhcNMzUwNjA0MTEwNDM4WjBPMQswCQYDVQQGEwJVUzEpMCcGA1UEChMgSW50ZXJu\nZXQgU2VjdXJpdHkgUmVzZWFyY2ggR3JvdXAxFTATBgNVBAMTDElTUkcgUm9vdCBY\nMTCCAiIwDQYJKoZIhvcNAQEBBQADggIPADCCAgoCggIBAK3oJHP0FDfzm54rVygc\nh77ct984kIxuPOZXoHj3dcKi/vVqbvYATyjb3miGbESTtrFj/RQSa78f0uoxmyF+\n0TM8ukj13Xnfs7j/EvEhmkvBioZxaUpmZmyPfjxwv60pIgbz5MDmgK7iS4+3mX6U\nA5/TR5d8mUgjU+g4rk8Kb4Mu0UlXjIB0ttov0DiNewNwIRt18jA8+o+u3dpjq+sW\nT8KOEUt+zwvo/7V3LvSye0rgTBIlDHCNAymg4VMk7BPZ7hm/ELNKjD+Jo2FR3qyH\nB5T0Y3HsLuJvW5iB4YlcNHlsdu87kGJ55tukmi8mxdAQ4Q7e2RCOFvu396j3x+UC\nB5iPNgiV5+I3lg02dZ77DnKxHZu8A/lJBdiB3QW0KtZB6awBdpUKD9jf1b0SHzUv\nKBds0pjBqAlkd25HN7rOrFleaJ1/ctaJxQZBKT5ZPt0m9STJEadao0xAH0ahmbWn\nOlFuhjuefXKnEgV4We0+UXgVCwOPjdAvBbI+e0ocS3MFEvzG6uBQE3xDk3SzynTn\njh8BCNAw1FtxNrQHusEwMFxIt4I7mKZ9YIqioymCzLq9gwQbooMDQaHWBfEbwrbw\nqHyGO0aoSCqI3Haadr8faqU9GY/rOPNk3sgrDQoo//fb4hVC1CLQJ13hef4Y53CI\nrU7m2Ys6xt0nUW7/vGT1M0NPAgMBAAGjQjBAMA4GA1UdDwEB/wQEAwIBBjAPBgNV\nHRMBAf8EBTADAQH/MB0GA1UdDgQWBBR5tFnme7bl5AFzgAiIyBpY9umbbjANBgkq\nhkiG9w0BAQsFAAOCAgEAVR9YqbyyqFDQDLHYGmkgJykIrGF1XIpu+ILlaS/V9lZL\nubhzEFnTIZd+50xx+7LSYK05qAvqFyFWhfFQDlnrzuBZ6brJFe+GnY+EgPbk6ZGQ\n3BebYhtF8GaV0nxvwuo77x/Py9auJ/GpsMiu/X1+mvoiBOv/2X/qkSsisRcOj/KK\nNFtY2PwByVS5uCbMiogziUwthDyC3+6WVwW6LLv3xLfHTjuCvjHIInNzktHCgKQ5\nORAzI4JMPJ+GslWYHb4phowim57iaztXOoJwTdwJx4nLCgdNbOhdjsnvzqvHu7Ur\nTkXWStAmzOVyyghqpZXjFaH3pO3JLF+l+/+sKAIuvtd7u+Nxe5AW0wdeRlN8NwdC\njNPElpzVmbUq4JUagEiuTDkHzsxHpFKVK7q4+63SM1N95R1NbdWhscdCb+ZAJzVc\noyi3B43njTOQ5yOf+1CceWxG1bQVs5ZufpsMljq4Ui0/1lvh+wjChP4kqKOJ2qxq\n4RgqsahDYVvTH9w7jXbyLeiNdd8XM2w9U/t7y0Ff/9yi0GE44Za4rF2LN9d11TPA\nmRGunUHBcnWEvgJBQl9nJEiU0Zsnvgc/ubhPgXRR4Xq37Z0j4r7g1SgEEzwxA57d\nemyPxgcYxn/eR44/KJ4EBs+lVDR3veyJm+kXQ99b21/+jh5Xos1AnX5iItreGCc=\n-----END CERTIFICATE-----")
+        # https://letsencrypt.org/certificates/ --> ISRG Root X1
+        sec = Security(
+            require_encryption=False,
+            tls_ca_file=(
+                "-----BEGIN CERTIFICATE-----\n"
+                "MIIFazCCA1OgAwIBAgIRAIIQz7DSQONZRGPgu2OCiwAwDQYJKoZIhvcNAQELBQAw\n"
+                "TzELMAkGA1UEBhMCVVMxKTAnBgNVBAoTIEludGVybmV0IFNlY3VyaXR5IFJlc2Vh\n"
+                "cmNoIEdyb3VwMRUwEwYDVQQDEwxJU1JHIFJvb3QgWDEwHhcNMTUwNjA0MTEwNDM4\n"
+                "WhcNMzUwNjA0MTEwNDM4WjBPMQswCQYDVQQGEwJVUzEpMCcGA1UEChMgSW50ZXJu\n"
+                "ZXQgU2VjdXJpdHkgUmVzZWFyY2ggR3JvdXAxFTATBgNVBAMTDElTUkcgUm9vdCBY\n"
+                "MTCCAiIwDQYJKoZIhvcNAQEBBQADggIPADCCAgoCggIBAK3oJHP0FDfzm54rVygc\n"
+                "h77ct984kIxuPOZXoHj3dcKi/vVqbvYATyjb3miGbESTtrFj/RQSa78f0uoxmyF+\n"
+                "0TM8ukj13Xnfs7j/EvEhmkvBioZxaUpmZmyPfjxwv60pIgbz5MDmgK7iS4+3mX6U\n"
+                "A5/TR5d8mUgjU+g4rk8Kb4Mu0UlXjIB0ttov0DiNewNwIRt18jA8+o+u3dpjq+sW\n"
+                "T8KOEUt+zwvo/7V3LvSye0rgTBIlDHCNAymg4VMk7BPZ7hm/ELNKjD+Jo2FR3qyH\n"
+                "B5T0Y3HsLuJvW5iB4YlcNHlsdu87kGJ55tukmi8mxdAQ4Q7e2RCOFvu396j3x+UC\n"
+                "B5iPNgiV5+I3lg02dZ77DnKxHZu8A/lJBdiB3QW0KtZB6awBdpUKD9jf1b0SHzUv\n"
+                "KBds0pjBqAlkd25HN7rOrFleaJ1/ctaJxQZBKT5ZPt0m9STJEadao0xAH0ahmbWn\n"
+                "OlFuhjuefXKnEgV4We0+UXgVCwOPjdAvBbI+e0ocS3MFEvzG6uBQE3xDk3SzynTn\n"
+                "jh8BCNAw1FtxNrQHusEwMFxIt4I7mKZ9YIqioymCzLq9gwQbooMDQaHWBfEbwrbw\n"
+                "qHyGO0aoSCqI3Haadr8faqU9GY/rOPNk3sgrDQoo//fb4hVC1CLQJ13hef4Y53CI\n"
+                "rU7m2Ys6xt0nUW7/vGT1M0NPAgMBAAGjQjBAMA4GA1UdDwEB/wQEAwIBBjAPBgNV\n"
+                "HRMBAf8EBTADAQH/MB0GA1UdDgQWBBR5tFnme7bl5AFzgAiIyBpY9umbbjANBgkq\n"
+                "hkiG9w0BAQsFAAOCAgEAVR9YqbyyqFDQDLHYGmkgJykIrGF1XIpu+ILlaS/V9lZL\n"
+                "ubhzEFnTIZd+50xx+7LSYK05qAvqFyFWhfFQDlnrzuBZ6brJFe+GnY+EgPbk6ZGQ\n"
+                "3BebYhtF8GaV0nxvwuo77x/Py9auJ/GpsMiu/X1+mvoiBOv/2X/qkSsisRcOj/KK\n"
+                "NFtY2PwByVS5uCbMiogziUwthDyC3+6WVwW6LLv3xLfHTjuCvjHIInNzktHCgKQ5\n"
+                "ORAzI4JMPJ+GslWYHb4phowim57iaztXOoJwTdwJx4nLCgdNbOhdjsnvzqvHu7Ur\n"
+                "TkXWStAmzOVyyghqpZXjFaH3pO3JLF+l+/+sKAIuvtd7u+Nxe5AW0wdeRlN8NwdC\n"
+                "jNPElpzVmbUq4JUagEiuTDkHzsxHpFKVK7q4+63SM1N95R1NbdWhscdCb+ZAJzVc\n"
+                "oyi3B43njTOQ5yOf+1CceWxG1bQVs5ZufpsMljq4Ui0/1lvh+wjChP4kqKOJ2qxq\n"
+                "4RgqsahDYVvTH9w7jXbyLeiNdd8XM2w9U/t7y0Ff/9yi0GE44Za4rF2LN9d11TPA\n"
+                "mRGunUHBcnWEvgJBQl9nJEiU0Zsnvgc/ubhPgXRR4Xq37Z0j4r7g1SgEEzwxA57d\n"
+                "emyPxgcYxn/eR44/KJ4EBs+lVDR3veyJm+kXQ99b21/+jh5Xos1AnX5iItreGCc=\n"
+                "-----END CERTIFICATE-----"
+            ),
+        )
         super().__init__(security=sec, debug=debug, **kwargs)
