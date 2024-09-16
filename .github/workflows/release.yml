@@ -16,7 +16,7 @@ jobs:
           python-version: 3.12
 
       - name: Install pypa/build
-        run: python -m pip install build wheel
+        run: python -m pip install build wheel setuptools
 
       - name: Build distributions
         shell: bash -l {0}
