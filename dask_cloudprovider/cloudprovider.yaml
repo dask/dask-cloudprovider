@@ -85,6 +85,7 @@ cloudprovider:
         # name: "ngc-base-version-21-02-2"
         # publisher: "nvidia"
         # product: "ngc_azure_17_11"
+      extra_options: {}  # Additional options to provide when creating the VMs.
 
   digitalocean:
     token: null # API token for interacting with the Digital Ocean API
