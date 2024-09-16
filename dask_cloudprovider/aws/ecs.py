@@ -360,21 +360,29 @@ class Scheduler(Task):
         Note: If the task is launched with a default configuration, the internal and
         external port will be the same. Otherwise it is the caller's responsibility to
         set up the task such that the scheduler is reachable on this port.
+    tls: bool
+        Whether the scheduler is going to listen on TLS or not. This is to inform workers and clients trying
+        to connect to the scheduler whether they should use TLS or not.
+        This value needs to be consistent with any TLS configuration provided in `scheduler_extra_args`,
+        otherwise the  cluster will not operate correctly.
     scheduler_timeout: str
         Time of inactivity after which to kill the scheduler.
     scheduler_extra_args: List[str] (optional)
         Any extra command line arguments to pass to dask-scheduler, e.g. ``["--tls-cert", "/path/to/cert.pem"]``
 
         Defaults to `None`, no extra command line arguments.
-    kwargs: Dict()
+    kwargs:
         Other kwargs to be passed to :class:`Task`.
 
     See :class:`Task` for parameter info.
     """
 
-    def __init__(self, port, scheduler_timeout, scheduler_extra_args=None, **kwargs):
+    def __init__(
+        self, port, tls, scheduler_timeout, scheduler_extra_args=None, **kwargs
+    ):
         super().__init__(**kwargs)
         self.port = port
+        self.tls = tls
         self.task_type = "scheduler"
         self._overrides = {
             "command": [
@@ -388,12 +396,14 @@ class Scheduler(Task):
     @property
     def address(self):
         ip = getattr(self, "private_ip", None)
-        return f"{ip}:{self.port}" if ip else None
+        protocol = "tls" if self.tls else "tcp"
+        return f"{protocol}://{ip}:{self.port}" if ip else None
 
     @property
     def external_address(self):
         ip = getattr(self, "public_ip", None)
-        return f"{ip}:{self.port}" if ip else None
+        protocol = "tls" if self.tls else "tcp"
+        return f"{protocol}://{ip}:{self.port}" if ip else None
 
 
 class Worker(Task):
@@ -403,7 +413,7 @@ class Worker(Task):
     scheduler: str
         The address of the scheduler
 
-    kwargs: Dict()
+    kwargs:
         Other kwargs to be passed to :class:`Task`.
     """
 
@@ -474,6 +484,10 @@ class ECSCluster(SpecCluster, ConfigMixin):
         The docker image to use for the scheduler and worker tasks.
 
         Defaults to ``daskdev/dask:latest`` or ``rapidsai/rapidsai:latest`` if ``worker_gpu`` is set.
+    cpu_architecture: str (optional)
+        Runtime platform CPU architecture
+
+        Defaults to ``X86_64``.
     scheduler_cpu: int (optional)
         The amount of CPU to request for the scheduler in milli-cpu (1/1024).
 
@@ -668,7 +682,7 @@ class ECSCluster(SpecCluster, ConfigMixin):
         mounted in worker tasks. This setting controls whether volumes are also mounted in the scheduler task.
 
         Default ``False``.
-    **kwargs: dict
+    **kwargs:
         Additional keyword arguments to pass to ``SpecCluster``.
 
     Examples
@@ -702,6 +716,7 @@ class ECSCluster(SpecCluster, ConfigMixin):
         fargate_workers=None,
         fargate_spot=None,
         image=None,
+        cpu_architecture="X86_64",
         scheduler_cpu=None,
         scheduler_mem=None,
         scheduler_port=8786,
@@ -748,6 +763,7 @@ class ECSCluster(SpecCluster, ConfigMixin):
         self._fargate_workers = fargate_workers
         self._fargate_spot = fargate_spot
         self.image = image
+        self._cpu_architecture = cpu_architecture.upper()
         self._scheduler_cpu = scheduler_cpu
         self._scheduler_mem = scheduler_mem
         self._scheduler_port = scheduler_port
@@ -848,6 +864,7 @@ class ECSCluster(SpecCluster, ConfigMixin):
             self.update_attr_from_config(attr=attr, private=True)
 
         self._check_scheduler_port_config()
+        self._check_scheduler_tls_config()
 
         # Cleanup any stale resources before we start
         if not self._skip_cleanup:
@@ -951,6 +968,7 @@ class ECSCluster(SpecCluster, ConfigMixin):
             "fargate": self._fargate_scheduler,
             "fargate_capacity_provider": "FARGATE" if self._fargate_spot else None,
             "port": self._scheduler_port,
+            "tls": self.security.require_encryption,
             "task_kwargs": self._scheduler_task_kwargs,
             "scheduler_timeout": self._scheduler_timeout,
             "scheduler_extra_args": self._scheduler_extra_args,
@@ -1211,6 +1229,7 @@ class ECSCluster(SpecCluster, ConfigMixin):
                 if self._volumes and self._mount_volumes_on_scheduler
                 else [],
                 requiresCompatibilities=["FARGATE"] if self._fargate_scheduler else [],
+                runtimePlatform={"cpuArchitecture": self._cpu_architecture},
                 cpu=str(self._scheduler_cpu),
                 memory=str(self._scheduler_mem),
                 tags=dict_to_aws(self.tags),
@@ -1285,6 +1304,7 @@ class ECSCluster(SpecCluster, ConfigMixin):
                 ],
                 volumes=self._volumes if self._volumes else [],
                 requiresCompatibilities=["FARGATE"] if self._fargate_workers else [],
+                runtimePlatform={"cpuArchitecture": self._cpu_architecture},
                 cpu=str(self._worker_cpu),
                 memory=str(self._worker_mem),
                 tags=dict_to_aws(self.tags),
@@ -1344,6 +1364,28 @@ class ECSCluster(SpecCluster, ConfigMixin):
                 "port."
             )
 
+    def _check_scheduler_tls_config(self):
+        scheduler_has_tls_config = any(
+            map(
+                lambda arg: type(arg) == "str" and arg.startswith("--tls"),
+                self._scheduler_extra_args or [],
+            )
+        )
+        if scheduler_has_tls_config != self.security.require_encryption:
+            protocol = "tls" if self.security.require_encryption else "tcp"
+            scheduler_had_tls_config = (
+                "had tls configuration"
+                if scheduler_has_tls_config
+                else "did not have any tls configuration"
+            )
+            warnings.warn(
+                "the cluster was instructed to connect to the scheduler using "
+                f"{protocol} but the scheduler {scheduler_had_tls_config}. "
+                "This can be OK if there is a load balancer in front of the scheduler "
+                "that changes the protocol, or if TLS settings are overwritten in the "
+                "scheduler task definition. But otherwise the cluster may not work."
+            )
+
 
 class FargateCluster(ECSCluster):
     """Deploy a Dask cluster using Fargate on ECS
@@ -1354,7 +1396,7 @@ class FargateCluster(ECSCluster):
 
     Parameters
     ----------
-    kwargs: dict
+    kwargs:
         Keyword arguments to be passed to :class:`ECSCluster`.
 
     Examples
