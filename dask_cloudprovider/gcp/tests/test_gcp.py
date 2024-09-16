@@ -76,7 +76,6 @@ async def test_create_cluster():
     async with GCPCluster(
         asynchronous=True, env_vars={"FOO": "bar"}, security=True
     ) as cluster:
-
         assert cluster.status == Status.running
 
         cluster.scale(2)
@@ -132,7 +131,6 @@ async def test_create_rapids_cluster():
         auto_shutdown=True,
         bootstrap=False,
     ) as cluster:
-
         assert cluster.status == Status.running
 
         cluster.scale(1)

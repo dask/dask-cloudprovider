@@ -16,6 +16,8 @@ extras_require = {
     "gcp": ["google-api-python-client>=1.12.5", "google-auth>=1.23.0"],
     "hetzner": ["hcloud>=1.10.0"],
     "fly": ["httpx>=0.24.0", "pydantic>=1.10.7"],
+    "ibm": ["ibm_code_engine_sdk>=3.1.0"],
+    "openstack": ["openstacksdk>=3.3.0"],
 }
 extras_require["all"] = set(pkg for pkgs in extras_require.values() for pkg in pkgs)
 
@@ -38,5 +40,5 @@ setup(
     [console_scripts]
     dask-ecs=dask_cloudprovider.cli.ecs:go
     """,
-    python_requires=">=3.9",
+    python_requires=">=3.10",
 )
