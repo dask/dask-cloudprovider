@@ -68,6 +68,7 @@ cloudprovider:
     subscription_id: null # The Azure subscription ID for the cluster
     azurevm:
       vnet: null # Azure Virtual Network to launch VMs in
+      subnet: null # Azure Virtual Network subnet to launch VMs in
       security_group: null # Network security group to allow 8786 and 8787
       public_ingress: true # Assign a public IP address to the scheduler
       vm_size: "Standard_DS1_v2" # Azure VM size to use for scheduler and workers
