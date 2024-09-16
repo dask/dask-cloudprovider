@@ -16,7 +16,9 @@ You can also restrict your install to just a specific cloud provider by giving t
    $ pip install dask-cloudprovider[azure]  # or
    $ pip install dask-cloudprovider[azureml]  # or
    $ pip install dask-cloudprovider[digitalocean]  # or
-   $ pip install dask-cloudprovider[gcp]
+   $ pip install dask-cloudprovider[gcp]  # or
+   $ pip install dask-cloudprovider[ibm]  # or
+   $ pip install dask-cloudprovider[openstack]
 
 Conda
 -----
