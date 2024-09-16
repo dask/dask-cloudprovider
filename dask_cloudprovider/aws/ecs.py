@@ -371,7 +371,7 @@ class Scheduler(Task):
         Any extra command line arguments to pass to dask-scheduler, e.g. ``["--tls-cert", "/path/to/cert.pem"]``
 
         Defaults to `None`, no extra command line arguments.
-    kwargs: Dict()
+    kwargs:
         Other kwargs to be passed to :class:`Task`.
 
     See :class:`Task` for parameter info.
@@ -413,7 +413,7 @@ class Worker(Task):
     scheduler: str
         The address of the scheduler
 
-    kwargs: Dict()
+    kwargs:
         Other kwargs to be passed to :class:`Task`.
     """
 
@@ -484,6 +484,10 @@ class ECSCluster(SpecCluster, ConfigMixin):
         The docker image to use for the scheduler and worker tasks.
 
         Defaults to ``daskdev/dask:latest`` or ``rapidsai/rapidsai:latest`` if ``worker_gpu`` is set.
+    cpu_architecture: str (optional)
+        Runtime platform CPU architecture
+
+        Defaults to ``X86_64``.
     scheduler_cpu: int (optional)
         The amount of CPU to request for the scheduler in milli-cpu (1/1024).
 
@@ -678,7 +682,7 @@ class ECSCluster(SpecCluster, ConfigMixin):
         mounted in worker tasks. This setting controls whether volumes are also mounted in the scheduler task.
 
         Default ``False``.
-    **kwargs: dict
+    **kwargs:
         Additional keyword arguments to pass to ``SpecCluster``.
 
     Examples
@@ -712,6 +716,7 @@ class ECSCluster(SpecCluster, ConfigMixin):
         fargate_workers=None,
         fargate_spot=None,
         image=None,
+        cpu_architecture="X86_64",
         scheduler_cpu=None,
         scheduler_mem=None,
         scheduler_port=8786,
@@ -758,6 +763,7 @@ class ECSCluster(SpecCluster, ConfigMixin):
         self._fargate_workers = fargate_workers
         self._fargate_spot = fargate_spot
         self.image = image
+        self._cpu_architecture = cpu_architecture.upper()
         self._scheduler_cpu = scheduler_cpu
         self._scheduler_mem = scheduler_mem
         self._scheduler_port = scheduler_port
@@ -1223,6 +1229,7 @@ class ECSCluster(SpecCluster, ConfigMixin):
                 if self._volumes and self._mount_volumes_on_scheduler
                 else [],
                 requiresCompatibilities=["FARGATE"] if self._fargate_scheduler else [],
+                runtimePlatform={"cpuArchitecture": self._cpu_architecture},
                 cpu=str(self._scheduler_cpu),
                 memory=str(self._scheduler_mem),
                 tags=dict_to_aws(self.tags),
@@ -1297,6 +1304,7 @@ class ECSCluster(SpecCluster, ConfigMixin):
                 ],
                 volumes=self._volumes if self._volumes else [],
                 requiresCompatibilities=["FARGATE"] if self._fargate_workers else [],
+                runtimePlatform={"cpuArchitecture": self._cpu_architecture},
                 cpu=str(self._worker_cpu),
                 memory=str(self._worker_mem),
                 tags=dict_to_aws(self.tags),
@@ -1388,7 +1396,7 @@ class FargateCluster(ECSCluster):
 
     Parameters
     ----------
-    kwargs: dict
+    kwargs:
         Keyword arguments to be passed to :class:`ECSCluster`.
 
     Examples

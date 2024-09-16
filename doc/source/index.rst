@@ -3,6 +3,15 @@ Dask Cloud Provider
 
 *Native Cloud integration for Dask.*
 
+This package contains open source tools to help you deploy and operate Dask clusters on the cloud.
+It contains cluster managers which can help you launch clusters using native cloud resources like VMs or containers,
+it has tools and plugins for use in ANY cluster running on the cloud and is a great source of documentation for Dask cloud deployments.
+
+It is by no means the "complete" or "only" way to run Dask on the cloud, check out the :doc:`alternatives` page for more tools.
+
+Cluster managers
+----------------
+
 This package provides classes for constructing and managing ephemeral Dask clusters on various
 cloud platforms.
 
@@ -52,6 +61,26 @@ this code.
         with Client(cluster) as client:
             # Do some Dask things
 
+Plugins
+-------
+
+Dask components like Schedulers and Workers can benefit from being cloud-aware.
+This project has plugins and tools that extend these components.
+
+One example is having the workers check for termination warnings when running on ephemeral/spot instances and begin migrating data to other workers.
+
+For Azure VMs you could use the :class:`dask_cloudprovider.azure.AzurePreemptibleWorkerPlugin` to do this.
+It can be used on any cluster that has workers running on Azure VMs, not just ones created with :class:`dask_cloudprovider.azure.AzureVMCluster`.
+
+.. code-block:: python
+
+    from distributed import Client
+    client = Client("<Any Dask cluster running on Azure VMs>")
+
+    from dask_cloudprovider.azure import AzurePreemptibleWorkerPlugin
+    client.register_worker_plugin(AzurePreemptibleWorkerPlugin())
+
+
 .. toctree::
     :maxdepth: 2
     :hidden:
@@ -59,6 +88,7 @@ this code.
 
     installation.rst
     config.rst
+    alternatives.rst
 
 .. toctree::
     :maxdepth: 2
@@ -70,6 +100,8 @@ this code.
     gcp.rst
     azure.rst
     hetzner.rst
+    ibm.rst
+    openstack.rst
 
 .. toctree::
     :maxdepth: 2
