@@ -66,7 +66,7 @@ class Droplet(VMInterface):
             await asyncio.sleep(0.1)
         self.cluster._log(f"Created droplet {self.name}")
 
-        return self.droplet.ip_address
+        return self.droplet.ip_address, None
 
     async def destroy_vm(self):
         await self.cluster.call_async(self.droplet.destroy)

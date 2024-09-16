@@ -66,7 +66,7 @@ class VServer(VMInterface):
                 await asyncio.sleep(0.1)
         self.cluster._log(f"Created Hetzner vServer {self.name}")
 
-        return self.server.public_net.ipv4.ip
+        return self.server.public_net.ipv4.ip, None
 
     async def destroy_vm(self):
         await self.cluster.call_async(self.client.servers.delete, server=self.server)

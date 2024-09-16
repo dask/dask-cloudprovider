@@ -76,7 +76,6 @@ async def test_create_cluster():
     async with GCPCluster(
         asynchronous=True, env_vars={"FOO": "bar"}, security=True
     ) as cluster:
-
         assert cluster.status == Status.running
 
         cluster.scale(2)
@@ -125,14 +124,13 @@ async def test_create_rapids_cluster():
         filesystem_size=50,
         ngpus=2,
         gpu_type="nvidia-tesla-t4",
-        docker_image="rapidsai/rapidsai:cuda11.0-runtime-ubuntu18.04-py3.8",
+        docker_image="rapidsai/rapidsai:cuda11.0-runtime-ubuntu18.04-py3.9",
         worker_class="dask_cuda.CUDAWorker",
         worker_options={"rmm_pool_size": "15GB"},
         asynchronous=True,
         auto_shutdown=True,
         bootstrap=False,
     ) as cluster:
-
         assert cluster.status == Status.running
 
         cluster.scale(1)
@@ -168,7 +166,7 @@ def test_create_rapids_cluster_sync():
         filesystem_size=50,
         ngpus=2,
         gpu_type="nvidia-tesla-t4",
-        docker_image="rapidsai/rapidsai:cuda11.0-runtime-ubuntu18.04-py3.8",
+        docker_image="rapidsai/rapidsai:cuda11.0-runtime-ubuntu18.04-py3.9",
         worker_class="dask_cuda.CUDAWorker",
         worker_options={"rmm_pool_size": "15GB"},
         asynchronous=False,

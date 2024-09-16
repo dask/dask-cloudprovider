@@ -6,7 +6,6 @@ sphinx:
 formats: all
 
 python:
-  version: "3.8"
   install:
     - method: pip
       path: .
@@ -16,3 +15,8 @@ python:
 
 submodules:
   include: all
+
+build:
+  os: ubuntu-22.04
+  tools:
+    python: "3.11"

@@ -217,7 +217,7 @@ class EC2Instance(VMInterface):
             await asyncio.sleep(min(backoff, 10) + backoff % 1)
             # Exponential backoff with a cap of 10 seconds and some jitter
             backoff = backoff * 2
-        return self.instance[ip_address_key]
+        return self.instance[ip_address_key], None
 
     async def destroy_vm(self):
         boto_config = botocore.config.Config(retries=dict(max_attempts=10))

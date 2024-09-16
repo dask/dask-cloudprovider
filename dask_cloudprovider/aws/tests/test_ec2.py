@@ -48,7 +48,7 @@ async def cluster_rapids():
         # Deep Learning AMI (Ubuntu 18.04)
         ami="ami-0c7c7d78f752f8f17",
         # Python version must match local version and CUDA version must match AMI CUDA version
-        docker_image="rapidsai/rapidsai:cuda10.1-runtime-ubuntu18.04-py3.8",
+        docker_image="rapidsai/rapidsai:cuda10.1-runtime-ubuntu18.04-py3.9",
         instance_type="p3.2xlarge",
         bootstrap=False,
         filesystem_size=120,
@@ -65,7 +65,7 @@ async def cluster_rapids_packer():
         # Packer AMI
         ami="ami-04e5539cb82859e69",
         # Python version must match local version and CUDA version must match AMI CUDA version
-        docker_image="rapidsai/rapidsai:cuda10.1-runtime-ubuntu18.04-py3.8",
+        docker_image="rapidsai/rapidsai:cuda10.1-runtime-ubuntu18.04-py3.9",
         instance_type="p3.2xlarge",
         bootstrap=False,
         filesystem_size=120,
@@ -202,7 +202,7 @@ async def test_get_cloud_init_rapids():
         # Deep Learning AMI (Ubuntu 18.04)
         ami="ami-0c7c7d78f752f8f17",
         # Python version must match local version and CUDA version must match AMI CUDA version
-        docker_image="rapidsai/rapidsai:cuda10.1-runtime-ubuntu18.04-py3.8",
+        docker_image="rapidsai/rapidsai:cuda10.1-runtime-ubuntu18.04-py3.9",
         instance_type="p3.2xlarge",
         bootstrap=False,
         filesystem_size=120,
