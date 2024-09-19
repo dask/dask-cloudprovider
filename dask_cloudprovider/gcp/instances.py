@@ -671,6 +671,7 @@ class GCPCompute:
             )
         else:
             import google.auth
+
             # Obtain Application Default Credentials
             credentials, _ = google.auth.default()
 
