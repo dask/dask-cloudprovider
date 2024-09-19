@@ -629,9 +629,11 @@ class GCPCluster(VMCluster):
             "gpu_instance": self.gpu_instance,
             "bootstrap": self.bootstrap,
             "auto_shutdown": self.auto_shutdown,
-            "preemptible": preemptible
-            if preemptible is not None
-            else self.config.get("preemptible"),
+            "preemptible": (
+                preemptible
+                if preemptible is not None
+                else self.config.get("preemptible")
+            ),
             "instance_labels": instance_labels or self.config.get("instance_labels"),
             "service_account": service_account or self.config.get("service_account"),
         }
@@ -662,16 +664,23 @@ class GCPCompute:
         if self.service_account_credentials:
             import google.oauth2.service_account  # google-auth
 
-            credentials = google.oauth2.service_account.Credentials.from_service_account_info(
-                self.service_account_credentials,
-                scopes=["https://www.googleapis.com/auth/cloud-platform"],
+            credentials = (
+                google.oauth2.service_account.Credentials.from_service_account_info(
+                    self.service_account_credentials,
+                    scopes=["https://www.googleapis.com/auth/cloud-platform"],
+                )
             )
         else:
             # Obtain Application Default Credentials
             credentials, _ = google.auth.default()
 
         # Use the credentials to build a service client
-        return googleapiclient.discovery.build("compute", "v1", credentials=credentials)
+        return googleapiclient.discovery.build(
+            "compute",
+            "v1",
+            credentials=credentials,
+            requestBuilder=build_request(credentials),
+        )
 
     def instances(self):
         try:
