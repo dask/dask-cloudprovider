@@ -1,13 +1,10 @@
 import asyncio
-import os
 import uuid
 import json
 
-import sqlite3
 from typing import Optional, Any, Dict
 
 import dask
-from dask.utils import tmpfile
 from dask_cloudprovider.generic.vmcluster import (
     VMCluster,
     VMInterface,
@@ -672,11 +669,11 @@ class GCPCompute:
         else:
             import google.auth
 
-            # Obtain Application Default Credentials
+            # Obtain Application Default Credentials (ADC)
             try:
                 credentials, _ = google.auth.default()
-            except google.auth.exceptions.DefaultCredentialsError:
-                credentials = None
+            except google.auth.exceptions.DefaultCredentialsError as e:
+                raise GCPCredentialsError() from e
 
         # Use the credentials to build a service client
         return googleapiclient.discovery.build(
