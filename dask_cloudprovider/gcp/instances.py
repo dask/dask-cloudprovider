@@ -673,7 +673,10 @@ class GCPCompute:
             import google.auth
 
             # Obtain Application Default Credentials
-            credentials, _ = google.auth.default()
+            try:
+                credentials, _ = google.auth.default()
+            except google.auth.exceptions.DefaultCredentialsError:
+                credentials = None
 
         # Use the credentials to build a service client
         return googleapiclient.discovery.build(
