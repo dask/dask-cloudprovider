@@ -19,7 +19,7 @@ from distributed.core import Status
 
 try:
     import googleapiclient.discovery
-    import google.auth
+    import google.auth.default
     from googleapiclient.errors import HttpError
 except ImportError as e:
     msg = (
