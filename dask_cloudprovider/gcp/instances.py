@@ -19,7 +19,6 @@ from distributed.core import Status
 
 try:
     import googleapiclient.discovery
-    from google.auth import default as google_auth_default
     from googleapiclient.errors import HttpError
 except ImportError as e:
     msg = (
@@ -671,8 +670,9 @@ class GCPCompute:
                 )
             )
         else:
+            import google.auth
             # Obtain Application Default Credentials
-            credentials, _ = google_auth_default()
+            credentials, _ = google.auth.default()
 
         # Use the credentials to build a service client
         return googleapiclient.discovery.build(
