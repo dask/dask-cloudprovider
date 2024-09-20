@@ -1,13 +1,10 @@
 import asyncio
-import os
 import uuid
 import json
 
-import sqlite3
 from typing import Optional, Any, Dict
 
 import dask
-from dask.utils import tmpfile
 from dask_cloudprovider.generic.vmcluster import (
     VMCluster,
     VMInterface,
@@ -628,9 +625,11 @@ class GCPCluster(VMCluster):
             "gpu_instance": self.gpu_instance,
             "bootstrap": self.bootstrap,
             "auto_shutdown": self.auto_shutdown,
-            "preemptible": preemptible
-            if preemptible is not None
-            else self.config.get("preemptible"),
+            "preemptible": (
+                preemptible
+                if preemptible is not None
+                else self.config.get("preemptible")
+            ),
             "instance_labels": instance_labels or self.config.get("instance_labels"),
             "service_account": service_account or self.config.get("service_account"),
         }
@@ -658,37 +657,30 @@ class GCPCompute:
         self._compute = self.refresh_client()
 
     def refresh_client(self):
-        if os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", False):
+        if self.service_account_credentials:
             import google.oauth2.service_account  # google-auth
 
-            creds = google.oauth2.service_account.Credentials.from_service_account_file(
-                os.environ["GOOGLE_APPLICATION_CREDENTIALS"],
-                scopes=["https://www.googleapis.com/auth/cloud-platform"],
-            )
-        elif self.service_account_credentials:
-            import google.oauth2.service_account  # google-auth
-
-            creds = google.oauth2.service_account.Credentials.from_service_account_info(
-                self.service_account_credentials,
-                scopes=["https://www.googleapis.com/auth/cloud-platform"],
+            credentials = (
+                google.oauth2.service_account.Credentials.from_service_account_info(
+                    self.service_account_credentials,
+                    scopes=["https://www.googleapis.com/auth/cloud-platform"],
+                )
             )
         else:
-            import google.auth.credentials  # google-auth
+            import google.auth
 
-            path = os.path.join(
-                os.path.expanduser("~"), ".config/gcloud/credentials.db"
-            )
-            if not os.path.exists(path):
-                raise GCPCredentialsError()
-            conn = sqlite3.connect(path)
-            creds_rows = conn.execute("select * from credentials").fetchall()
-            with tmpfile() as f:
-                with open(f, "w") as f_:
-                    # take first row
-                    f_.write(creds_rows[0][1])
-                creds, _ = google.auth.load_credentials_from_file(filename=f)
+            # Obtain Application Default Credentials (ADC)
+            try:
+                credentials, _ = google.auth.default()
+            except google.auth.exceptions.DefaultCredentialsError as e:
+                raise GCPCredentialsError() from e
+
+        # Use the credentials to build a service client
         return googleapiclient.discovery.build(
-            "compute", "v1", credentials=creds, requestBuilder=build_request(creds)
+            "compute",
+            "v1",
+            credentials=credentials,
+            requestBuilder=build_request(credentials),
         )
 
     def instances(self):
