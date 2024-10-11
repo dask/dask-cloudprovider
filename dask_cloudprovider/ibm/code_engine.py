@@ -311,7 +311,7 @@ class IBMCodeEngineCluster(VMCluster):
 
         See: https://cloud.ibm.com/docs/codeengine?topic=codeengine-mem-cpu-combo
     scheduler_disk: str
-        The amount of ephemeral storage to allocate to the scheduler.
+        The amount of ephemeral storage to allocate to the scheduler. This value must be lower than scheduler_mem.
     scheduler_timeout: int
         The timeout for the scheduler in seconds.
     worker_cpu: str
@@ -323,7 +323,7 @@ class IBMCodeEngineCluster(VMCluster):
 
         See: https://cloud.ibm.com/docs/codeengine?topic=codeengine-mem-cpu-combo
     worker_disk: str
-        The amount of ephemeral storage to allocate to each worker.
+        The amount of ephemeral storage to allocate to each worker. This value must be lower than worker_mem.
     worker_threads: int
         The number of threads to use on each worker.
     debug: bool, optional
