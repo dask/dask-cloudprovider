@@ -128,9 +128,11 @@ cloudprovider:
     project_id: null
     scheduler_cpu: "1.0"
     scheduler_mem: 4G
+    scheduler_disk: 400M
     scheduler_timeout: 600 # seconds
     worker_cpu: "2.0"
     worker_mem: 8G
+    worker_disk: 400M
     worker_threads: 1
 
   openstack:
