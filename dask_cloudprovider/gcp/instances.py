@@ -336,7 +336,7 @@ class GCPWorker(GCPInstance):
         *args,
         worker_class: str = "distributed.cli.dask_worker",
         worker_options: dict = {},
-        n_worker_procs,
+        n_worker_procs: int = 1,
         **kwargs,
     ):
         super().__init__(**kwargs)
