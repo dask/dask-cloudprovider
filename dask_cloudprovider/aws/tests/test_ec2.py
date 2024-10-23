@@ -41,6 +41,14 @@ async def cluster_sync():
 
 @pytest.fixture
 @pytest.mark.external
+async def cluster_with_4_worker_procs():
+    await skip_without_credentials()
+    cluster = EC2Cluster(n_worker_procs=4)
+    yield cluster
+
+
+@pytest.fixture
+@pytest.mark.external
 async def cluster_rapids():
     await skip_without_credentials()
     async with EC2Cluster(
@@ -121,6 +129,17 @@ async def test_create_cluster_sync(cluster_sync):
     with Client(cluster_sync) as client:
         inc = lambda x: x + 1
         assert client.submit(inc, 10).result() == 11
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(600)
+async def test_create_cluster_with_4_worker_procs(cluster_with_4_worker_procs):
+    assert cluster_with_4_worker_procs.status == Status.running
+
+    cluster_with_4_worker_procs.scale(1)
+
+    with Client(cluster_with_4_worker_procs) as client:
+        assert len(client.scheduler_info()["workers"]) == 4
 
 
 @pytest.mark.asyncio

@@ -110,6 +110,7 @@ class WorkerMixin(object):
         worker_module: str = None,
         worker_class: str = None,
         worker_options: dict = {},
+        n_worker_procs: int = 1,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
@@ -132,6 +133,7 @@ class WorkerMixin(object):
             )
         if worker_class is not None:
             self.worker_class = worker_class
+            self.n_worker_procs = n_worker_procs
             self.command = " ".join(
                 [
                     self.set_env,
@@ -143,11 +145,14 @@ class WorkerMixin(object):
                     "''%s''"  # in yaml double single quotes escape the single quote
                     % json.dumps(
                         {
-                            "cls": self.worker_class,
-                            "opts": {
-                                **worker_options,
-                                "name": self.name,
-                            },
+                            f"{i}": {
+                                "cls": self.worker_class,
+                                "opts": {
+                                    **worker_options,
+                                    "name": self.name,
+                                },
+                            }
+                            for i in range(self.n_worker_procs)
                         }
                     ),
                 ]
@@ -173,19 +178,21 @@ class VMCluster(SpecCluster):
 
     For a reference implementation see :class:`DropletCluster`.
 
-    The following paramaters section should be copied to the subclass docstring and appended
-    to the provider specific paramaters.
+    The following parameters section should be copied to the subclass docstring and appended
+    to the provider specific parameters.
 
     Parameters
     ----------
     n_workers: int
         Number of workers to initialise the cluster with. Defaults to ``0``.
-    worker_module: str
-        The Python module to run for the worker. Defaults to ``distributed.cli.dask_worker``
+    n_worker_procs:
+        Number of worker process to spawn in each worker node of the cluster. Defaults to ``1``.
+    worker_class: str
+        The Python class to run for the worker. Defaults to ``dask.distributed.Nanny``
     worker_options: dict
         Params to be passed to the worker class.
-        See :class:`distributed.worker.Worker` for default worker class.
-        If you set ``worker_module`` then refer to the docstring for the custom worker class.
+        See :class:`dask.distributed.Nanny` for default worker class.
+        If you set ``worker_class`` then refer to the docstring for the custom worker class.
     scheduler_options: dict
         Params to be passed to the scheduler class.
         See :class:`distributed.scheduler.Scheduler`.
@@ -233,6 +240,7 @@ class VMCluster(SpecCluster):
         n_workers: int = 0,
         worker_class: str = "dask.distributed.Nanny",
         worker_options: dict = {},
+        n_worker_procs: int = 1,
         scheduler_options: dict = {},
         docker_image="daskdev/dask:latest",
         docker_args: str = "",
@@ -298,6 +306,7 @@ class VMCluster(SpecCluster):
         self.worker_options["docker_args"] = docker_args
         self.worker_options["docker_image"] = image
         self.worker_options["worker_class"] = worker_class
+        self.worker_options["n_worker_procs"] = n_worker_procs
         self.worker_options["protocol"] = protocol
         self.worker_options["worker_options"] = worker_options
         self.worker_options["extra_bootstrap"] = extra_bootstrap

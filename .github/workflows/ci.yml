@@ -30,7 +30,7 @@ jobs:
 
       - name: Run tests
         shell: bash -l {0}
-        run: py.test dask_cloudprovider
+        run: py.test dask_cloudprovider --asyncio-mode=auto
 
   lint:
     name: "pre-commit hooks"

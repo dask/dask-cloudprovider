@@ -12,6 +12,7 @@ cloudprovider:
     worker_gpu: 0 # Number of GPUs for each worker
     #   worker_extra_args: "--tls-cert,/path/to/cert.pem,--tls-key,/path/to/cert.key,--tls-ca-file,/path/to/ca.key"
     n_workers: 0 # Number of workers to start the cluster with
+    n_worker_procs: 1 # Number of worker process to spawn in each worker node of the cluster.
     scheduler_timeout: "5 minutes" # Length of inactivity to wait before closing the cluster
 
     image: "daskdev/dask:latest" # Docker image to use for non GPU tasks
@@ -43,6 +44,8 @@ cloudprovider:
     auto_shutdown: true # Shutdown instances automatically if the scheduler or worker services time out.
     # worker_command: "dask-worker" # The command for workers to run. If the instance_type is a GPU instance dask-cuda-worker will be used.
     ami: null # AMI ID to use for all instances. Defaults to latest Ubuntu 20.04 image.
+    n_workers: 0 # Number of workers to start the cluster with
+    n_worker_procs: 1 # Number of worker process to spawn in each worker node of the cluster.
     instance_type: "t2.micro" # Instance type for the scheduler and all workers
     scheduler_instance_type: "t2.micro" # Instance type for the scheduler
     worker_instance_type: "t2.micro" # Instance type for all workers
@@ -73,6 +76,8 @@ cloudprovider:
       public_ingress: true # Assign a public IP address to the scheduler
       vm_size: "Standard_DS1_v2" # Azure VM size to use for scheduler and workers
       disk_size: 50  # Specifies the size of the VM host OS disk in gigabytes. This value cannot be larger than `1023`.
+      n_workers: 0 # Number of workers to start the cluster with
+      n_worker_procs: 1 # Number of worker process to spawn in each worker node of the cluster.
       scheduler_vm_size: null # Set a different VM size for the scheduler. Will use vm_size if not set
       docker_image: "daskdev/dask:latest" # docker image to use
       vm_image: # OS image to use for the virtual machines
@@ -92,6 +97,8 @@ cloudprovider:
     token: null # API token for interacting with the Digital Ocean API
     region: "nyc3" # Region to launch Droplets in
     size: "s-1vcpu-1gb" # Droplet size to launch, default is 1GB RAM, 1 vCPU
+    n_workers: 0 # Number of workers to start the cluster with
+    n_worker_procs: 1 # Number of worker process to spawn in each worker node of the cluster.
     image: "ubuntu-20-04-x64" # Operating System image to use
 
   gcp:
@@ -118,6 +125,8 @@ cloudprovider:
     location: "fsn1" # Location to launch vServer in
     server_type: "cx11" # vServer server type to launch, default is 2GB RAM, 1 vCPU
     image: "ubuntu-20.04" # Operating System image to use
+    n_workers: 0 # Number of workers to start the cluster with
+    n_worker_procs: 1 # Number of worker process to spawn in each worker node of the cluster.
     docker_image: "daskdev/dask:latest" # docker image to use
     bootstrap: true # It is assumed that the OS image does not have Docker and needs bootstrapping. Set this to false if using a custom image with Docker already installed.
 
