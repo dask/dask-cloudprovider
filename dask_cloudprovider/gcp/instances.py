@@ -336,11 +336,13 @@ class GCPWorker(GCPInstance):
         *args,
         worker_class: str = "distributed.cli.dask_worker",
         worker_options: dict = {},
+        n_worker_procs,
         **kwargs,
     ):
         super().__init__(**kwargs)
         self.scheduler = scheduler
         self.worker_class = worker_class
+        self.n_worker_procs = n_worker_procs
         self.name = f"dask-{self.cluster.uuid}-worker-{str(uuid.uuid4())[:8]}"
         proto, ip, port = (
             self.cluster.protocol,
@@ -359,11 +361,14 @@ class GCPWorker(GCPInstance):
                 "''%s''"  # in yaml double single quotes escape the single quote
                 % json.dumps(
                     {
-                        "cls": self.worker_class,
-                        "opts": {
-                            **worker_options,
-                            "name": self.name,
-                        },
+                        f"{i}": {
+                            "cls": self.worker_class,
+                            "opts": {
+                                **worker_options,
+                                "name": f"{self.name}-{i}",
+                            },
+                        }
+                        for i in range(self.n_worker_procs)
                     }
                 ),
             ]
