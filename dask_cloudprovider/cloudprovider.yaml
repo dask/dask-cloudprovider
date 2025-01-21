@@ -149,3 +149,13 @@ cloudprovider:
     external_network_id: null # The ID of the external network used for assigning floating IPs. List available external networks using: `openstack network list --external`
     create_floating_ip: false # Specifies whether to assign a floating IP to each instance, enabling external access. Set to `True` if external connectivity is needed.
     docker_image: "daskdev/dask:latest" # docker image to use
+
+  nebius:
+    token: null  # iam token for interacting with the Nebius AI Cloud
+    project_id: null # You can find it in Nebius AI Cloud console
+    bootstrap: true # It is assumed that the OS image does not have Docker and needs bootstrapping. Set this to false if using a custom image with Docker already installed.
+    image_family: "ubuntu22.04-driverless"  # it should be "ubuntu22.04-driverless" or "ubuntu22.04-cuda12" https://docs.nebius.com/compute/storage/manage#parameters-boot
+    docker_image: "daskdev/dask:latest" # docker image to use
+    server_platform: "cpu-d3"  # all platforms https://docs.nebius.com/compute/virtual-machines/types
+    server_preset: "4vcpu-16gb" # all presets https://docs.nebius.com/compute/virtual-machines/types
+    disk_size: 64  # Specifies the size of the VM host OS disk in gigabytes.
