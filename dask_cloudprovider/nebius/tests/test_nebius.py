@@ -10,7 +10,7 @@ from distributed.core import Status
 
 
 async def skip_without_credentials(config):
-    if config.get("token") is None or config.get("project_id") is None :
+    if config.get("token") is None or config.get("project_id") is None:
         pytest.skip(
             """
         You must configure a Nebius AI Cloud API token to run this test.
@@ -24,7 +24,7 @@ async def skip_without_credentials(config):
                 project_id: "yourprojectid"
 
         Or by setting it as an environment variable
-        
+
             export DASK_CLOUDPROVIDER__NEBIUS__TOKEN=$(nebius iam get-access-token)
             export DASK_CLOUDPROVIDER__NEBIUS__PROJECT_ID=project_id
 

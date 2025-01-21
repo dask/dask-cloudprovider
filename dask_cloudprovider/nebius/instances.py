@@ -1,8 +1,4 @@
-import asyncio
 import dask
-from nebius.api.nebius.common.v1 import ResourceMetadata
-from nebius.api.nebius.vpc.v1 import SubnetServiceClient, ListSubnetsRequest
-from nebius.sdk import SDK
 
 from dask_cloudprovider.generic.vmcluster import (
     VMCluster,
@@ -12,7 +8,27 @@ from dask_cloudprovider.generic.vmcluster import (
 )
 
 try:
-    import nebius
+    from nebius.api.nebius.common.v1 import ResourceMetadata
+    from nebius.api.nebius.vpc.v1 import SubnetServiceClient, ListSubnetsRequest
+    from nebius.sdk import SDK
+    from nebius.api.nebius.compute.v1 import (
+        InstanceServiceClient,
+        CreateInstanceRequest,
+        DiskServiceClient,
+        CreateDiskRequest,
+        DiskSpec,
+        SourceImageFamily,
+        InstanceSpec,
+        AttachedDiskSpec,
+        ExistingDisk,
+        ResourcesSpec,
+        NetworkInterfaceSpec,
+        IPAddress,
+        PublicIPAddress,
+        GetInstanceRequest,
+        DeleteInstanceRequest,
+        DeleteDiskRequest,
+    )
 except ImportError as e:
     msg = (
         "Dask Cloud Provider Nebius requirements are not installed.\n\n"
@@ -21,10 +37,6 @@ except ImportError as e:
     )
     raise ImportError(msg) from e
 
-from nebius.api.nebius.compute.v1 import InstanceServiceClient, CreateInstanceRequest, DiskServiceClient, \
-    CreateDiskRequest, DiskSpec, SourceImageFamily, InstanceSpec, AttachedDiskSpec, ExistingDisk, ResourcesSpec, \
-    NetworkInterfaceSpec, IPAddress, PublicIPAddress, GetInstanceRequest, DeleteInstanceRequest, DeleteDiskRequest
-
 
 class NebiusInstance(VMInterface):
     def __init__(
@@ -32,8 +44,8 @@ class NebiusInstance(VMInterface):
         cluster: str,
         config,
         env_vars: dict = None,
-        bootstrap = None,
-        extra_bootstrap = None,
+        bootstrap=None,
+        extra_bootstrap=None,
         docker_image: str = None,
         image_family: str = None,
         project_id: str = None,
@@ -62,16 +74,20 @@ class NebiusInstance(VMInterface):
     async def create_vm(self, user_data=None):
         service = DiskServiceClient(self.sdk)
         operation = await service.create(
-            CreateDiskRequest(metadata=ResourceMetadata(
-                parent_id=self.project_id,
-                name=self.name+'-disk',
-            ),
+            CreateDiskRequest(
+                metadata=ResourceMetadata(
+                    parent_id=self.project_id,
+                    name=self.name + "-disk",
+                ),
                 spec=DiskSpec(
                     source_image_family=SourceImageFamily(
-                        image_family=self.image_family),
+                        image_family=self.image_family
+                    ),
                     size_gibibytes=self.disk_size,
                     type=DiskSpec.DiskType.NETWORK_SSD,
-                )))
+                ),
+            )
+        )
         await operation.wait()
         self.disk_id = operation.resource_id
 
@@ -80,7 +96,8 @@ class NebiusInstance(VMInterface):
         subnet_id = sub_net.items[0].metadata.id
 
         service = InstanceServiceClient(self.sdk)
-        operation = await service.create(CreateInstanceRequest(
+        operation = await service.create(
+            CreateInstanceRequest(
                 metadata=ResourceMetadata(
                     parent_id=self.project_id,
                     name=self.name,
@@ -88,45 +105,64 @@ class NebiusInstance(VMInterface):
                 spec=InstanceSpec(
                     boot_disk=AttachedDiskSpec(
                         attach_mode=AttachedDiskSpec.AttachMode(2),
-                        existing_disk=ExistingDisk(id=self.disk_id)),
+                        existing_disk=ExistingDisk(id=self.disk_id),
+                    ),
                     cloud_init_user_data=self.cluster.render_process_cloud_init(self),
-                    resources=ResourcesSpec(platform=self.server_platform, preset=self.server_preset),
+                    resources=ResourcesSpec(
+                        platform=self.server_platform, preset=self.server_preset
+                    ),
                     network_interfaces=[
                         NetworkInterfaceSpec(
                             subnet_id=subnet_id,
                             ip_address=IPAddress(),
-                            name='network-interface-0',
-                            public_ip_address=PublicIPAddress())
-                    ])))
+                            name="network-interface-0",
+                            public_ip_address=PublicIPAddress(),
+                        )
+                    ],
+                ),
+            )
+        )
         self.instance_id = operation.resource_id
 
         self.cluster._log(f"Creating Nebius instance {self.name}")
         await operation.wait()
         service = InstanceServiceClient(self.sdk)
-        operation = await service.get(GetInstanceRequest(
-            id=self.instance_id,
-        ))
-        internal_ip = operation.status.network_interfaces[
-                0].ip_address.address.split('/')[0]
+        operation = await service.get(
+            GetInstanceRequest(
+                id=self.instance_id,
+            )
+        )
+        internal_ip = operation.status.network_interfaces[0].ip_address.address.split(
+            "/"
+        )[0]
         external_ip = operation.status.network_interfaces[
-                0].public_ip_address.address.split('/')[0]
-        self.cluster._log(f"Created Nebius instance {self.name} with internal IP {internal_ip} and external IP {external_ip}")
+            0
+        ].public_ip_address.address.split("/")[0]
+        self.cluster._log(
+            f"Created Nebius instance {self.name} with internal IP {internal_ip} and external IP {external_ip}"
+        )
         return internal_ip, external_ip
 
     async def destroy_vm(self):
         if self.instance_id:
             service = InstanceServiceClient(self.sdk)
-            operation = await service.delete(DeleteInstanceRequest(
-                id=self.instance_id,
-            ))
+            operation = await service.delete(
+                DeleteInstanceRequest(
+                    id=self.instance_id,
+                )
+            )
         await operation.wait()
 
         if self.disk_id:
             service = DiskServiceClient(self.sdk)
-            await service.delete(DeleteDiskRequest(
-                id=self.disk_id,
-            ))
-        self.cluster._log(f"Terminated instance {self.name} ({self.instance_id}) and deleted disk {self.disk_id}")
+            await service.delete(
+                DeleteDiskRequest(
+                    id=self.disk_id,
+                )
+            )
+        self.cluster._log(
+            f"Terminated instance {self.name} ({self.instance_id}) and deleted disk {self.disk_id}"
+        )
         self.instance_id = None
         self.disk_id = None
 
@@ -244,7 +280,7 @@ class NebiusCluster(VMCluster):
             "project_id": self.project_id,
             "server_platform": self.server_platform,
             "server_preset": self.server_preset,
-            "disk_size": self.disk_size
+            "disk_size": self.disk_size,
         }
         self.scheduler_options = {**self.options}
         self.worker_options = {**self.options}
