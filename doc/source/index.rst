@@ -102,6 +102,7 @@ It can be used on any cluster that has workers running on Azure VMs, not just on
     hetzner.rst
     ibm.rst
     openstack.rst
+    nebius.rst
 
 .. toctree::
     :maxdepth: 2
