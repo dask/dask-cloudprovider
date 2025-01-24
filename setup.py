@@ -17,7 +17,7 @@ extras_require = {
     "hetzner": ["hcloud>=1.10.0"],
     "ibm": ["ibm_code_engine_sdk>=3.1.0"],
     "openstack": ["openstacksdk>=3.3.0"],
-    "nebius": ["nebius @ git+https://github.com/nebius/pysdk"],
+    "nebius": ["nebius>=0.2.0"],
 }
 extras_require["all"] = set(pkg for pkgs in extras_require.values() for pkg in pkgs)
 
