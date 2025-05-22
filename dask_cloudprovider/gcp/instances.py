@@ -618,9 +618,7 @@ class GCPCluster(VMCluster):
             self.worker_machine_type = worker_machine_type or self.config.get("worker_machine_type")
         else:
             if scheduler_machine_type is not None or worker_machine_type is not None:
-                raise ValueError(
-                    "If you specify machine_type, you may not specify scheduler_machine_type or worker_machine_type"
-                )
+                raise ValueError("If you specify machine_type, you may not specify scheduler_machine_type or worker_machine_type")
             self.scheduler_machine_type = machine_type
             self.worker_machine_type = machine_type
         self.gpu_instance = "gpu" in self.machine_type or bool(ngpus)
@@ -659,6 +657,15 @@ class GCPCluster(VMCluster):
         self.worker_options = {**self.options}
         self.scheduler_options["machine_type"] = self.scheduler_machine_type
         self.worker_options["machine_type"] = self.worker_machine_type
+
+        if ngpus is not None:
+            self.scheduler_options["ngpus"] = 0
+            self.scheduler_options["gpu_type"] = None
+
+            self.worker_ngpus = ngpus
+            self.worker_options["ngpus"] = ngpus or self.config.get("ngpus"),
+            self.worker_options["gpu_type"] = gpu_type or self.config.get("gpu_type"),
+            self.worker_options["gpu_instance"] = True
 
         if "extra_bootstrap" not in kwargs:
             kwargs["extra_bootstrap"] = self.config.get("extra_bootstrap")
