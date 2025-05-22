@@ -657,13 +657,16 @@ class GCPCompute:
         self._compute = self.refresh_client()
 
     def refresh_client(self):
+
+        scopes = ["https://www.googleapis.com/auth/cloud-platform"]
+
         if self.service_account_credentials:
             import google.oauth2.service_account  # google-auth
 
             credentials = (
                 google.oauth2.service_account.Credentials.from_service_account_info(
                     self.service_account_credentials,
-                    scopes=["https://www.googleapis.com/auth/cloud-platform"],
+                    scopes=scopes,
                 )
             )
         else:
@@ -671,7 +674,7 @@ class GCPCompute:
 
             # Obtain Application Default Credentials (ADC)
             try:
-                credentials, _ = google.auth.default()
+                credentials, _ = google.auth.default(scopes)
             except google.auth.exceptions.DefaultCredentialsError as e:
                 raise GCPCredentialsError() from e
 
