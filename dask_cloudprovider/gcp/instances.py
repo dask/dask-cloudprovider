@@ -417,7 +417,15 @@ class GCPCluster(VMCluster):
         be cases (i.e. Shared VPC) when network configurations from a different GCP project are used.
     machine_type: str
         The VM machine_type. You can get a full list with ``gcloud compute machine-types list``.
-        The default is ``n1-standard-1`` which is 3.75GB RAM and 1 vCPU
+        The default is ``n1-standard-1`` which is 3.75GB RAM and 1 vCPU.
+        This will determine the resources available to both the sceduler and all workers.
+        If supplied, you may not specify ``scheduler_machine_type`` or ``worker_machine_type``.
+    scheduler_machine_type: str
+        The VM machine_type. This will determine the resources available to the scheduler.
+        The default is ``n1-standard-1`` which is 3.75GB RAM and 1 vCPU.
+    worker_machine_type: str
+        The VM machine_type. This will determine the resources available to all workers.
+        The default is ``n1-standard-1`` which is 3.75GB RAM and 1 vCPU.
     source_image: str
         The OS image to use for the VM. Dask Cloudprovider will boostrap Ubuntu based images automatically.
         Other images require Docker and for GPUs the NVIDIA Drivers and NVIDIA Docker.
@@ -573,6 +581,8 @@ class GCPCluster(VMCluster):
         network=None,
         network_projectid=None,
         machine_type=None,
+        scheduler_machine_type=None,
+        worker_machine_type=None,
         on_host_maintenance=None,
         source_image=None,
         docker_image=None,
@@ -603,7 +613,14 @@ class GCPCluster(VMCluster):
             bootstrap if bootstrap is not None else self.config.get("bootstrap")
         )
         self.machine_type = machine_type or self.config.get("machine_type")
-        self.gpu_instance = "gpu" in self.machine_type or bool(ngpus)
+        if machine_type is None:
+            self.scheduler_machine_type = scheduler_machine_type or self.config.get("scheduler_machine_type")
+            self.worker_machine_type = worker_machine_type or self.config.get("worker_machine_type")
+        else:
+            if scheduler_machine_type is not None or worker_machine_type is not None:
+                raise ValueError("If you specify machine_type, you may not specify scheduler_machine_type or worker_machine_type")
+            self.scheduler_machine_type = machine_type
+            self.worker_machine_type = machine_type
         self.debug = debug
         self.options = {
             "cluster": self,
@@ -617,6 +634,8 @@ class GCPCluster(VMCluster):
             or self.config.get("on_host_maintenance"),
             "zone": zone or self.config.get("zone"),
             "machine_type": self.machine_type,
+            "scheduler_machine_type": self.scheduler_machine_type,
+            "worker_machine_type": self.worker_machine_type,
             "ngpus": ngpus or self.config.get("ngpus"),
             "network": network or self.config.get("network"),
             "network_projectid": network_projectid
@@ -635,6 +654,18 @@ class GCPCluster(VMCluster):
         }
         self.scheduler_options = {**self.options}
         self.worker_options = {**self.options}
+        self.scheduler_options["machine_type"] = self.scheduler_machine_type
+        self.worker_options["machine_type"] = self.worker_machine_type
+
+        if ngpus is not None:
+            self.scheduler_options["ngpus"] = 0
+            self.scheduler_options["gpu_type"] = None
+            self.scheduler_options["gpu_instance"] = False
+
+            self.worker_ngpus = ngpus
+            self.worker_options["ngpus"] = ngpus or self.config.get("ngpus")
+            self.worker_options["gpu_type"] = gpu_type or self.config.get("gpu_type")
+            self.worker_options["gpu_instance"] = True
 
         if "extra_bootstrap" not in kwargs:
             kwargs["extra_bootstrap"] = self.config.get("extra_bootstrap")
