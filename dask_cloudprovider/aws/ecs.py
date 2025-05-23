@@ -485,7 +485,10 @@ class ECSCluster(SpecCluster, ConfigMixin):
 
         Defaults to ``daskdev/dask:latest`` or ``rapidsai/rapidsai:latest`` if ``worker_gpu`` is set.
     cpu_architecture: str (optional)
-        Runtime platform CPU architecture
+        Runtime platform CPU architecture.
+        Typically either ``X86_64`` or ``ARM64``.
+        Valid values are documented here:
+        https://docs.aws.amazon.com/AmazonECS/latest/developerguide/fargate-tasks-services.html#fargate-task-os
 
         Defaults to ``X86_64``.
     scheduler_cpu: int (optional)

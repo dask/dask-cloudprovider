@@ -116,11 +116,20 @@ class OpenStackInstance(VMInterface):
                 floating_network_id=self.config["external_network_id"],
             )
 
-            # Assign the floating IP to the server
+            # Find the first port of the instance
+            ports = await self.cluster.call_async(
+                conn.network.ports,
+                device_id=self.instance.id
+            )
+            ports = list(ports)
+            if not ports:
+                raise RuntimeError(f"No network ports found for instance {self.instance.id}")
+
+            # Assign the floating IP to the instance's port
             await self.cluster.call_async(
-                conn.compute.add_floating_ip_to_server,
-                server=self.instance.id,
-                address=floating_ip.floating_ip_address,
+                conn.network.update_ip,
+                floating_ip,
+                port_id=ports[0].id
             )
 
             return floating_ip.floating_ip_address
