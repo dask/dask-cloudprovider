@@ -663,8 +663,8 @@ class GCPCluster(VMCluster):
             self.scheduler_options["gpu_instance"] = False
 
             self.worker_ngpus = ngpus
-            self.worker_options["ngpus"] = ngpus or self.config.get("ngpus"),
-            self.worker_options["gpu_type"] = gpu_type or self.config.get("gpu_type"),
+            self.worker_options["ngpus"] = ngpus or self.config.get("ngpus")
+            self.worker_options["gpu_type"] = gpu_type or self.config.get("gpu_type")
             self.worker_options["gpu_instance"] = True
 
         if "extra_bootstrap" not in kwargs:
