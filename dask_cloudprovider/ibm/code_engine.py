@@ -4,6 +4,9 @@ import urllib3
 import threading
 import random
 
+from kubernetes import client
+from kubernetes.client.rest import ApiException
+
 import dask
 from dask_cloudprovider.generic.vmcluster import (
     VMCluster,
@@ -16,8 +19,9 @@ from distributed.core import Status
 from distributed.security import Security
 
 try:
-    from ibm_code_engine_sdk.code_engine_v2 import CodeEngineV2
     from ibm_cloud_sdk_core.authenticators import IAMAuthenticator
+    from ibm_code_engine_sdk.code_engine_v2 import CodeEngineV2
+    from ibm_code_engine_sdk.ibm_cloud_code_engine_v1 import IbmCloudCodeEngineV1
 except ImportError as e:
     msg = (
         "Dask Cloud Provider IBM requirements are not installed.\n\n"
@@ -34,7 +38,7 @@ urllib3.disable_warnings()
 class IBMCodeEngine(VMInterface):
     def __init__(
         self,
-        cluster: str,
+        cluster,
         config,
         image: str = None,
         region: str = None,
@@ -43,15 +47,21 @@ class IBMCodeEngine(VMInterface):
         scheduler_mem: str = None,
         scheduler_disk: str = None,
         scheduler_timeout: int = None,
+        scheduler_command: str = None,
         worker_cpu: str = None,
         worker_mem: str = None,
         worker_disk: str = None,
         worker_threads: int = None,
+        worker_command: str = None,
         api_key: str = None,
+        docker_server: str = None,
+        docker_username: str = None,
+        docker_password: str = None,
+        docker_registry_name: str = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self.cluster = cluster
+        self.cluster = cluster  # This is the IBMCodeEngineCluster instance
         self.config = config
         self.image = image
         self.region = region
@@ -60,24 +70,102 @@ class IBMCodeEngine(VMInterface):
         self.scheduler_mem = scheduler_mem
         self.scheduler_disk = scheduler_disk
         self.scheduler_timeout = scheduler_timeout
+        self.scheduler_command = scheduler_command
         self.worker_cpu = worker_cpu
         self.worker_mem = worker_mem
         self.worker_disk = worker_disk
         self.worker_threads = worker_threads
+        self.worker_command = worker_command
         self.api_key = api_key
+        self.docker_server = docker_server
+        self.docker_username = docker_username
+        self.docker_password = docker_password
+        self.docker_registry_name = docker_registry_name
 
-        authenticator = IAMAuthenticator(self.api_key, url="https://iam.cloud.ibm.com")
-        authenticator.set_disable_ssl_verification(
+        self.authenticator = IAMAuthenticator(self.api_key, url="https://iam.cloud.ibm.com")
+        self.authenticator.set_disable_ssl_verification(
             True
         )  # Disable SSL verification for the authenticator
 
-        self.code_engine_service = CodeEngineV2(authenticator=authenticator)
+        self.code_engine_service = CodeEngineV2(authenticator=self.authenticator)
         self.code_engine_service.set_service_url(
             "https://api." + self.region + ".codeengine.cloud.ibm.com/v2"
         )
         self.code_engine_service.set_disable_ssl_verification(
             True
         )  # Disable SSL verification for the service instance
+
+    def _extract_k8s_config_details(self, project_id):
+        delegated_refresh_token_payload = {
+            'grant_type': 'urn:ibm:params:oauth:grant-type:apikey', 'apikey': self.api_key,
+            'response_type': 'delegated_refresh_token', 'receiver_client_ids': 'ce',
+            'delegated_refresh_token_expiry': '3600'
+        }
+        token_manager = self.code_engine_service.authenticator.token_manager
+        original_request_payload = token_manager.request_payload
+        token_manager.request_payload = delegated_refresh_token_payload
+        try:
+            iam_response = token_manager.request_token()
+        finally:
+            token_manager.request_payload = original_request_payload
+
+        kc_resp = self.code_engine_service_v1.get_kubeconfig(iam_response['delegated_refresh_token'], project_id)
+        kubeconfig_data = kc_resp.get_result()
+
+        current_context_name = kubeconfig_data['current-context']
+        context_details = next(c['context'] for c in kubeconfig_data['contexts'] if c['name'] == current_context_name)
+
+        namespace = context_details.get('namespace', 'default')
+        server_url = next(c['cluster'] for c in kubeconfig_data['clusters'] if c['name'] == context_details['cluster'])['server']
+        return namespace, server_url
+
+    def create_registry_secret(self):
+        # Set up the authenticator and service instance
+        self.code_engine_service_v1 = IbmCloudCodeEngineV1(authenticator=self.authenticator)
+        self.code_engine_service_v1.set_service_url("https://api." + self.region + ".codeengine.cloud.ibm.com/api/v1")
+        token = self.authenticator.token_manager.get_token()
+
+        # Fetch K8s config details
+        namespace, k8s_api_server_url = self._extract_k8s_config_details(self.project_id)
+
+        # Create a new configuration instance
+        configuration = client.Configuration()
+        configuration.host = k8s_api_server_url
+        configuration.api_key = {"authorization": "Bearer " + token}
+        api_client_instance = client.ApiClient(configuration)
+        core_api = client.CoreV1Api(api_client_instance)
+
+        secret = client.V1Secret(
+            metadata=client.V1ObjectMeta(name=self.docker_registry_name, namespace=namespace),
+            type="kubernetes.io/dockerconfigjson",
+            string_data={".dockerconfigjson": json.dumps({
+                "auths": {
+                    self.docker_server: {
+                        "username": self.docker_username,
+                        "password": self.docker_password,
+                    }
+                }
+            })}
+        )
+
+        try:
+            core_api.delete_namespaced_secret(self.docker_registry_name, namespace=namespace)
+        except ApiException as e:
+            if e.status == 404: # Not Found, which is fine
+                pass
+            else:
+                self.cluster._log(f"Error deleting existing registry secret {self.docker_registry_name} in {namespace}: {e}")
+                pass
+
+        try:
+            core_api.create_namespaced_secret(namespace, secret)
+            self.cluster._log(f"Successfully created registry secret '{self.docker_registry_name}'.")
+        except ApiException as e:
+            if e.status == 409: # Conflict, secret already exists
+                self.cluster._log(f"Registry secret '{self.docker_registry_name}' already exists.")
+            else:
+                self.cluster._log(f"Error creating registry secret '{self.docker_registry_name}': {e}")
+                raise e
 
     async def create_vm(self):
         # Deploy a scheduler on a Code Engine application
@@ -95,6 +183,7 @@ class IBMCodeEngine(VMInterface):
                 scale_memory_limit=self.memory,
                 scale_ephemeral_storage_limit=self.disk,
                 scale_request_timeout=self.cluster.scheduler_timeout,
+                image_secret=self.docker_registry_name,
                 run_env_variables=[
                     {
                         "type": "literal",
@@ -150,6 +239,7 @@ class IBMCodeEngine(VMInterface):
                             scale_cpu_limit=self.cpu,
                             scale_memory_limit=self.memory,
                             scale_ephemeral_storage_limit=self.disk,
+                            image_secret=self.docker_registry_name,
                             run_env_variables=[
                                 {
                                     "type": "config_map_key_reference",
@@ -202,15 +292,24 @@ class IBMCodeEngineScheduler(SchedulerMixin, IBMCodeEngine):
         self.memory = self.cluster.scheduler_mem
         self.disk = self.cluster.scheduler_disk
 
-        self.command = [
-            "python",
-            "-m",
-            "distributed.cli.dask_scheduler",
-            "--protocol",
-            "ws",
-        ]
+        if self.scheduler_command:
+            self.command = self.scheduler_command.split()
+        else:
+            # The scheduler must run on the public URL with the "ws" protocol
+            self.command = [
+                "python",
+                "-m",
+                "distributed.cli.dask_scheduler",
+                "--protocol",
+                "ws",
+            ]
 
     async def start(self):
+        if self.docker_server and self.docker_username and self.docker_password:
+            self.docker_registry_name = "dask-" + self.docker_server.split(".")[0]
+            self.cluster._log(f"Creating registry secret for {self.docker_registry_name}")
+            self.create_registry_secret()
+
         self.cluster._log(
             f"Launching cluster with the following configuration: "
             f"\n  Source Image: {self.image} "
@@ -276,6 +375,15 @@ class IBMCodeEngineWorker(WorkerMixin, IBMCodeEngine):
             ),
         ]
 
+        # To work with Code Engine, we need to use the extra arguments
+        if self.worker_command:
+            custom_command_prefix = self.worker_command.split()
+            original_command_suffix = self.command[3:]
+            self.command = custom_command_prefix + original_command_suffix
+
+        if self.docker_server and self.docker_username and self.docker_password:
+            self.docker_registry_name = "dask-" + self.docker_server.split(".")[0]
+
     async def start(self):
         self.cluster._log(f"Creating worker instance {self.name}")
         await self.create_vm()
@@ -314,6 +422,9 @@ class IBMCodeEngineCluster(VMCluster):
         The amount of ephemeral storage to allocate to the scheduler. This value must be lower than scheduler_mem.
     scheduler_timeout: int
         The timeout for the scheduler in seconds.
+    scheduler_command: str
+        The command to run the scheduler. This should be a string that is passed to the ``dask-scheduler`` command.
+        The default is ``dask-scheduler --protocol ws``.
     worker_cpu: str
         The amount of CPU to allocate to each worker.
 
@@ -326,6 +437,15 @@ class IBMCodeEngineCluster(VMCluster):
         The amount of ephemeral storage to allocate to each worker. This value must be lower than worker_mem.
     worker_threads: int
         The number of threads to use on each worker.
+    worker_command: str
+        The command to run the worker. This should be a string that is passed to the ``dask-worker`` command.
+        The default is ``python -m distributed.cli.dask_spec``.
+    docker_server: str
+        The Docker registry server (e.g., "docker.io", "gcr.io"). Required if using private Docker images.
+    docker_username: str
+        The username for authenticating with the Docker registry. Required if using private Docker images.
+    docker_password: str
+        The password or access token for authenticating with the Docker registry. Required if using private Docker images.
     debug: bool, optional
         More information will be printed when constructing clusters to enable debugging.
 
@@ -342,6 +462,12 @@ class IBMCodeEngineCluster(VMCluster):
 
     To expose your IBM API KEY, use this command:
     export DASK_CLOUDPROVIDER__IBM__API_KEY=xxxxx
+
+    **Docker Registry Authentication**
+
+    If you need to use private Docker images, you can configure Docker registry credentials using the docker_server,
+    docker_username, and docker_password parameters. These credentials will be used to create a Kubernetes secret
+    for image pulling in Code Engine.
 
     **Certificates**
 
@@ -423,10 +549,15 @@ class IBMCodeEngineCluster(VMCluster):
         scheduler_mem: str = None,
         scheduler_disk: str = None,
         scheduler_timeout: int = None,
+        scheduler_command: str = None,
         worker_cpu: str = None,
         worker_mem: str = None,
         worker_disk: str = None,
         worker_threads: int = 1,
+        worker_command: str = None,
+        docker_server: str = None,
+        docker_username: str = None,
+        docker_password: str = None,
         debug: bool = False,
         **kwargs,
     ):
@@ -441,13 +572,16 @@ class IBMCodeEngineCluster(VMCluster):
         self.scheduler_cpu = scheduler_cpu or self.config.get("scheduler_cpu")
         self.scheduler_mem = scheduler_mem or self.config.get("scheduler_mem")
         self.scheduler_disk = scheduler_disk or self.config.get("scheduler_disk")
-        self.scheduler_timeout = scheduler_timeout or self.config.get(
-            "scheduler_timeout"
-        )
+        self.scheduler_timeout = scheduler_timeout or self.config.get("scheduler_timeout")
+        self.scheduler_command = scheduler_command or self.config.get("scheduler_command")
         self.worker_cpu = worker_cpu or self.config.get("worker_cpu")
         self.worker_mem = worker_mem or self.config.get("worker_mem")
         self.worker_disk = worker_disk or self.config.get("worker_disk")
         self.worker_threads = worker_threads or self.config.get("worker_threads")
+        self.worker_command = worker_command or self.config.get("worker_command")
+        self.docker_server = docker_server or self.config.get("docker_server")
+        self.docker_username = docker_username or self.config.get("docker_username")
+        self.docker_password = docker_password or self.config.get("docker_password")
 
         self.debug = debug
 
@@ -461,10 +595,15 @@ class IBMCodeEngineCluster(VMCluster):
             "scheduler_mem": self.scheduler_mem,
             "scheduler_disk": self.scheduler_disk,
             "scheduler_timeout": self.scheduler_timeout,
+            "scheduler_command": self.scheduler_command,
             "worker_cpu": self.worker_cpu,
             "worker_mem": self.worker_mem,
             "worker_disk": self.worker_disk,
             "worker_threads": self.worker_threads,
+            "worker_command": self.worker_command,
+            "docker_server": self.docker_server,
+            "docker_username": self.docker_username,
+            "docker_password": self.docker_password,
             "api_key": api_key,
         }
         self.scheduler_options = {**self.options}

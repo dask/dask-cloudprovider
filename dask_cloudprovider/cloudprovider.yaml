@@ -130,10 +130,15 @@ cloudprovider:
     scheduler_mem: 4G
     scheduler_disk: 400M
     scheduler_timeout: 600 # seconds
+    scheduler_command:  python -m distributed.cli.dask_scheduler --protocol ws
     worker_cpu: "2.0"
     worker_mem: 8G
     worker_disk: 400M
     worker_threads: 1
+    worker_command: python -m distributed.cli.dask_spec
+    docker_server: ""
+    docker_username: ""
+    docker_password: ""
 
   openstack:
     region: "RegionOne" # The name of the region where resources will be allocated in OpenStack. List available regions using: `openstack region list`.
