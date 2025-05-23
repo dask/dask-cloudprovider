@@ -621,7 +621,6 @@ class GCPCluster(VMCluster):
                 raise ValueError("If you specify machine_type, you may not specify scheduler_machine_type or worker_machine_type")
             self.scheduler_machine_type = machine_type
             self.worker_machine_type = machine_type
-        self.gpu_instance = "gpu" in self.machine_type or bool(ngpus)
         self.debug = debug
         self.options = {
             "cluster": self,
@@ -661,6 +660,7 @@ class GCPCluster(VMCluster):
         if ngpus is not None:
             self.scheduler_options["ngpus"] = 0
             self.scheduler_options["gpu_type"] = None
+            self.scheduler_options["gpu_instance"] = False
 
             self.worker_ngpus = ngpus
             self.worker_options["ngpus"] = ngpus or self.config.get("ngpus"),
