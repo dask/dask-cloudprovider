@@ -453,10 +453,11 @@ class GCPCluster(VMCluster):
     extra_bootstrap: list[str] (optional)
         Extra commands to be run during the bootstrap phase.
     ngpus: int (optional)
-        The number of GPUs to atatch to the instance.
+        The number of GPUs to atatch to the worker instance. No work is expected to be done on scheduler, so no
+        GPU there.
         Default is ``0``.
     gpu_type: str (optional)
-        The name of the GPU to use. This must be set if ``ngpus>0``.
+        The name of the GPU to use on worker. This must be set if ``ngpus>0``.
         You can see a list of GPUs available in each zone with ``gcloud compute accelerator-types list``.
     filesystem_size: int (optional)
         The VM filesystem size in GB. Defaults to ``50``.
@@ -616,6 +617,8 @@ class GCPCluster(VMCluster):
         if machine_type is None:
             self.scheduler_machine_type = scheduler_machine_type or self.config.get("scheduler_machine_type")
             self.worker_machine_type = worker_machine_type or self.config.get("worker_machine_type")
+            if self.scheduler_machine_type is None or self.worker_machine_type is None:
+                raise ValueError("machine_type and scheduler_machine_type must be set")
         else:
             if scheduler_machine_type is not None or worker_machine_type is not None:
                 raise ValueError("If you specify machine_type, you may not specify scheduler_machine_type or worker_machine_type")
@@ -657,12 +660,12 @@ class GCPCluster(VMCluster):
         self.scheduler_options["machine_type"] = self.scheduler_machine_type
         self.worker_options["machine_type"] = self.worker_machine_type
 
-        if ngpus is not None:
-            self.scheduler_options["ngpus"] = 0
-            self.scheduler_options["gpu_type"] = None
-            self.scheduler_options["gpu_instance"] = False
+        # Scheduler always does not have GPUs as no work is expected to be done there
+        self.scheduler_options["ngpus"] = 0
+        self.scheduler_options["gpu_type"] = None
+        self.scheduler_options["gpu_instance"] = False
 
-            self.worker_ngpus = ngpus
+        if ngpus or self.config.get("ngpus"):
             self.worker_options["ngpus"] = ngpus or self.config.get("ngpus")
             self.worker_options["gpu_type"] = gpu_type or self.config.get("gpu_type")
             self.worker_options["gpu_instance"] = True
