@@ -302,7 +302,8 @@ class GCPScheduler(SchedulerMixin, GCPInstance):
             f"\n  Machine Type: {self.machine_type} "
             f"\n  Filesystem Size: {self.filesystem_size} "
             f"\n  Disk Type: {self.disk_type} "
-            f"\n  N-GPU Type: {self.ngpus} {self.gpu_type}"
+            f"\n  Scheduler GPU Count: {self.ngpus}"
+            f"\n  Scheduler GPU Type: {self.gpu_type}"
             f"\n  Zone: {self.zone} "
         )
         self.cluster._log("Creating scheduler instance")
@@ -375,6 +376,8 @@ class GCPWorker(GCPInstance):
 
     async def start_worker(self):
         self.cluster._log("Creating worker instance")
+        self.cluster._log(f"Worker GPU Count: {self.ngpus}")
+        self.cluster._log(f"Worker GPU Type: {self.gpu_type}")
         self.internal_ip, self.external_ip = await self.create_vm()
         if self.config.get("public_ingress", True):
             # scheduler is publicly available
@@ -407,7 +410,7 @@ class GCPCluster(VMCluster):
         The GCP zone to launch you cluster in. A full list can be obtained with ``gcloud compute zones list``.
     network: str
         The GCP VPC network/subnetwork to use.  The default is `default`.  If using firewall rules,
-        please ensure the follwing accesses are configured:
+        please ensure the following accesses are configured:
             - egress 0.0.0.0/0 on all ports for downloading docker images and general data access
             - ingress 10.0.0.0/8 on all ports for internal communication of workers
             - ingress 0.0.0.0/0 on 8786-8787 for external accessibility of the dashboard/scheduler
@@ -418,7 +421,7 @@ class GCPCluster(VMCluster):
     machine_type: str
         The VM machine_type. You can get a full list with ``gcloud compute machine-types list``.
         The default is ``n1-standard-1`` which is 3.75GB RAM and 1 vCPU.
-        This will determine the resources available to both the sceduler and all workers.
+        This will determine the resources available to both the scheduler and all workers.
         If supplied, you may not specify ``scheduler_machine_type`` or ``worker_machine_type``.
     scheduler_machine_type: str
         The VM machine_type. This will determine the resources available to the scheduler.
@@ -427,7 +430,7 @@ class GCPCluster(VMCluster):
         The VM machine_type. This will determine the resources available to all workers.
         The default is ``n1-standard-1`` which is 3.75GB RAM and 1 vCPU.
     source_image: str
-        The OS image to use for the VM. Dask Cloudprovider will boostrap Ubuntu based images automatically.
+        The OS image to use for the VM. Dask Cloudprovider will bootstrap Ubuntu based images automatically.
         Other images require Docker and for GPUs the NVIDIA Drivers and NVIDIA Docker.
 
         A list of available images can be found with ``gcloud compute images list``
@@ -453,12 +456,25 @@ class GCPCluster(VMCluster):
     extra_bootstrap: list[str] (optional)
         Extra commands to be run during the bootstrap phase.
     ngpus: int (optional)
-        The number of GPUs to atatch to the worker instance. No work is expected to be done on scheduler, so no
-        GPU there.
-        Default is ``0``.
+        The number of GPUs to attach to both the worker and scheduler instances. If specified,
+        you cannot use ``scheduler_ngpus`` or ``worker_ngpus`` (they must be None). Default is None.
+
+        Note: Due to the way that Dask uses pickle to move things around there are cases where the scheduler might
+        deserialize a meta object which may try and allocate a small amount of GPU memory. It's always recommended
+        to have a matching GPU configuration on the scheduler and workers.
     gpu_type: str (optional)
-        The name of the GPU to use on worker. This must be set if ``ngpus>0``.
+        The name of the GPU to use on both the worker and scheduler. This must be set if ``ngpus>0``.
         You can see a list of GPUs available in each zone with ``gcloud compute accelerator-types list``.
+    scheduler_ngpus: int (optional)
+        The number of GPUs to attach to the scheduler instance. If you specified this,
+        nothing should be specified for the ``ngpus`` and ``gpu_type``. Default is ``0``.
+    scheduler_gpu_type: str (optional)
+        The name of the GPU to use on the scheduler. This must be set if ``scheduler_ngpus>0``.
+    worker_ngpus: int (optional)
+        The number of GPUs to attach to the worker instance. If you specified this,
+        nothing should be specified for the ``ngpus`` and ``gpu_type``. Default is ``0``.
+    worker_gpu_type: str (optional)
+        The name of the GPU to use on the worker. This must be set if ``worker_ngpus>0``.
     filesystem_size: int (optional)
         The VM filesystem size in GB. Defaults to ``50``.
     disk_type: str (optional)
@@ -589,6 +605,10 @@ class GCPCluster(VMCluster):
         docker_image=None,
         ngpus=None,
         gpu_type=None,
+        scheduler_ngpus=None,
+        scheduler_gpu_type=None,
+        worker_ngpus=None,
+        worker_gpu_type=None,
         filesystem_size=None,
         disk_type=None,
         auto_shutdown=None,
@@ -624,6 +644,33 @@ class GCPCluster(VMCluster):
                 raise ValueError("If you specify machine_type, you may not specify scheduler_machine_type or worker_machine_type")
             self.scheduler_machine_type = machine_type
             self.worker_machine_type = machine_type
+
+        self.ngpus = ngpus or self.config.get("ngpus")
+        if not self.ngpus:
+            self.scheduler_ngpus = scheduler_ngpus if scheduler_ngpus is not None else self.config.get("scheduler_ngpus", 0)
+            self.worker_ngpus = worker_ngpus if worker_ngpus is not None else self.config.get("worker_ngpus", 0)
+            if self.scheduler_ngpus == 0 and self.worker_ngpus == 0:
+                self._log("No GPU instances configured")
+        else:
+            if scheduler_ngpus is not None or worker_ngpus is not None:
+                raise ValueError("If you specify ngpus, you may not specify scheduler_ngpus or worker_ngpus")
+            self.scheduler_ngpus = self.ngpus
+            self.worker_ngpus = self.ngpus
+
+        self.gpu_type = gpu_type or self.config.get("gpu_type")
+        if not self.gpu_type:
+            self.scheduler_gpu_type = scheduler_gpu_type or self.config.get("scheduler_gpu_type")
+            self.worker_gpu_type = worker_gpu_type or self.config.get("worker_gpu_type")
+            if self.scheduler_ngpus > 0 and self.scheduler_gpu_type is None:
+                raise ValueError("scheduler_gpu_type must be specified when scheduler_ngpus > 0")
+            if self.worker_ngpus > 0 and self.worker_gpu_type is None:
+                raise ValueError("worker_gpu_type must be specified when worker_ngpus > 0")
+        else:
+            if scheduler_gpu_type is not None or worker_gpu_type is not None:
+                raise ValueError("If you specify gpu_type, you may not specify scheduler_gpu_type or worker_gpu_type")
+            self.scheduler_gpu_type = self.gpu_type
+            self.worker_gpu_type = self.gpu_type
+
         self.debug = debug
         self.options = {
             "cluster": self,
@@ -636,15 +683,9 @@ class GCPCluster(VMCluster):
             "on_host_maintenance": on_host_maintenance
             or self.config.get("on_host_maintenance"),
             "zone": zone or self.config.get("zone"),
-            "machine_type": self.machine_type,
-            "scheduler_machine_type": self.scheduler_machine_type,
-            "worker_machine_type": self.worker_machine_type,
-            "ngpus": ngpus or self.config.get("ngpus"),
             "network": network or self.config.get("network"),
             "network_projectid": network_projectid
             or self.config.get("network_projectid"),
-            "gpu_type": gpu_type or self.config.get("gpu_type"),
-            "gpu_instance": self.gpu_instance,
             "bootstrap": self.bootstrap,
             "auto_shutdown": self.auto_shutdown,
             "preemptible": (
@@ -656,19 +697,16 @@ class GCPCluster(VMCluster):
             "service_account": service_account or self.config.get("service_account"),
         }
         self.scheduler_options = {**self.options}
-        self.worker_options = {**self.options}
         self.scheduler_options["machine_type"] = self.scheduler_machine_type
+        self.scheduler_options["ngpus"] = self.scheduler_ngpus
+        self.scheduler_options["gpu_type"] = self.scheduler_gpu_type
+        self.scheduler_options["gpu_instance"] = bool(self.scheduler_ngpus)
+
+        self.worker_options = {**self.options}
         self.worker_options["machine_type"] = self.worker_machine_type
-
-        # Scheduler always does not have GPUs as no work is expected to be done there
-        self.scheduler_options["ngpus"] = 0
-        self.scheduler_options["gpu_type"] = None
-        self.scheduler_options["gpu_instance"] = False
-
-        if ngpus or self.config.get("ngpus"):
-            self.worker_options["ngpus"] = ngpus or self.config.get("ngpus")
-            self.worker_options["gpu_type"] = gpu_type or self.config.get("gpu_type")
-            self.worker_options["gpu_instance"] = True
+        self.worker_options["ngpus"] = self.worker_ngpus
+        self.worker_options["gpu_type"] = self.worker_gpu_type
+        self.worker_options["gpu_instance"] = bool(self.worker_ngpus)
 
         if "extra_bootstrap" not in kwargs:
             kwargs["extra_bootstrap"] = self.config.get("extra_bootstrap")

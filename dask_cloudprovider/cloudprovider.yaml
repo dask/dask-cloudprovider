@@ -105,8 +105,12 @@ cloudprovider:
     scheduler_machine_type: "n1-standard-1" # size of the machine type to use for the scheduler
     worker_machine_type: "n1-standard-1" # size of the machine type to use for all workers
     filesystem_size: 50 # amount in GBs of hard drive space to allocate
-    ngpus: "" # number of GPUs to use
-    gpu_type: "" # type of gpus to use: nvidia-tesla-k80, nvidia-tesla-p100, nvidia-tesla-t4
+    ngpus: "" # number of GPUs to use. If provided, will be used for both scheduler and worker
+    gpu_type: "" # type of gpus to use: nvidia-tesla-k80, nvidia-tesla-p100, nvidia-tesla-t4. If provided, will be used for both scheduler and worker
+    scheduler_ngpus: "" # number of GPUs to use on scheduler
+    scheduler_gpu_type: "" # type of gpus to use on scheduler: nvidia-tesla-k80, nvidia-tesla-p100, nvidia-tesla-t4
+    worker_ngpus: "" # number of GPUs to use on worker
+    worker_gpu_type: "" # type of gpus to use on worker: nvidia-tesla-k80, nvidia-tesla-p100, nvidia-tesla-t4
     disk_type: "pd-standard" # type of disk to use: pd-standard, pd-ssd
     docker_image: "daskdev/dask:latest" # docker image to use
     auto_shutdown: true # Shutdown instances automatically if the scheduler or worker services time out.
