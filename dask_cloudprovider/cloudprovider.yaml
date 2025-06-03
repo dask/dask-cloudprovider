@@ -101,10 +101,16 @@ cloudprovider:
     network_projectid: null # GCP project id where the network exists
     projectid: "" # name of the google cloud project
     on_host_maintenance: "TERMINATE"
-    machine_type: "n1-standard-1" # size of the machine type to use
+    machine_type: "n1-standard-1" # size of the machine type to use for the scheduler and all workers
+    scheduler_machine_type: "n1-standard-1" # size of the machine type to use for the scheduler
+    worker_machine_type: "n1-standard-1" # size of the machine type to use for all workers
     filesystem_size: 50 # amount in GBs of hard drive space to allocate
-    ngpus: "" # number of GPUs to use
-    gpu_type: "" # type of gpus to use: nvidia-tesla-k80, nvidia-tesla-p100, nvidia-tesla-t4
+    ngpus: "" # number of GPUs to use. If provided, will be used for both scheduler and worker
+    gpu_type: "" # type of gpus to use. (e.g. 'nvidia-tesla-t4'). You can view the possible values through ``gcloud compute accelerator-types list``. If provided, will be used for both scheduler and worker
+    scheduler_ngpus: "" # number of GPUs to use on scheduler
+    scheduler_gpu_type: "" # type of gpus to use. (e.g. 'nvidia-tesla-t4'). You can view the possible values through ``gcloud compute accelerator-types list``.
+    worker_ngpus: "" # number of GPUs to use on worker
+    worker_gpu_type: "" # type of gpus to use. (e.g. 'nvidia-tesla-t4'). You can view the possible values through ``gcloud compute accelerator-types list``.
     disk_type: "pd-standard" # type of disk to use: pd-standard, pd-ssd
     docker_image: "daskdev/dask:latest" # docker image to use
     auto_shutdown: true # Shutdown instances automatically if the scheduler or worker services time out.
