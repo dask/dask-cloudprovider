@@ -110,31 +110,32 @@ class OpenStackInstance(VMInterface):
     async def create_and_assign_floating_ip(self, conn):
         """Create and assign a floating IP to the instance."""
         try:
+            loop = asyncio.get_event_loop()
             # Create a floating IP
-            floating_ip = await self.cluster.call_async(
-                conn.network.create_ip,
-                floating_network_id=self.config["external_network_id"],
+            floating_ip = await loop.run_in_executor(
+                None,
+                lambda: conn.network.create_ip(
+                    floating_network_id=self.config["external_network_id"]
+                )
             )
 
             # Find the first port of the instance
-            ports = await self.cluster.call_async(
-                conn.network.ports,
-                device_id=self.instance.id
+            ports = await loop.run_in_executor(
+                None,
+                lambda: list(conn.network.ports(device_id=self.instance.id))
             )
-            ports = list(ports)
             if not ports:
                 raise RuntimeError(f"No network ports found for instance {self.instance.id}")
 
             # Assign the floating IP to the instance's port
-            await self.cluster.call_async(
-                conn.network.update_ip,
-                floating_ip,
-                port_id=ports[0].id
+            await loop.run_in_executor(
+                None,
+                lambda: conn.network.update_ip(floating_ip, port_id=ports[0].id)
             )
 
             return floating_ip.floating_ip_address
         except Exception as e:
-            self.cluster._log(f"Failed to create or assign floating IP: {str(e)}")
+            self.cluster._log(f"Failed to create or assign floating IP: {e}")
             return None
 
     async def destroy_vm(self):
