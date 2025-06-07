@@ -118,18 +118,17 @@ class OpenStackInstance(VMInterface):
 
             # Find the first port of the instance
             ports = await self.call_async(
-                conn.network.ports,
-                device_id=self.instance.id
+                conn.network.ports, device_id=self.instance.id
             )
             ports = list(ports)
             if not ports:
-                raise RuntimeError(f"No network ports found for instance {self.instance.id}")
+                raise RuntimeError(
+                    f"No network ports found for instance {self.instance.id}"
+                )
 
             # Assign the floating IP to the instance's port
             await self.call_async(
-                conn.network.update_ip,
-                floating_ip,
-                port_id=ports[0].id
+                conn.network.update_ip, floating_ip, port_id=ports[0].id
             )
 
             return floating_ip.floating_ip_address

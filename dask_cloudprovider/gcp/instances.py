@@ -635,39 +635,63 @@ class GCPCluster(VMCluster):
         )
         self.machine_type = machine_type or self.config.get("machine_type")
         if machine_type is None:
-            self.scheduler_machine_type = scheduler_machine_type or self.config.get("scheduler_machine_type")
-            self.worker_machine_type = worker_machine_type or self.config.get("worker_machine_type")
+            self.scheduler_machine_type = scheduler_machine_type or self.config.get(
+                "scheduler_machine_type"
+            )
+            self.worker_machine_type = worker_machine_type or self.config.get(
+                "worker_machine_type"
+            )
             if self.scheduler_machine_type is None or self.worker_machine_type is None:
                 raise ValueError("machine_type and scheduler_machine_type must be set")
         else:
             if scheduler_machine_type is not None or worker_machine_type is not None:
-                raise ValueError("If you specify machine_type, you may not specify scheduler_machine_type or worker_machine_type")
+                raise ValueError(
+                    "If you specify machine_type, you may not specify scheduler_machine_type or worker_machine_type"
+                )
             self.scheduler_machine_type = machine_type
             self.worker_machine_type = machine_type
 
         self.ngpus = ngpus or self.config.get("ngpus")
         if not self.ngpus:
-            self.scheduler_ngpus = scheduler_ngpus if scheduler_ngpus is not None else self.config.get("scheduler_ngpus", 0)
-            self.worker_ngpus = worker_ngpus if worker_ngpus is not None else self.config.get("worker_ngpus", 0)
+            self.scheduler_ngpus = (
+                scheduler_ngpus
+                if scheduler_ngpus is not None
+                else self.config.get("scheduler_ngpus", 0)
+            )
+            self.worker_ngpus = (
+                worker_ngpus
+                if worker_ngpus is not None
+                else self.config.get("worker_ngpus", 0)
+            )
             if self.scheduler_ngpus == 0 and self.worker_ngpus == 0:
                 self._log("No GPU instances configured")
         else:
             if scheduler_ngpus is not None or worker_ngpus is not None:
-                raise ValueError("If you specify ngpus, you may not specify scheduler_ngpus or worker_ngpus")
+                raise ValueError(
+                    "If you specify ngpus, you may not specify scheduler_ngpus or worker_ngpus"
+                )
             self.scheduler_ngpus = self.ngpus
             self.worker_ngpus = self.ngpus
 
         self.gpu_type = gpu_type or self.config.get("gpu_type")
         if not self.gpu_type:
-            self.scheduler_gpu_type = scheduler_gpu_type or self.config.get("scheduler_gpu_type")
+            self.scheduler_gpu_type = scheduler_gpu_type or self.config.get(
+                "scheduler_gpu_type"
+            )
             self.worker_gpu_type = worker_gpu_type or self.config.get("worker_gpu_type")
             if self.scheduler_ngpus > 0 and self.scheduler_gpu_type is None:
-                raise ValueError("scheduler_gpu_type must be specified when scheduler_ngpus > 0")
+                raise ValueError(
+                    "scheduler_gpu_type must be specified when scheduler_ngpus > 0"
+                )
             if self.worker_ngpus > 0 and self.worker_gpu_type is None:
-                raise ValueError("worker_gpu_type must be specified when worker_ngpus > 0")
+                raise ValueError(
+                    "worker_gpu_type must be specified when worker_ngpus > 0"
+                )
         else:
             if scheduler_gpu_type is not None or worker_gpu_type is not None:
-                raise ValueError("If you specify gpu_type, you may not specify scheduler_gpu_type or worker_gpu_type")
+                raise ValueError(
+                    "If you specify gpu_type, you may not specify scheduler_gpu_type or worker_gpu_type"
+                )
             self.scheduler_gpu_type = self.gpu_type
             self.worker_gpu_type = self.gpu_type
 

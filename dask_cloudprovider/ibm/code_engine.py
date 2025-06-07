@@ -82,7 +82,9 @@ class IBMCodeEngine(VMInterface):
         self.docker_password = docker_password
         self.docker_registry_name = docker_registry_name
 
-        self.authenticator = IAMAuthenticator(self.api_key, url="https://iam.cloud.ibm.com")
+        self.authenticator = IAMAuthenticator(
+            self.api_key, url="https://iam.cloud.ibm.com"
+        )
         self.authenticator.set_disable_ssl_verification(
             True
         )  # Disable SSL verification for the authenticator
@@ -97,9 +99,11 @@ class IBMCodeEngine(VMInterface):
 
     def _extract_k8s_config_details(self, project_id):
         delegated_refresh_token_payload = {
-            'grant_type': 'urn:ibm:params:oauth:grant-type:apikey', 'apikey': self.api_key,
-            'response_type': 'delegated_refresh_token', 'receiver_client_ids': 'ce',
-            'delegated_refresh_token_expiry': '3600'
+            "grant_type": "urn:ibm:params:oauth:grant-type:apikey",
+            "apikey": self.api_key,
+            "response_type": "delegated_refresh_token",
+            "receiver_client_ids": "ce",
+            "delegated_refresh_token_expiry": "3600",
         }
         token_manager = self.code_engine_service.authenticator.token_manager
         original_request_payload = token_manager.request_payload
@@ -109,24 +113,40 @@ class IBMCodeEngine(VMInterface):
         finally:
             token_manager.request_payload = original_request_payload
 
-        kc_resp = self.code_engine_service_v1.get_kubeconfig(iam_response['delegated_refresh_token'], project_id)
+        kc_resp = self.code_engine_service_v1.get_kubeconfig(
+            iam_response["delegated_refresh_token"], project_id
+        )
         kubeconfig_data = kc_resp.get_result()
 
-        current_context_name = kubeconfig_data['current-context']
-        context_details = next(c['context'] for c in kubeconfig_data['contexts'] if c['name'] == current_context_name)
+        current_context_name = kubeconfig_data["current-context"]
+        context_details = next(
+            c["context"]
+            for c in kubeconfig_data["contexts"]
+            if c["name"] == current_context_name
+        )
 
-        namespace = context_details.get('namespace', 'default')
-        server_url = next(c['cluster'] for c in kubeconfig_data['clusters'] if c['name'] == context_details['cluster'])['server']
+        namespace = context_details.get("namespace", "default")
+        server_url = next(
+            c["cluster"]
+            for c in kubeconfig_data["clusters"]
+            if c["name"] == context_details["cluster"]
+        )["server"]
         return namespace, server_url
 
     def create_registry_secret(self):
         # Set up the authenticator and service instance
-        self.code_engine_service_v1 = IbmCloudCodeEngineV1(authenticator=self.authenticator)
-        self.code_engine_service_v1.set_service_url("https://api." + self.region + ".codeengine.cloud.ibm.com/api/v1")
+        self.code_engine_service_v1 = IbmCloudCodeEngineV1(
+            authenticator=self.authenticator
+        )
+        self.code_engine_service_v1.set_service_url(
+            "https://api." + self.region + ".codeengine.cloud.ibm.com/api/v1"
+        )
         token = self.authenticator.token_manager.get_token()
 
         # Fetch K8s config details
-        namespace, k8s_api_server_url = self._extract_k8s_config_details(self.project_id)
+        namespace, k8s_api_server_url = self._extract_k8s_config_details(
+            self.project_id
+        )
 
         # Create a new configuration instance
         configuration = client.Configuration()
@@ -136,35 +156,51 @@ class IBMCodeEngine(VMInterface):
         core_api = client.CoreV1Api(api_client_instance)
 
         secret = client.V1Secret(
-            metadata=client.V1ObjectMeta(name=self.docker_registry_name, namespace=namespace),
+            metadata=client.V1ObjectMeta(
+                name=self.docker_registry_name, namespace=namespace
+            ),
             type="kubernetes.io/dockerconfigjson",
-            string_data={".dockerconfigjson": json.dumps({
-                "auths": {
-                    self.docker_server: {
-                        "username": self.docker_username,
-                        "password": self.docker_password,
+            string_data={
+                ".dockerconfigjson": json.dumps(
+                    {
+                        "auths": {
+                            self.docker_server: {
+                                "username": self.docker_username,
+                                "password": self.docker_password,
+                            }
+                        }
                     }
-                }
-            })}
+                )
+            },
         )
 
         try:
-            core_api.delete_namespaced_secret(self.docker_registry_name, namespace=namespace)
+            core_api.delete_namespaced_secret(
+                self.docker_registry_name, namespace=namespace
+            )
         except ApiException as e:
-            if e.status == 404: # Not Found, which is fine
+            if e.status == 404:  # Not Found, which is fine
                 pass
             else:
-                self.cluster._log(f"Error deleting existing registry secret {self.docker_registry_name} in {namespace}: {e}")
+                self.cluster._log(
+                    f"Error deleting existing registry secret {self.docker_registry_name} in {namespace}: {e}"
+                )
                 pass
 
         try:
             core_api.create_namespaced_secret(namespace, secret)
-            self.cluster._log(f"Successfully created registry secret '{self.docker_registry_name}'.")
+            self.cluster._log(
+                f"Successfully created registry secret '{self.docker_registry_name}'."
+            )
         except ApiException as e:
-            if e.status == 409: # Conflict, secret already exists
-                self.cluster._log(f"Registry secret '{self.docker_registry_name}' already exists.")
+            if e.status == 409:  # Conflict, secret already exists
+                self.cluster._log(
+                    f"Registry secret '{self.docker_registry_name}' already exists."
+                )
             else:
-                self.cluster._log(f"Error creating registry secret '{self.docker_registry_name}': {e}")
+                self.cluster._log(
+                    f"Error creating registry secret '{self.docker_registry_name}': {e}"
+                )
                 raise e
 
     async def create_vm(self):
@@ -307,7 +343,9 @@ class IBMCodeEngineScheduler(SchedulerMixin, IBMCodeEngine):
     async def start(self):
         if self.docker_server and self.docker_username and self.docker_password:
             self.docker_registry_name = "dask-" + self.docker_server.split(".")[0]
-            self.cluster._log(f"Creating registry secret for {self.docker_registry_name}")
+            self.cluster._log(
+                f"Creating registry secret for {self.docker_registry_name}"
+            )
             self.create_registry_secret()
 
         self.cluster._log(
@@ -375,7 +413,7 @@ class IBMCodeEngineWorker(WorkerMixin, IBMCodeEngine):
             ),
         ]
 
-        # To work with Code Engine, we need to use the extra arguments
+        # To work with Code Engine, we need to use the extra arguments
         if self.worker_command:
             custom_command_prefix = self.worker_command.split()
             original_command_suffix = self.command[3:]
@@ -445,7 +483,8 @@ class IBMCodeEngineCluster(VMCluster):
     docker_username: str
         The username for authenticating with the Docker registry. Required if using private Docker images.
     docker_password: str
-        The password or access token for authenticating with the Docker registry. Required if using private Docker images.
+        The password or access token for authenticating with the Docker registry.
+        Required if using private Docker images.
     debug: bool, optional
         More information will be printed when constructing clusters to enable debugging.
 
@@ -572,8 +611,12 @@ class IBMCodeEngineCluster(VMCluster):
         self.scheduler_cpu = scheduler_cpu or self.config.get("scheduler_cpu")
         self.scheduler_mem = scheduler_mem or self.config.get("scheduler_mem")
         self.scheduler_disk = scheduler_disk or self.config.get("scheduler_disk")
-        self.scheduler_timeout = scheduler_timeout or self.config.get("scheduler_timeout")
-        self.scheduler_command = scheduler_command or self.config.get("scheduler_command")
+        self.scheduler_timeout = scheduler_timeout or self.config.get(
+            "scheduler_timeout"
+        )
+        self.scheduler_command = scheduler_command or self.config.get(
+            "scheduler_command"
+        )
         self.worker_cpu = worker_cpu or self.config.get("worker_cpu")
         self.worker_mem = worker_mem or self.config.get("worker_mem")
         self.worker_disk = worker_disk or self.config.get("worker_disk")
