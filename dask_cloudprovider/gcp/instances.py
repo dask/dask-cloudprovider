@@ -206,7 +206,7 @@ class GCPInstance(VMInterface):
         self.gcp_config = self.create_gcp_config()
 
         try:
-            inst = await self.cluster.call_async(
+            inst = await self.call_async(
                 self.cluster.compute.instances()
                 .insert(project=self.projectid, zone=self.zone, body=self.gcp_config)
                 .execute
@@ -232,7 +232,7 @@ class GCPInstance(VMInterface):
 
     async def get_internal_ip(self):
         return (
-            await self.cluster.call_async(
+            await self.call_async(
                 self.cluster.compute.instances()
                 .list(
                     project=self.projectid, zone=self.zone, filter=f"name={self.name}"
@@ -243,7 +243,7 @@ class GCPInstance(VMInterface):
 
     async def get_external_ip(self):
         return (
-            await self.cluster.call_async(
+            await self.call_async(
                 self.cluster.compute.instances()
                 .list(
                     project=self.projectid, zone=self.zone, filter=f"name={self.name}"
@@ -253,7 +253,7 @@ class GCPInstance(VMInterface):
         )["items"][0]["networkInterfaces"][0]["accessConfigs"][0]["natIP"]
 
     async def update_status(self):
-        d = await self.cluster.call_async(
+        d = await self.call_async(
             self.cluster.compute.instances()
             .list(project=self.projectid, zone=self.zone, filter=f"name={self.name}")
             .execute
@@ -276,7 +276,7 @@ class GCPInstance(VMInterface):
 
     async def close(self):
         self.cluster._log(f"Closing Instance: {self.name}")
-        await self.cluster.call_async(
+        await self.call_async(
             self.cluster.compute.instances()
             .delete(project=self.projectid, zone=self.zone, instance=self.name)
             .execute

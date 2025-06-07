@@ -111,13 +111,13 @@ class OpenStackInstance(VMInterface):
         """Create and assign a floating IP to the instance."""
         try:
             # Create a floating IP
-            floating_ip = await self.cluster.call_async(
+            floating_ip = await self.call_async(
                 conn.network.create_ip,
                 floating_network_id=self.config["external_network_id"],
             )
 
             # Find the first port of the instance
-            ports = await self.cluster.call_async(
+            ports = await self.call_async(
                 conn.network.ports,
                 device_id=self.instance.id
             )
@@ -126,7 +126,7 @@ class OpenStackInstance(VMInterface):
                 raise RuntimeError(f"No network ports found for instance {self.instance.id}")
 
             # Assign the floating IP to the instance's port
-            await self.cluster.call_async(
+            await self.call_async(
                 conn.network.update_ip,
                 floating_ip,
                 port_id=ports[0].id
@@ -170,7 +170,7 @@ class OpenStackInstance(VMInterface):
         try:
             instance = conn.compute.get_server(self.instance.id)
             if instance:
-                await self.cluster.call_async(conn.compute.delete_server, instance.id)
+                await self.call_async(conn.compute.delete_server, instance.id)
                 self.cluster._log(f"Terminated instance {self.name}")
             else:
                 self.cluster._log(f"Instance {self.name} not found or already deleted.")
