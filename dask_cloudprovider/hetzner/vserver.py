@@ -51,7 +51,7 @@ class VServer(VMInterface):
         self.docker_image = docker_image
 
     async def create_vm(self):
-        await self.cluster.call_async(
+        await self.call_async(
             self.client.servers.create,
             server_type=self.server_type,
             image=self.image,
@@ -62,14 +62,14 @@ class VServer(VMInterface):
         self.server = self.client.servers.get_by_name(self.name)
         for action in self.server.get_actions():
             while action.status != Action.STATUS_SUCCESS:
-                await self.cluster.call_async(action.reload)
+                await self.call_async(action.reload)
                 await asyncio.sleep(0.1)
         self.cluster._log(f"Created Hetzner vServer {self.name}")
 
         return self.server.public_net.ipv4.ip, None
 
     async def destroy_vm(self):
-        await self.cluster.call_async(self.client.servers.delete, server=self.server)
+        await self.call_async(self.client.servers.delete, server=self.server)
         self.cluster._log(f"Terminated vServer {self.name}")
 
 

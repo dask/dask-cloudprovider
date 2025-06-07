@@ -79,7 +79,7 @@ class AzureVM(VMInterface):
 
     async def create_vm(self):
         if not self.subnet:
-            [subnet_info, *_] = await self.cluster.call_async(
+            [subnet_info, *_] = await self.call_async(
                 self.cluster.network_client.subnets.list,
                 self.cluster.resource_group,
                 self.vnet,
@@ -96,7 +96,7 @@ class AzureVM(VMInterface):
             ],
             "networkSecurityGroup": {
                 "id": (
-                    await self.cluster.call_async(
+                    await self.call_async(
                         self.cluster.network_client.network_security_groups.get,
                         self.cluster.resource_group,
                         self.security_group,
@@ -107,7 +107,7 @@ class AzureVM(VMInterface):
             "tags": self.cluster.get_tags(),
         }
         if self.public_ingress:
-            self.public_ip = await self.cluster.call_async(
+            self.public_ip = await self.call_async(
                 self.cluster.network_client.public_ip_addresses.begin_create_or_update(
                     self.cluster.resource_group,
                     self.nic_name,
@@ -124,7 +124,7 @@ class AzureVM(VMInterface):
                 "id": self.public_ip.id
             }
             self.cluster._log("Assigned public IP")
-        self.nic = await self.cluster.call_async(
+        self.nic = await self.call_async(
             self.cluster.network_client.network_interfaces.begin_create_or_update(
                 self.cluster.resource_group,
                 self.nic_name,
@@ -198,17 +198,17 @@ class AzureVM(VMInterface):
             self.cluster._log(
                 f"with parameters\n{json.dumps(vm_parameters, sort_keys=True, indent=2)}"
             )
-        await self.cluster.call_async(
+        await self.call_async(
             self.cluster.compute_client.virtual_machines.begin_create_or_update(
                 self.cluster.resource_group, self.name, vm_parameters
             ).wait
         )
-        self.vm = await self.cluster.call_async(
+        self.vm = await self.call_async(
             self.cluster.compute_client.virtual_machines.get,
             self.cluster.resource_group,
             self.name,
         )
-        self.nic = await self.cluster.call_async(
+        self.nic = await self.call_async(
             self.cluster.network_client.network_interfaces.get,
             self.cluster.resource_group,
             self.nic.name,
@@ -222,32 +222,32 @@ class AzureVM(VMInterface):
             return private_ip_address, None
 
     async def destroy_vm(self):
-        await self.cluster.call_async(
+        await self.call_async(
             self.cluster.compute_client.virtual_machines.begin_delete(
                 self.cluster.resource_group, self.name
             ).wait
         )
         self.cluster._log(f"Terminated VM {self.name}")
-        for disk in await self.cluster.call_async(
+        for disk in await self.call_async(
             self.cluster.compute_client.disks.list_by_resource_group,
             self.cluster.resource_group,
         ):
             if self.name in disk.name:
-                await self.cluster.call_async(
+                await self.call_async(
                     self.cluster.compute_client.disks.begin_delete(
                         self.cluster.resource_group,
                         disk.name,
                     ).wait
                 )
         self.cluster._log(f"Removed disks for VM {self.name}")
-        await self.cluster.call_async(
+        await self.call_async(
             self.cluster.network_client.network_interfaces.begin_delete(
                 self.cluster.resource_group, self.nic.name
             ).wait
         )
         self.cluster._log("Deleted network interface")
         if self.public_ingress:
-            await self.cluster.call_async(
+            await self.call_async(
                 self.cluster.network_client.public_ip_addresses.begin_delete(
                     self.cluster.resource_group, self.public_ip.name
                 ).wait

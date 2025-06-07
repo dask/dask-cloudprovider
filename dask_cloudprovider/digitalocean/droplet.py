@@ -56,20 +56,20 @@ class Droplet(VMInterface):
             backups=False,
             user_data=self.cluster.render_process_cloud_init(self),
         )
-        await self.cluster.call_async(self.droplet.create)
+        await self.call_async(self.droplet.create)
         for action in self.droplet.get_actions():
             while action.status != "completed":
                 action.load()
                 await asyncio.sleep(0.1)
         while self.droplet.ip_address is None:
-            await self.cluster.call_async(self.droplet.load)
+            await self.call_async(self.droplet.load)
             await asyncio.sleep(0.1)
         self.cluster._log(f"Created droplet {self.name}")
 
         return self.droplet.ip_address, None
 
     async def destroy_vm(self):
-        await self.cluster.call_async(self.droplet.destroy)
+        await self.call_async(self.droplet.destroy)
         self.cluster._log(f"Terminated droplet {self.name}")
 
 
