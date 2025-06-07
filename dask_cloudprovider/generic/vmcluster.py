@@ -63,6 +63,10 @@ class VMInterface(ProcessInterface):
         await self.destroy_vm()
         await super().close()
 
+    async def call_async(self, f, *args, **kwargs):
+        """Run a blocking function in a thread as a coroutine."""
+        return await self.cluster.call_async(f, *args, **kwargs)
+
 
 class SchedulerMixin(object):
     """A mixin for Schedulers."""
