@@ -27,6 +27,7 @@ from distributed.core import Status
 
 try:
     from botocore.exceptions import ClientError
+    from aiobotocore.config import AioConfig
     from aiobotocore.session import get_session
 except ImportError as e:
     msg = (
@@ -47,9 +48,6 @@ DEFAULT_TAGS = {
 
 MAX_TASKS_PER_DESCRIBE_CALL = 100
 DEFAULT_POLL_INTERVAL_S = 1  # How often to check if there are tasks to describe
-MAX_RETRY_ATTEMPTS = 5
-INITIAL_BACKOFF_S = 1
-MAX_BACKOFF_S = 20
 
 class TaskPoller:
     def __init__(self, client_factory, poll_interval_s=DEFAULT_POLL_INTERVAL_S):
@@ -160,62 +158,28 @@ class TaskPoller:
                     if not batch_arns:
                         continue
 
-                    wait_duration = INITIAL_BACKOFF_S
-                    success = False
-                    for attempt in range(MAX_RETRY_ATTEMPTS):
-                        try:
-                            response = await ecs.describe_tasks(cluster=cluster_arn, tasks=batch_arns)
-                            fetched_task_details = {task["taskArn"]: task for task in response.get("tasks", [])}
+                    try:
+                        response = await ecs.describe_tasks(cluster=cluster_arn, tasks=batch_arns)
+                        fetched_task_details = {task["taskArn"]: task for task in response.get("tasks", [])}
 
-                            async with self._lock:
-                                for arn, detail in fetched_task_details.items():
-                                    self._polled_task_details_cache[arn] = detail
-                                    if arn in current_futures_for_cluster and not current_futures_for_cluster[arn].done():
-                                        current_futures_for_cluster[arn].set_result(detail)
+                        async with self._lock:
+                            for arn, detail in fetched_task_details.items():
+                                self._polled_task_details_cache[arn] = detail
+                                if arn in current_futures_for_cluster and not current_futures_for_cluster[arn].done():
+                                    current_futures_for_cluster[arn].set_result(detail)
 
-                                # For ARNs in batch but not in response (e.g. task terminated quickly)
-                                for arn_in_batch in batch_arns:
-                                    if arn_in_batch not in fetched_task_details and arn_in_batch in current_futures_for_cluster and not current_futures_for_cluster[arn_in_batch].done():
-                                        err = RuntimeError(f"Task {arn_in_batch} not found in describe_tasks response for cluster {cluster_arn}. It might have terminated.")
-                                        logger.warning(str(err))
-                                        current_futures_for_cluster[arn_in_batch].set_exception(err)
-                            success = True
-                            break  # Break from retry loop on success
-                        except ClientError as e:
-                            if e.response["Error"].get("Code") == "ThrottlingException":
-                                logger.warning(
-                                    f"describe_tasks throttled for cluster {cluster_arn}, batch starting with {batch_arns[0]} (attempt {attempt + 1}/{MAX_RETRY_ATTEMPTS}). Retrying in {wait_duration}s."
-                                )
-                                if attempt == MAX_RETRY_ATTEMPTS - 1:
-                                    logger.error(f"Max retries exceeded for describe_tasks on cluster {cluster_arn} (batch starting {batch_arns[0]}) due to throttling.")
-                                    async with self._lock:
-                                        for arn_in_batch in batch_arns:
-                                            if arn_in_batch in current_futures_for_cluster and not current_futures_for_cluster[arn_in_batch].done():
-                                                current_futures_for_cluster[arn_in_batch].set_exception(e)
-                                    # Do not raise, let other batches/clusters proceed
-                                else:
-                                    await asyncio.sleep(wait_duration)
-                                    wait_duration = min(wait_duration * 2, MAX_BACKOFF_S)
-                            else:
-                                logger.error(f"ClientError describing tasks for cluster {cluster_arn} (batch starting {batch_arns[0]}): {e}", exc_info=True)
-                                async with self._lock:
-                                    for arn_in_batch in batch_arns:
-                                        if arn_in_batch in current_futures_for_cluster and not current_futures_for_cluster[arn_in_batch].done():
-                                            current_futures_for_cluster[arn_in_batch].set_exception(e)
-                                success = True # Break retry loop for non-throttling ClientErrors
-                                break
-                        except Exception as e:
-                            logger.error(f"Unexpected error describing tasks for cluster {cluster_arn} (batch starting {batch_arns[0]}): {e}", exc_info=True)
-                            async with self._lock:
-                                for arn_in_batch in batch_arns:
-                                    if arn_in_batch in current_futures_for_cluster and not current_futures_for_cluster[arn_in_batch].done():
-                                        current_futures_for_cluster[arn_in_batch].set_exception(e)
-                            success = True # Break retry loop for other unexpected errors
-                            break
-
-                    if not success: # Should only happen if all retries for throttling failed
-                         logger.error(f"Failed to describe tasks for batch starting with {batch_arns[0]} in cluster {cluster_arn} after all retries.")
-                         # Futures for this failed batch were already handled with exceptions in the retry loop.
+                            # For ARNs in batch but not in response (e.g. task terminated quickly)
+                            for arn_in_batch in batch_arns:
+                                if arn_in_batch not in fetched_task_details and arn_in_batch in current_futures_for_cluster and not current_futures_for_cluster[arn_in_batch].done():
+                                    err = RuntimeError(f"Task {arn_in_batch} not found in describe_tasks response for cluster {cluster_arn}. It might have terminated.")
+                                    logger.warning(str(err))
+                                    current_futures_for_cluster[arn_in_batch].set_exception(err)
+                    except Exception as e:
+                        logger.error(f"Unexpected error describing tasks for cluster {cluster_arn} (batch starting {batch_arns[0]}): {e}", exc_info=True)
+                        async with self._lock:
+                            for arn_in_batch in batch_arns:
+                                if arn_in_batch in current_futures_for_cluster and not current_futures_for_cluster[arn_in_batch].done():
+                                    current_futures_for_cluster[arn_in_batch].set_exception(e)
 
                 # Clean up futures from self._tasks_to_poll that were part of this processing cycle
                 async with self._lock:
@@ -488,48 +452,35 @@ class Task:
         )
 
     async def logs(self, follow=False):
-        current_try = 0
         next_token = None
         read_from = 0
 
         while True:
-            try:
-                async with self._client("logs") as logs:
-                    if next_token:
-                        l = await logs.get_log_events(
-                            logGroupName=self.log_group,
-                            logStreamName=self._log_stream_name,
-                            nextToken=next_token,
-                        )
-                    else:
-                        l = await logs.get_log_events(
-                            logGroupName=self.log_group,
-                            logStreamName=self._log_stream_name,
-                            startTime=read_from,
-                        )
-                if next_token != l["nextForwardToken"]:
-                    next_token = l["nextForwardToken"]
-                else:
-                    next_token = None
-                if not l["events"]:
-                    if follow:
-                        await asyncio.sleep(1)
-                    else:
-                        break
-                for event in l["events"]:
-                    read_from = event["timestamp"]
-                    yield event["message"]
-            except ClientError as e:
-                if e.response["Error"]["Code"] == "ThrottlingException":
-                    warnings.warn(
-                        "get_log_events rate limit exceeded, retrying after delay.",
-                        RuntimeWarning,
+            async with self._client("logs") as logs:
+                if next_token:
+                    l = await logs.get_log_events(
+                        logGroupName=self.log_group,
+                        logStreamName=self._log_stream_name,
+                        nextToken=next_token,
                     )
-                    backoff_duration = get_sleep_duration(current_try)
-                    await asyncio.sleep(backoff_duration)
-                    current_try += 1
                 else:
-                    raise
+                    l = await logs.get_log_events(
+                        logGroupName=self.log_group,
+                        logStreamName=self._log_stream_name,
+                        startTime=read_from,
+                    )
+            if next_token != l["nextForwardToken"]:
+                next_token = l["nextForwardToken"]
+            else:
+                next_token = None
+            if not l["events"]:
+                if follow:
+                    await asyncio.sleep(1)
+                else:
+                    break
+            for event in l["events"]:
+                read_from = event["timestamp"]
+                yield event["message"]
 
     def __repr__(self):
         return "<ECS Task %s: status=%s>" % (type(self).__name__, self.status)
@@ -1007,6 +958,16 @@ class ECSCluster(SpecCluster, ConfigMixin):
             aws_access_key_id=self._aws_access_key_id,
             aws_secret_access_key=self._aws_secret_access_key,
             region_name=self._region_name,
+            config=AioConfig(
+                retries={
+                    # Use Standard retry mode which provides:
+                    # - Jittered exponential backoff in the event of failures
+                    # - Never delays the first request attempt, only the retries
+                    # - Supports circuit-breaking to prevent the SDK from retrying during outages
+                    "mode": "standard",
+                    "total_max_attempts": 5,  # Includes the initial request
+                }
+            ),
         )
 
     async def __aenter__(self):
@@ -1542,7 +1503,6 @@ class ECSCluster(SpecCluster, ConfigMixin):
                 )
 
     async def _get_is_task_long_arn_format_enabled(self):
-        # TODO: Throttling backoff if this fails
         async with self._client("ecs") as ecs:
             [response] = (
                 await ecs.list_account_settings(
