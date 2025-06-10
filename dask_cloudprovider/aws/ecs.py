@@ -3,9 +3,7 @@ import logging
 import uuid
 import warnings
 import weakref
-from collections import defaultdict
 from typing import List, Optional
-from cachetools import TTLCache
 
 import dask
 
@@ -45,154 +43,6 @@ logger.setLevel(logging.DEBUG)
 DEFAULT_TAGS = {
     "createdBy": "dask-cloudprovider"
 }  # Package tags to apply to all resources
-
-MAX_TASKS_PER_DESCRIBE_CALL = 100
-DEFAULT_POLL_INTERVAL_S = 1  # How often to check if there are tasks to describe
-
-class TaskPoller:
-    def __init__(self, client_factory, poll_interval_s=DEFAULT_POLL_INTERVAL_S):
-        self._client_factory = client_factory
-        self._poll_interval_s = poll_interval_s
-        self._tasks_to_poll = defaultdict(lambda: {"arns": set(), "futures": {}})
-        self._polled_task_details_cache: TTLCache[str, dict] = TTLCache(maxsize=1000, ttl=DEFAULT_POLL_INTERVAL_S)  # Cache for task_arn -> task_detail
-        self._lock = asyncio.Lock()
-        self._poll_loop_task = None
-
-    async def ensure_running(self):
-        async with self._lock:
-            if self._poll_loop_task is None or self._poll_loop_task.done():
-                self._poll_loop_task = asyncio.create_task(self._poll_loop())
-                logger.info("TaskPoller started.")
-
-    async def stop(self):
-        async with self._lock:
-            if self._poll_loop_task:
-                self._poll_loop_task.cancel()
-                try:
-                    await self._poll_loop_task
-                except asyncio.CancelledError:
-                    logger.info("TaskPoller poll loop cancelled.")
-                except Exception as e:
-                    logger.error(f"Error during TaskPoller stop: {e}", exc_info=True)
-                self._poll_loop_task = None
-            logger.info("TaskPoller stopped.")
-            # Clear futures to prevent tasks from hanging if poller is stopped then restarted
-            for cluster_data in self._tasks_to_poll.values():
-                for future in cluster_data["futures"].values():
-                    if not future.done():
-                        future.set_exception(RuntimeError("TaskPoller stopped before task details could be fetched."))
-            self._tasks_to_poll.clear()
-            self._polled_task_details_cache.clear()
-
-
-    async def get_task_details(self, cluster_arn, task_arn):
-        await self.ensure_running()
-        async with self._lock:
-            # Check cache first
-            if (task_details := self._polled_task_details_cache.get(task_arn)) is not None:
-                # logger.debug(f"Task {task_arn} found in cache for cluster {cluster_arn}.")
-                return task_details
-
-            # Check if a future already exists for this task_arn
-            cluster_data = self._tasks_to_poll[cluster_arn]
-            if task_arn in cluster_data["futures"]:
-                future = cluster_data["futures"][task_arn]
-            else:
-                future = asyncio.Future()
-                cluster_data["arns"].add(task_arn)
-                cluster_data["futures"][task_arn] = future
-        return await future
-
-    async def _poll_loop(self):
-        while self._poll_loop_task is not None and not self._poll_loop_task.cancelled():
-            try:
-                await asyncio.sleep(self._poll_interval_s)
-                await self._process_poll_queue()
-            except asyncio.CancelledError:
-                logger.info("TaskPoller poll loop gracefully exiting due to cancellation.")
-                break
-            except Exception as e:
-                logger.error(f"Error in TaskPoller poll loop: {e}", exc_info=True)
-                # Avoid tight loop on persistent errors, wait longer
-                await asyncio.sleep(self._poll_interval_s * 5)
-        logger.info("TaskPoller poll loop finished.")
-
-
-    async def _process_poll_queue(self):
-        # logger.debug("Processing task poll queue...")
-        clusters_to_process = []
-        async with self._lock:
-            if not self._tasks_to_poll:
-                return
-            for cluster_arn, data in self._tasks_to_poll.items():
-                if data["arns"]:
-                    clusters_to_process.append(cluster_arn)
-
-        # logger.debug(f"{len(clusters_to_process)} clusters to process")
-        if not clusters_to_process:
-            return
-
-        async with self._client_factory("ecs") as ecs:
-            for cluster_arn in clusters_to_process:
-                task_arns_to_fetch_for_cluster = []
-                current_futures_for_cluster = {}
-
-                async with self._lock:
-                    if cluster_arn in self._tasks_to_poll and self._tasks_to_poll[cluster_arn]["arns"]:
-                        task_arns_to_fetch_for_cluster = list(self._tasks_to_poll[cluster_arn]["arns"])
-                        # Keep track of futures associated with this specific fetch attempt
-                        current_futures_for_cluster = {
-                            arn: self._tasks_to_poll[cluster_arn]["futures"][arn]
-                            for arn in task_arns_to_fetch_for_cluster
-                            if arn in self._tasks_to_poll[cluster_arn]["futures"] and not self._tasks_to_poll[cluster_arn]["futures"][arn].done()
-                        }
-                        self._tasks_to_poll[cluster_arn]["arns"].clear() # Clear ARNs for this poll cycle
-                    else:
-                        continue
-
-                if not task_arns_to_fetch_for_cluster:
-                    continue
-
-                for i in range(0, len(task_arns_to_fetch_for_cluster), MAX_TASKS_PER_DESCRIBE_CALL):
-                    batch_arns = task_arns_to_fetch_for_cluster[i:i + MAX_TASKS_PER_DESCRIBE_CALL]
-                    if not batch_arns:
-                        continue
-
-                    try:
-                        response = await ecs.describe_tasks(cluster=cluster_arn, tasks=batch_arns)
-                        fetched_task_details = {task["taskArn"]: task for task in response.get("tasks", [])}
-
-                        async with self._lock:
-                            for arn, detail in fetched_task_details.items():
-                                self._polled_task_details_cache[arn] = detail
-                                if arn in current_futures_for_cluster and not current_futures_for_cluster[arn].done():
-                                    current_futures_for_cluster[arn].set_result(detail)
-
-                            # For ARNs in batch but not in response (e.g. task terminated quickly)
-                            for arn_in_batch in batch_arns:
-                                if arn_in_batch not in fetched_task_details and arn_in_batch in current_futures_for_cluster and not current_futures_for_cluster[arn_in_batch].done():
-                                    err = RuntimeError(f"Task {arn_in_batch} not found in describe_tasks response for cluster {cluster_arn}. It might have terminated.")
-                                    logger.warning(str(err))
-                                    current_futures_for_cluster[arn_in_batch].set_exception(err)
-                    except Exception as e:
-                        logger.error(f"Unexpected error describing tasks for cluster {cluster_arn} (batch starting {batch_arns[0]}): {e}", exc_info=True)
-                        async with self._lock:
-                            for arn_in_batch in batch_arns:
-                                if arn_in_batch in current_futures_for_cluster and not current_futures_for_cluster[arn_in_batch].done():
-                                    current_futures_for_cluster[arn_in_batch].set_exception(e)
-
-                # Clean up futures from self._tasks_to_poll that were part of this processing cycle
-                async with self._lock:
-                    if cluster_arn in self._tasks_to_poll:
-                        cluster_futures = self._tasks_to_poll[cluster_arn]["futures"]
-                        for arn in list(cluster_futures.keys()): # Iterate over copy of keys for safe deletion
-                             if arn in current_futures_for_cluster and cluster_futures[arn].done():
-                                 del cluster_futures[arn]
-                        if not cluster_futures and not self._tasks_to_poll[cluster_arn]["arns"]: # if no pending arns and no pending futures
-                            try:
-                                del self._tasks_to_poll[cluster_arn]
-                            except KeyError:
-                                pass # already deleted by another part of the code
 
 
 class Task:
@@ -273,7 +123,6 @@ class Task:
         fargate_capacity_provider=None,
         task_kwargs=None,
         is_task_long_arn_format_enabled=True,
-        task_poller=None,
         **kwargs,
     ):
         self.lock = asyncio.Lock()
@@ -300,7 +149,6 @@ class Task:
         self.task_kwargs = task_kwargs
         self._is_task_long_arn_format_enabled = is_task_long_arn_format_enabled
         self.status = Status.created
-        self._task_poller = task_poller
 
     def __await__(self):
         async def _():
@@ -317,22 +165,15 @@ class Task:
         return self.fargate and not self._fargate_use_private_ip
 
     async def _update_task(self):
+        async with self._client("ecs") as ecs:
+            [self.task] = (
+                await ecs.describe_tasks(
+                    cluster=self.cluster_arn, tasks=[self.task_arn]
+                )
+            )["tasks"]
 
-        if not self._task_poller:
-            raise RuntimeError(f"TaskPoller not available to Task {self.task_arn}")
-
-        if not self.task_arn:
-            raise RuntimeError(f"Task {self.name} (type: {self.task_type}) has no task_arn")
-
-        try:
-            # logger.debug(f"Task {self.task_arn} requesting details from poller for cluster {self.cluster_arn}.")
-            self.task = await self._task_poller.get_task_details(self.cluster_arn, self.task_arn)
-            # logger.debug(f"Task {self.name} updated via poller. Status: {self.task.get('lastStatus')}")
-        except Exception as e:
-            logger.error(f"Failed to get task details for {self.task_arn} via poller: {e}", exc_info=True)
-            raise
-
-    def _task_is_running(self):
+    async def _task_is_running(self):
+        await self._update_task()
         return self.task["lastStatus"] == "RUNNING"
 
     async def start(self):
@@ -402,11 +243,10 @@ class Task:
                 await asyncio.sleep(1)
 
         self.task_arn = self.task["taskArn"]
-        await self._update_task()
         while self.task["lastStatus"] in ["PENDING", "PROVISIONING"]:
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(1)
             await self._update_task()
-        if not self._task_is_running():
+        if not await self._task_is_running():
             raise RuntimeError("%s failed to start" % type(self).__name__)
         [eni] = [
             attachment
@@ -435,7 +275,7 @@ class Task:
             await self._update_task()
             while self.task["lastStatus"] in ["RUNNING"]:
                 # logger.debug(f"Waiting for {self.task_type} task {self.task_arn} to close...")
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(1)
                 await self._update_task()
         self.status = Status.closed
 
@@ -949,7 +789,6 @@ class ECSCluster(SpecCluster, ConfigMixin):
         self._lock = asyncio.Lock()
         self.session = get_session()
         self._is_task_long_arn_format_enabled = None
-        self._task_poller = TaskPoller(client_factory=self._client)
         super().__init__(**kwargs)
 
     def _client(self, name: str):
@@ -969,34 +808,6 @@ class ECSCluster(SpecCluster, ConfigMixin):
                 }
             ),
         )
-
-    async def __aenter__(self):
-        await super().__aenter__()
-        await self._task_poller.ensure_running()
-        return self
-
-    # async def __aexit__(self, exc_type, exc, tb):
-    #     try:
-    #         await self._task_poller.stop()
-    #     except Exception as e:
-    #         logger.error(f"Failed to stop TaskPoller cleanly: {e}", exc_info=True)
-    #     await super().__aexit__(exc_type, exc, tb)
-
-    # Override new_spec_object to inject the task_poller
-    # def new_spec_object(self, spec):
-    #     cls = spec["cls"]
-    #     options = spec.get("options", {}) # Ensure options exist
-
-    #     # Inject the task_poller
-    #     # Ensure self._task_poller is initialized before this can be called.
-    #     # It is initialized in ECSCluster.__init__
-    #     options_with_poller = {**options, "task_poller": self._task_poller}
-
-    #     # Original SpecCluster.new_spec_object just does: return cls(**options)
-    #     # We need to ensure that the cls (Scheduler or Worker) correctly handles task_poller.
-    #     # Their __init__ methods now accept **kwargs and pass to super().__init__(..., **kwargs)
-    #     # and Task.__init__ explicitly takes task_poller.
-    #     return cls(**options_with_poller)
 
     async def _start(
         self,
@@ -1141,7 +952,6 @@ class ECSCluster(SpecCluster, ConfigMixin):
             "tags": self.tags,
             "platform_version": self._platform_version,
             "fargate_use_private_ip": self._fargate_use_private_ip,
-            "task_poller": self._task_poller,
             "is_task_long_arn_format_enabled": self._is_task_long_arn_format_enabled,
         }
         scheduler_options = {
