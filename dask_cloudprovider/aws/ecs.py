@@ -12,7 +12,6 @@ from dask_cloudprovider.utils.timeout import Timeout
 from dask_cloudprovider.aws.helper import (
     dict_to_aws,
     aws_to_dict,
-    get_sleep_duration,
     get_default_vpc,
     get_vpc_subnets,
     create_default_security_group,
@@ -37,7 +36,6 @@ except ImportError as e:
     raise ImportError(msg) from e
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
 
 
 DEFAULT_TAGS = {
@@ -132,7 +130,7 @@ class Task:
         self.task_definition_arn = task_definition_arn
         self.task = None
         self.task_arn = None
-        self.task_type = None # Should be set by Scheduler/Worker subclasses
+        self.task_type = None
         self.public_ip = None
         self.private_ip = None
         self.connection = None
@@ -172,8 +170,7 @@ class Task:
                 )
             )["tasks"]
 
-    async def _task_is_running(self):
-        await self._update_task()
+    def _task_is_running(self):
         return self.task["lastStatus"] == "RUNNING"
 
     async def start(self):
@@ -237,16 +234,19 @@ class Task:
                 [self.task] = response["tasks"]
                 break
             except Exception as e:
+                # Retries due to throttle errors are handled by the aiobotocore client so this should be an uncommon case
                 timeout.set_exception(e)
-                logger.warning(f"Failed to start {self.task_type} task: {e}")
-                logger.info("Retrying in 1 second...")
-                await asyncio.sleep(1)
+                logger.debug(f"Failed to start {self.task_type} task after {timeout.elapsed_time:.1f}s, retrying in 1s: {e}")
+                await asyncio.sleep(2)
 
         self.task_arn = self.task["taskArn"]
+
+        # Wait for the task to come up
         while self.task["lastStatus"] in ["PENDING", "PROVISIONING"]:
+            # Try to avoid hitting throttling rate limits when bring up a large cluster
             await asyncio.sleep(1)
             await self._update_task()
-        if not await self._task_is_running():
+        if not self._task_is_running():
             raise RuntimeError("%s failed to start" % type(self).__name__)
         [eni] = [
             attachment
@@ -273,8 +273,7 @@ class Task:
             async with self._client("ecs") as ecs:
                 await ecs.stop_task(cluster=self.cluster_arn, task=self.task_arn)
             await self._update_task()
-            while self.task["lastStatus"] in ["RUNNING"]:
-                # logger.debug(f"Waiting for {self.task_type} task {self.task_arn} to close...")
+            while self._task_is_running():
                 await asyncio.sleep(1)
                 await self._update_task()
         self.status = Status.closed
@@ -1166,9 +1165,7 @@ class ECSCluster(SpecCluster, ConfigMixin):
                     await ec2.delete_security_group(
                         GroupName=self.cluster_name, DryRun=False
                     )
-                except Exception as e:
-                    logging.warning(f"Failed to delete security group {self.cluster_name}: {e}")
-                    logger.info("Retrying to delete security in 2 seconds...")
+                except Exception:
                     await asyncio.sleep(2)
                 break
 
