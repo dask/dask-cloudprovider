@@ -800,11 +800,11 @@ class ECSCluster(SpecCluster, ConfigMixin):
             config=AioConfig(
                 retries={
                     # Use Standard retry mode which provides:
-                    # - Jittered exponential backoff in the event of failures
+                    # - Jittered exponential backoff with max of 20s in the event of failures
                     # - Never delays the first request attempt, only the retries
                     # - Supports circuit-breaking to prevent the SDK from retrying during outages
                     "mode": "standard",
-                    "total_max_attempts": 5,  # Includes the initial request
+                    "max_attempts": 10,  # Not including the initial request
                 }
             ),
         )
