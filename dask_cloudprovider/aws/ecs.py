@@ -224,9 +224,9 @@ class Task:
                             "awsvpcConfiguration": {
                                 "subnets": self._vpc_subnets,
                                 "securityGroups": self._security_groups,
-                                "assignPublicIp": "ENABLED"
-                                if self._use_public_ip
-                                else "DISABLED",
+                                "assignPublicIp": (
+                                    "ENABLED" if self._use_public_ip else "DISABLED"
+                                ),
                             }
                         },
                     }
@@ -1223,14 +1223,18 @@ class ECSCluster(SpecCluster, ConfigMixin):
                                 "awslogs-create-group": "true",
                             },
                         },
-                        "mountPoints": self._mount_points
-                        if self._mount_points and self._mount_volumes_on_scheduler
-                        else [],
+                        "mountPoints": (
+                            self._mount_points
+                            if self._mount_points and self._mount_volumes_on_scheduler
+                            else []
+                        ),
                     }
                 ],
-                volumes=self._volumes
-                if self._volumes and self._mount_volumes_on_scheduler
-                else [],
+                volumes=(
+                    self._volumes
+                    if self._volumes and self._mount_volumes_on_scheduler
+                    else []
+                ),
                 requiresCompatibilities=["FARGATE"] if self._fargate_scheduler else [],
                 runtimePlatform={"cpuArchitecture": self._cpu_architecture},
                 cpu=str(self._scheduler_cpu),

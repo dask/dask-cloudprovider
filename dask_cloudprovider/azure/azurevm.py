@@ -174,15 +174,15 @@ class AzureVM(VMInterface):
             # Ref: https://docs.microsoft.com/en-us/rest/api/compute/virtual-machines/create-or-update#create-a-vm-with-a-marketplace-image-plan. # noqa
             # Creating a marketplace VM with a plan will override default vm_image values.
             vm_parameters["plan"] = self.marketplace_plan
-            vm_parameters["storage_profile"]["image_reference"][
-                "sku"
-            ] = self.marketplace_plan["name"]
-            vm_parameters["storage_profile"]["image_reference"][
-                "publisher"
-            ] = self.marketplace_plan["publisher"]
-            vm_parameters["storage_profile"]["image_reference"][
-                "offer"
-            ] = self.marketplace_plan["product"]
+            vm_parameters["storage_profile"]["image_reference"]["sku"] = (
+                self.marketplace_plan["name"]
+            )
+            vm_parameters["storage_profile"]["image_reference"]["publisher"] = (
+                self.marketplace_plan["publisher"]
+            )
+            vm_parameters["storage_profile"]["image_reference"]["offer"] = (
+                self.marketplace_plan["product"]
+            )
             vm_parameters["storage_profile"]["image_reference"]["version"] = "latest"
             self.cluster._log("Using Marketplace VM image with a Plan")
 
