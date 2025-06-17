@@ -343,7 +343,7 @@ class OpenStackCluster(VMCluster):
         If you set ``worker_module`` then refer to the docstring for the custom worker class.
     worker_threads: int
         The number of threads to use on each worker.
-    worker_command : str
+    worker_command : str (optional)
         The command workers should run when starting. By default this will be
         ``python -m distributed.cli.dask_spec``, but you can override it—for example, to
         ``dask-cuda-worker`` on GPU-enabled instances.
