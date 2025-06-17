@@ -32,6 +32,7 @@ class OpenStackInstance(VMInterface):
         docker_image: str = None,
         env_vars: str = None,
         extra_bootstrap: str = None,
+        command: str = None, 
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -45,6 +46,7 @@ class OpenStackInstance(VMInterface):
         self.bootstrap = True
         self.docker_image = docker_image
         self.extra_bootstrap = extra_bootstrap
+        self.command = command  # Command to run on the instance, if any
 
     async def create_vm(self):
         conn = connection.Connection(
