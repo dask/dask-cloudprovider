@@ -1,3 +1,4 @@
+import json
 import asyncio
 import dask
 
@@ -32,6 +33,8 @@ class OpenStackInstance(VMInterface):
         docker_image: str = None,
         env_vars: str = None,
         extra_bootstrap: str = None,
+        worker_threads: int = None,
+        worker_command: str = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -42,6 +45,8 @@ class OpenStackInstance(VMInterface):
         self.size = size
         self.image = image
         self.env_vars = env_vars
+        self.worker_threads = worker_threads
+        self.worker_command = worker_command
         self.bootstrap = True
         self.docker_image = docker_image
         self.extra_bootstrap = extra_bootstrap
@@ -226,6 +231,44 @@ class OpenStackScheduler(SchedulerMixin, OpenStackInstance):
 class OpenStackWorker(WorkerMixin, OpenStackInstance):
     """Worker running on a OpenStack Instance."""
 
+    def __init__(
+        self,
+        scheduler: str,
+        *args,
+        worker_module: str = None,
+        worker_class: str = None,
+        worker_options: dict = {},
+        **kwargs,
+    ):
+        super().__init__(
+            scheduler=scheduler,
+            *args,
+            worker_module=worker_module,
+            worker_class=worker_class,
+            worker_options=worker_options,
+            **kwargs,
+        )
+
+        # Select scheduler address (external or internal)
+        if self.config.get("create_floating_ip", True):
+            scheduler_ip = self.cluster.scheduler_external_ip
+        else:
+            scheduler_ip = self.cluster.scheduler_internal_ip
+        scheduler_address = f"{self.cluster.protocol}://{scheduler_ip}:{self.cluster.scheduler_port}"
+
+        # If user provides worker_command, override the start of the command
+        if self.worker_command:
+            # This is only for custom worker_command overrides
+            cmd = (
+                self.worker_command if isinstance(self.worker_command, list)
+                else self.worker_command.split()
+            )
+            self.command = " ".join([self.set_env] + cmd + [scheduler_address])
+
+    async def start(self):
+        self.cluster._log(f"Creating worker instance {self.name}")
+        await self.create_vm()
+        self.status = Status.running
 
 class OpenStackCluster(VMCluster):
     """Cluster running on Openstack VM Instances
@@ -298,6 +341,21 @@ class OpenStackCluster(VMCluster):
         Params to be passed to the worker class.
         See :class:`distributed.worker.Worker` for default worker class.
         If you set ``worker_module`` then refer to the docstring for the custom worker class.
+    worker_threads: int
+        The number of threads to use on each worker.
+    worker_command : str
+        The command workers should run when starting. By default this will be
+        ``python -m distributed.cli.dask_spec``, but you can override it—for example, to
+        ``dask-cuda-worker`` on GPU-enabled instances.
+
+        Example
+        -------
+
+            worker_command=[
+                "dask worker",
+                "--nthreads", "4",
+                "--memory-limit", "16GB",
+            ]  
     scheduler_options: dict
         Params to be passed to the scheduler class.
         See :class:`distributed.scheduler.Scheduler`.
@@ -355,6 +413,8 @@ class OpenStackCluster(VMCluster):
         docker_image: str = None,
         debug: bool = False,
         bootstrap: bool = True,
+        worker_threads: int = 2,
+        worker_command: str = None,
         **kwargs,
     ):
         self.config = dask.config.get("cloudprovider.openstack", {})
@@ -364,6 +424,8 @@ class OpenStackCluster(VMCluster):
         self.bootstrap = (
             bootstrap if bootstrap is not None else self.config.get("bootstrap")
         )
+        self.worker_threads = worker_threads or self.config.get("worker_threads")
+        self.worker_command = worker_command or self.config.get("worker_command")
         self.options = {
             "cluster": self,
             "config": self.config,
@@ -371,6 +433,8 @@ class OpenStackCluster(VMCluster):
             "size": size if size is not None else self.config.get("size"),
             "image": image if image is not None else self.config.get("image"),
             "docker_image": docker_image or self.config.get("docker_image"),
+            "worker_command": self.worker_command,
+            "worker_threads": self.worker_threads,
         }
         self.scheduler_options = {**self.options}
         self.worker_options = {**self.options}
