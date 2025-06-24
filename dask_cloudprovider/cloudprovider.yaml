@@ -160,6 +160,9 @@ cloudprovider:
     external_network_id: null # The ID of the external network used for assigning floating IPs. List available external networks using: `openstack network list --external`
     create_floating_ip: false # Specifies whether to assign a floating IP to each instance, enabling external access. Set to `True` if external connectivity is needed.
     docker_image: "daskdev/dask:latest" # docker image to use
+    worker_threads: 2 # The number of threads to use on each worker.
+    worker_command: null # str (optional) The command workers should run when starting. for example, ``dask-cuda-worker`` on GPU-enabled instances.
+
 
   nebius:
     token: null  # iam token for interacting with the Nebius AI Cloud
