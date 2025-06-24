@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import uuid
+import copy
 
 from jinja2 import Environment, FileSystemLoader
 
@@ -14,6 +15,26 @@ from distributed.deploy.spec import SpecCluster, ProcessInterface
 from distributed.utils import warn_on_duration, cli_keywords
 
 from dask_cloudprovider.utils.socket import is_socket_open
+
+
+def _prune_defaults(cfg: dict, defaults: dict) -> dict:
+    """
+    Recursively remove any key in cfg whose value exactly equals
+    the corresponding built-in default.
+    """
+    pruned = {}
+    for key, val in cfg.items():
+        if key not in defaults:
+            pruned[key] = val
+        else:
+            default_val = defaults[key]
+            if isinstance(val, dict) and isinstance(default_val, dict):
+                nested = _prune_defaults(val, default_val)
+                if nested:
+                    pruned[key] = nested
+            elif val != default_val:
+                pruned[key] = val
+    return pruned
 
 
 class VMInterface(ProcessInterface):
@@ -31,9 +52,13 @@ class VMInterface(ProcessInterface):
         self.docker_args = docker_args
         self.extra_bootstrap = extra_bootstrap
         self.auto_shutdown = True
-        self.set_env = 'env DASK_INTERNAL_INHERIT_CONFIG="{}"'.format(
-            dask.config.serialize(dask.config.global_config)
-        )
+
+        user_cfg = copy.deepcopy(dask.config.global_config)
+        all_defaults = dask.config.merge(*dask.config.defaults)
+        pruned_cfg = _prune_defaults(user_cfg, all_defaults)
+        serialized = dask.config.serialize(pruned_cfg)
+        self.set_env = f'env DASK_INTERNAL_INHERIT_CONFIG=\"{serialized}\"'
+
         self.kwargs = kwargs
 
     async def create_vm(self):
