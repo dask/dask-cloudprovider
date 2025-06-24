@@ -650,7 +650,7 @@ class GCPCluster(VMCluster):
             self.scheduler_ngpus = scheduler_ngpus if scheduler_ngpus is not None else self.config.get("scheduler_ngpus", 0)
             self.worker_ngpus = worker_ngpus if worker_ngpus is not None else self.config.get("worker_ngpus", 0)
             if self.scheduler_ngpus == 0 and self.worker_ngpus == 0:
-                self._log("No GPU instances configured")
+                print("No GPU instances configured")
         else:
             if scheduler_ngpus is not None or worker_ngpus is not None:
                 raise ValueError("If you specify ngpus, you may not specify scheduler_ngpus or worker_ngpus")
