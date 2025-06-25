@@ -66,7 +66,7 @@ class Timeout:
             self.start = datetime.now()
             self.running = True
 
-        if self.start + timedelta(seconds=self.timeout) < datetime.now():
+        if self.elapsed_time >= self.timeout:
             if self.warn:
                 warnings.warn(self.error_message)
                 return False
@@ -82,3 +82,10 @@ class Timeout:
         the thing you are trying rather than a TimeoutException.
         """
         self.exception = e
+
+    @property
+    def elapsed_time(self):
+        """Return the elapsed time since the timeout started."""
+        if self.start is None:
+            return 0
+        return (datetime.now() - self.start).total_seconds()
