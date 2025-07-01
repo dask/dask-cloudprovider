@@ -56,6 +56,7 @@ class EC2Instance(VMInterface):
         volume_tags: None,
         use_private_ip: False,
         enable_detailed_monitoring=None,
+        spot=False,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
@@ -81,14 +82,13 @@ class EC2Instance(VMInterface):
         self.volume_tags = volume_tags
         self.use_private_ip = use_private_ip
         self.enable_detailed_monitoring = enable_detailed_monitoring
+        self.spot = spot
 
     async def create_vm(self):
         """
 
         https://botocore.amazonaws.com/v1/documentation/api/latest/reference/services/ec2.html#EC2.Client.run_instances
         """
-        # TODO Enable Spot support
-
         boto_config = botocore.config.Config(retries=dict(max_attempts=10))
         async with self.cluster.boto_session.create_client(
             "ec2", region_name=self.region, config=boto_config
@@ -160,6 +160,12 @@ class EC2Instance(VMInterface):
                 if isinstance(self.availability_zone, list):
                     self.availability_zone = random.choice(self.availability_zone)
                 vm_kwargs["Placement"] = {"AvailabilityZone": self.availability_zone}
+
+            if self.spot:
+                vm_kwargs["InstanceMarketOptions"] = {
+                    "MarketType": "spot",
+                    "SpotOptions": {"SpotInstanceType": "one-time"},
+            }
 
             response = await client.run_instances(**vm_kwargs)
             [self.instance] = response["Instances"]
@@ -486,10 +492,12 @@ class EC2Cluster(VMCluster):
         volume_tags=None,
         use_private_ip=None,
         enable_detailed_monitoring=None,
+        spot=False,
         **kwargs,
     ):
         self.boto_session = get_session()
         self.config = dask.config.get("cloudprovider.ec2", {})
+        self.spot = spot
         self.scheduler_class = EC2Scheduler
         self.worker_class = EC2Worker
         self.region = region if region is not None else self.config.get("region")
@@ -602,4 +610,5 @@ class EC2Cluster(VMCluster):
         self.worker_options = {**self.options}
         self.scheduler_options["instance_type"] = self.scheduler_instance_type
         self.worker_options["instance_type"] = self.worker_instance_type
+        self.worker_options["spot"] = self.spot
         super().__init__(debug=debug, **kwargs)
