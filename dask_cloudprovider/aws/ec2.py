@@ -165,7 +165,7 @@ class EC2Instance(VMInterface):
                 vm_kwargs["InstanceMarketOptions"] = {
                     "MarketType": "spot",
                     "SpotOptions": {"SpotInstanceType": "one-time"},
-            }
+                }
 
             response = await client.run_instances(**vm_kwargs)
             [self.instance] = response["Instances"]

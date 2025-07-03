@@ -122,18 +122,17 @@ class OpenStackInstance(VMInterface):
 
             # Find the first port of the instance
             ports = await self.call_async(
-                conn.network.ports,
-                device_id=self.instance.id
+                conn.network.ports, device_id=self.instance.id
             )
             ports = list(ports)
             if not ports:
-                raise RuntimeError(f"No network ports found for instance {self.instance.id}")
+                raise RuntimeError(
+                    f"No network ports found for instance {self.instance.id}"
+                )
 
             # Assign the floating IP to the instance's port
             await self.call_async(
-                conn.network.update_ip,
-                floating_ip,
-                port_id=ports[0].id
+                conn.network.update_ip, floating_ip, port_id=ports[0].id
             )
 
             return floating_ip.floating_ip_address
@@ -253,13 +252,16 @@ class OpenStackWorker(WorkerMixin, OpenStackInstance):
             scheduler_ip = self.cluster.scheduler_external_ip
         else:
             scheduler_ip = self.cluster.scheduler_internal_ip
-        scheduler_address = f"{self.cluster.protocol}://{scheduler_ip}:{self.cluster.scheduler_port}"
+        scheduler_address = (
+            f"{self.cluster.protocol}://{scheduler_ip}:{self.cluster.scheduler_port}"
+        )
 
         # If user provides worker_command, override the start of the command
         if self.worker_command:
             # This is only for custom worker_command overrides
             cmd = (
-                self.worker_command if isinstance(self.worker_command, list)
+                self.worker_command
+                if isinstance(self.worker_command, list)
                 else self.worker_command.split()
             )
             self.command = " ".join([self.set_env] + cmd + [scheduler_address])
@@ -268,6 +270,7 @@ class OpenStackWorker(WorkerMixin, OpenStackInstance):
         self.cluster._log(f"Creating worker instance {self.name}")
         await self.create_vm()
         self.status = Status.running
+
 
 class OpenStackCluster(VMCluster):
     """Cluster running on Openstack VM Instances
@@ -354,7 +357,7 @@ class OpenStackCluster(VMCluster):
                 "dask worker",
                 "--nthreads", "4",
                 "--memory-limit", "16GB",
-            ]  
+            ]
     scheduler_options: dict
         Params to be passed to the scheduler class.
         See :class:`distributed.scheduler.Scheduler`.
