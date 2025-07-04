@@ -14,6 +14,7 @@ from distributed.deploy.spec import SpecCluster, ProcessInterface
 from distributed.utils import warn_on_duration, cli_keywords
 
 from dask_cloudprovider.utils.socket import is_socket_open
+from dask_cloudprovider.utils.config_helper import serialize_custom_config
 
 
 class VMInterface(ProcessInterface):
@@ -31,9 +32,7 @@ class VMInterface(ProcessInterface):
         self.docker_args = docker_args
         self.extra_bootstrap = extra_bootstrap
         self.auto_shutdown = True
-        self.set_env = 'env DASK_INTERNAL_INHERIT_CONFIG="{}"'.format(
-            dask.config.serialize(dask.config.global_config)
-        )
+        self.set_env = f'env DASK_INTERNAL_INHERIT_CONFIG="{serialize_custom_config()}"'
         self.kwargs = kwargs
 
     async def create_vm(self):
