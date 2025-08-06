@@ -1163,7 +1163,7 @@ class ECSCluster(SpecCluster, ConfigMixin):
     async def _create_security_groups(self):
         async with self._client("ec2") as client:
             group = await create_default_security_group(
-                client, self.cluster_name, self._vpc
+                client, self.cluster_name, self._vpc, self.tags
             )
         weakref.finalize(self, self.sync, self._delete_security_groups)
         return [group]
