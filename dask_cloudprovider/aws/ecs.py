@@ -573,6 +573,12 @@ class ECSCluster(SpecCluster, ConfigMixin):
         Name workers by adding multiples of `workers_name_step` to `workers_name_start`.
 
         Default to `1`.
+    dask_cluster_id: str (optional)
+        A unique identifier for this Dask cluster, useful if multiple Dask clusters are
+        running in the same ECS cluster. The value will be included in the names and/or
+        tags of all newly-created AWS resources related to this Dask cluster.
+
+        Defaults to a random 10-digit UUID.
     cluster_arn: str (optional if fargate is true)
         The ARN of an existing ECS cluster to use for launching tasks.
 
@@ -581,7 +587,7 @@ class ECSCluster(SpecCluster, ConfigMixin):
         A template to use for the cluster name if ``cluster_arn`` is set to
         ``None``.
 
-        Defaults to ``'dask-{uuid}'``
+        Defaults to ``'dask-{dask_cluster_id}'``
     execution_role_arn: str (optional)
         The ARN of an existing IAM role to use for ECS execution.
 
@@ -628,7 +634,7 @@ class ECSCluster(SpecCluster, ConfigMixin):
     cloudwatch_logs_stream_prefix: str (optional)
         Prefix for log streams.
 
-        Defaults to the cluster name.
+        Defaults to ``{cluster_name}/{dask_cluster_id}``.
     cloudwatch_logs_default_retention: int (optional)
         Retention for logs in days. For use when log group is auto created.
 
@@ -738,6 +744,7 @@ class ECSCluster(SpecCluster, ConfigMixin):
         n_workers=None,
         workers_name_start=0,
         workers_name_step=1,
+        dask_cluster_id=None,
         cluster_arn=None,
         cluster_name_template=None,
         execution_role_arn=None,
@@ -791,6 +798,7 @@ class ECSCluster(SpecCluster, ConfigMixin):
         self._n_workers = n_workers
         self._workers_name_start = workers_name_start
         self._workers_name_step = workers_name_step
+        self.dask_cluster_id = dask_cluster_id or str(uuid.uuid4())[:10]
         self.cluster_arn = cluster_arn
         self.cluster_name = None
         self._cluster_name_template = cluster_name_template
@@ -921,7 +929,10 @@ class ECSCluster(SpecCluster, ConfigMixin):
         if self._cloudwatch_logs_stream_prefix is None:
             self._cloudwatch_logs_stream_prefix = self.config.get(
                 "cloudwatch_logs_stream_prefix"
-            ).format(cluster_name=self.cluster_name)
+            ).format(
+                cluster_name=self.cluster_name,
+                dask_cluster_id=self.dask_cluster_id,
+            )
 
         if self.cloudwatch_logs_group is None:
             self.cloudwatch_logs_group = (
@@ -1025,7 +1036,12 @@ class ECSCluster(SpecCluster, ConfigMixin):
 
     @property
     def tags(self):
-        return {**self._tags, **DEFAULT_TAGS, "cluster": self.cluster_name}
+        return {
+            **self._tags,
+            **DEFAULT_TAGS,
+            "cluster": self.cluster_name,
+            "dask_cluster_id": self.dask_cluster_id
+        }
 
     async def _create_cluster(self):
         if not self._fargate_scheduler or not self._fargate_workers:
@@ -1038,7 +1054,10 @@ class ECSCluster(SpecCluster, ConfigMixin):
         self.cluster_name = dask.config.expand_environment_variables(
             self._cluster_name_template
         )
-        self.cluster_name = self.cluster_name.format(uuid=str(uuid.uuid4())[:10])
+        self.cluster_name = self.cluster_name.format(
+            dask_cluster_id=self.dask_cluster_id,
+            uuid=self.dask_cluster_id,  # backwards-compatible
+        )
         async with self._client("ecs") as ecs:
             response = await ecs.create_cluster(
                 clusterName=self.cluster_name,
@@ -1059,7 +1078,7 @@ class ECSCluster(SpecCluster, ConfigMixin):
 
     @property
     def _execution_role_name(self):
-        return "{}-{}".format(self.cluster_name, "execution-role")
+        return "dask-{}-execution-role".format(self.dask_cluster_id)
 
     async def _create_execution_role(self):
         async with self._client("iam") as iam:
@@ -1099,7 +1118,7 @@ class ECSCluster(SpecCluster, ConfigMixin):
 
     @property
     def _task_role_name(self):
-        return "{}-{}".format(self.cluster_name, "task-role")
+        return "dask-{}-task-role".format(self.dask_cluster_id)
 
     async def _create_task_role(self):
         async with self._client("iam") as iam:
@@ -1141,6 +1160,9 @@ class ECSCluster(SpecCluster, ConfigMixin):
             await iam.delete_role(RoleName=role)
 
     async def _create_cloudwatch_logs_group(self):
+        # The log group does not include `dask_cluster_id` because it is
+        # shared by all Dask ECS clusters. But, log streams do because they are
+        # specific to each Dask cluster.
         log_group_name = "dask-ecs"
         async with self._client("logs") as logs:
             groups = await logs.describe_log_groups()
@@ -1160,23 +1182,28 @@ class ECSCluster(SpecCluster, ConfigMixin):
         # Note: Not cleaning up the logs here as they may be useful after the cluster is destroyed
         return log_group_name
 
+
+    @property
+    def _security_group_name(self):
+        return "dask-{}-security-group".format(self.dask_cluster_id)
+
     async def _create_security_groups(self):
         async with self._client("ec2") as client:
             group = await create_default_security_group(
-                client, self.cluster_name, self._vpc, self.tags
+                client, self._security_group_name, self._vpc, self.tags
             )
         weakref.finalize(self, self.sync, self._delete_security_groups)
         return [group]
 
     async def _delete_security_groups(self):
         timeout = Timeout(
-            30, "Unable to delete AWS security group " + self.cluster_name, warn=True
+            30, "Unable to delete AWS security group {}".format(self._security_group_name), warn=True
         )
         async with self._client("ec2") as ec2:
             while timeout.run():
                 try:
                     await ec2.delete_security_group(
-                        GroupName=self.cluster_name, DryRun=False
+                        GroupName=self._security_group_name, DryRun=False
                     )
                 except Exception:
                     await asyncio.sleep(2)
@@ -1185,7 +1212,7 @@ class ECSCluster(SpecCluster, ConfigMixin):
     async def _create_scheduler_task_definition_arn(self):
         async with self._client("ecs") as ecs:
             response = await ecs.register_task_definition(
-                family="{}-{}".format(self.cluster_name, "scheduler"),
+                family="dask-{}-scheduler".format(self.dask_cluster_id),
                 taskRoleArn=self._task_role_arn,
                 executionRoleArn=self._execution_role_arn,
                 networkMode="awsvpc",
@@ -1255,7 +1282,7 @@ class ECSCluster(SpecCluster, ConfigMixin):
             )
         async with self._client("ecs") as ecs:
             response = await ecs.register_task_definition(
-                family="{}-{}".format(self.cluster_name, "worker"),
+                family="dask-{}-worker".format(self.dask_cluster_id),
                 taskRoleArn=self._task_role_arn,
                 executionRoleArn=self._execution_role_arn,
                 networkMode="awsvpc",
