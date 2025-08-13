@@ -224,9 +224,9 @@ class Task:
                             "awsvpcConfiguration": {
                                 "subnets": self._vpc_subnets,
                                 "securityGroups": self._security_groups,
-                                "assignPublicIp": "ENABLED"
-                                if self._use_public_ip
-                                else "DISABLED",
+                                "assignPublicIp": (
+                                    "ENABLED" if self._use_public_ip else "DISABLED"
+                                ),
                             }
                         },
                     }
@@ -1040,7 +1040,7 @@ class ECSCluster(SpecCluster, ConfigMixin):
             **self._tags,
             **DEFAULT_TAGS,
             "cluster": self.cluster_name,
-            "dask_cluster_id": self.dask_cluster_id
+            "dask_cluster_id": self.dask_cluster_id,
         }
 
     async def _create_cluster(self):
@@ -1182,7 +1182,6 @@ class ECSCluster(SpecCluster, ConfigMixin):
         # Note: Not cleaning up the logs here as they may be useful after the cluster is destroyed
         return log_group_name
 
-
     @property
     def _security_group_name(self):
         return "dask-{}-security-group".format(self.dask_cluster_id)
@@ -1197,7 +1196,9 @@ class ECSCluster(SpecCluster, ConfigMixin):
 
     async def _delete_security_groups(self):
         timeout = Timeout(
-            30, "Unable to delete AWS security group {}".format(self._security_group_name), warn=True
+            30,
+            "Unable to delete AWS security group {}".format(self._security_group_name),
+            warn=True,
         )
         async with self._client("ec2") as ec2:
             while timeout.run():
@@ -1250,14 +1251,18 @@ class ECSCluster(SpecCluster, ConfigMixin):
                                 "awslogs-create-group": "true",
                             },
                         },
-                        "mountPoints": self._mount_points
-                        if self._mount_points and self._mount_volumes_on_scheduler
-                        else [],
+                        "mountPoints": (
+                            self._mount_points
+                            if self._mount_points and self._mount_volumes_on_scheduler
+                            else []
+                        ),
                     }
                 ],
-                volumes=self._volumes
-                if self._volumes and self._mount_volumes_on_scheduler
-                else [],
+                volumes=(
+                    self._volumes
+                    if self._volumes and self._mount_volumes_on_scheduler
+                    else []
+                ),
                 requiresCompatibilities=["FARGATE"] if self._fargate_scheduler else [],
                 runtimePlatform={"cpuArchitecture": self._cpu_architecture},
                 cpu=str(self._scheduler_cpu),
