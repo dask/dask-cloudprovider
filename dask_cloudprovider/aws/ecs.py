@@ -461,7 +461,9 @@ class ECSCluster(SpecCluster, ConfigMixin):
     This creates a dask scheduler and workers on an existing ECS cluster.
 
     All the other required resources such as roles, task definitions, tasks, etc
-    will be created automatically like in :class:`FargateCluster`.
+    will be created automatically like in :class:`FargateCluster`. Resource names will
+    include the value of `self.name` to uniquely associate them with this cluster, and
+    they will also be tagged with `dask_cluster_name` using the same value.
 
     Parameters
     ----------
@@ -573,21 +575,17 @@ class ECSCluster(SpecCluster, ConfigMixin):
         Name workers by adding multiples of `workers_name_step` to `workers_name_start`.
 
         Default to `1`.
-    dask_cluster_id: str (optional)
-        A unique identifier for this Dask cluster, useful if multiple Dask clusters are
-        running in the same ECS cluster. The value will be included in the names and/or
-        tags of all newly-created AWS resources related to this Dask cluster.
-
-        Defaults to a random 10-digit UUID.
     cluster_arn: str (optional if fargate is true)
         The ARN of an existing ECS cluster to use for launching tasks.
 
         Defaults to ``None`` which results in a new cluster being created for you.
     cluster_name_template: str (optional)
         A template to use for the cluster name if ``cluster_arn`` is set to
-        ``None``.
+        ``None``. Valid substitution variables are:
 
-        Defaults to ``'dask-{dask_cluster_id}'``
+           ``name`` <= self.name (usually a UUID)
+
+        Defaults to ``'dask-{name}'``
     execution_role_arn: str (optional)
         The ARN of an existing IAM role to use for ECS execution.
 
@@ -632,9 +630,12 @@ class ECSCluster(SpecCluster, ConfigMixin):
 
         Default ``None`` (one will be created called ``dask-ecs``)
     cloudwatch_logs_stream_prefix: str (optional)
-        Prefix for log streams.
+        Prefix for log streams. Valid substitution variables are:
 
-        Defaults to ``{cluster_name}/{dask_cluster_id}``.
+           ``name`` <= self.name (usually a UUID)
+           ``cluster_name`` <= self.cluster_name (ECS cluster name)
+
+        Defaults to ``{cluster_name}/{name}``.
     cloudwatch_logs_default_retention: int (optional)
         Retention for logs in days. For use when log group is auto created.
 
@@ -744,7 +745,6 @@ class ECSCluster(SpecCluster, ConfigMixin):
         n_workers=None,
         workers_name_start=0,
         workers_name_step=1,
-        dask_cluster_id=None,
         cluster_arn=None,
         cluster_name_template=None,
         execution_role_arn=None,
@@ -798,7 +798,6 @@ class ECSCluster(SpecCluster, ConfigMixin):
         self._n_workers = n_workers
         self._workers_name_start = workers_name_start
         self._workers_name_step = workers_name_step
-        self.dask_cluster_id = dask_cluster_id or str(uuid.uuid4())[:10]
         self.cluster_arn = cluster_arn
         self.cluster_name = None
         self._cluster_name_template = cluster_name_template
@@ -931,7 +930,7 @@ class ECSCluster(SpecCluster, ConfigMixin):
                 "cloudwatch_logs_stream_prefix"
             ).format(
                 cluster_name=self.cluster_name,
-                dask_cluster_id=self.dask_cluster_id,
+                name=self.name,
             )
 
         if self.cloudwatch_logs_group is None:
@@ -1040,7 +1039,7 @@ class ECSCluster(SpecCluster, ConfigMixin):
             **self._tags,
             **DEFAULT_TAGS,
             "cluster": self.cluster_name,
-            "dask_cluster_id": self.dask_cluster_id,
+            "dask_cluster_name": self.name,
         }
 
     async def _create_cluster(self):
@@ -1055,8 +1054,8 @@ class ECSCluster(SpecCluster, ConfigMixin):
             self._cluster_name_template
         )
         self.cluster_name = self.cluster_name.format(
-            dask_cluster_id=self.dask_cluster_id,
-            uuid=self.dask_cluster_id,  # backwards-compatible
+            name=self.name,
+            uuid=self.name,  # backwards-compatible
         )
         async with self._client("ecs") as ecs:
             response = await ecs.create_cluster(
@@ -1078,7 +1077,7 @@ class ECSCluster(SpecCluster, ConfigMixin):
 
     @property
     def _execution_role_name(self):
-        return "dask-{}-execution-role".format(self.dask_cluster_id)
+        return "dask-{}-execution-role".format(self.name)
 
     async def _create_execution_role(self):
         async with self._client("iam") as iam:
@@ -1118,7 +1117,7 @@ class ECSCluster(SpecCluster, ConfigMixin):
 
     @property
     def _task_role_name(self):
-        return "dask-{}-task-role".format(self.dask_cluster_id)
+        return "dask-{}-task-role".format(self.name)
 
     async def _create_task_role(self):
         async with self._client("iam") as iam:
@@ -1160,9 +1159,8 @@ class ECSCluster(SpecCluster, ConfigMixin):
             await iam.delete_role(RoleName=role)
 
     async def _create_cloudwatch_logs_group(self):
-        # The log group does not include `dask_cluster_id` because it is
-        # shared by all Dask ECS clusters. But, log streams do because they are
-        # specific to each Dask cluster.
+        # The log group does not include `name` because it is shared by all Dask ECS clusters. But,
+        # log streams do because they are specific to each Dask cluster.
         log_group_name = "dask-ecs"
         async with self._client("logs") as logs:
             groups = await logs.describe_log_groups()
@@ -1184,7 +1182,7 @@ class ECSCluster(SpecCluster, ConfigMixin):
 
     @property
     def _security_group_name(self):
-        return "dask-{}-security-group".format(self.dask_cluster_id)
+        return "dask-{}-security-group".format(self.name)
 
     async def _create_security_groups(self):
         async with self._client("ec2") as client:
@@ -1213,7 +1211,7 @@ class ECSCluster(SpecCluster, ConfigMixin):
     async def _create_scheduler_task_definition_arn(self):
         async with self._client("ecs") as ecs:
             response = await ecs.register_task_definition(
-                family="dask-{}-scheduler".format(self.dask_cluster_id),
+                family="dask-{}-scheduler".format(self.name),
                 taskRoleArn=self._task_role_arn,
                 executionRoleArn=self._execution_role_arn,
                 networkMode="awsvpc",
@@ -1287,7 +1285,7 @@ class ECSCluster(SpecCluster, ConfigMixin):
             )
         async with self._client("ecs") as ecs:
             response = await ecs.register_task_definition(
-                family="dask-{}-worker".format(self.dask_cluster_id),
+                family="dask-{}-worker".format(self.name),
                 taskRoleArn=self._task_role_arn,
                 executionRoleArn=self._execution_role_arn,
                 networkMode="awsvpc",
