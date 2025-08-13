@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import uuid
 import warnings
 import weakref
 from typing import List, Optional
