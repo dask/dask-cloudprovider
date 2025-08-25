@@ -1,4 +1,5 @@
 """Helper functions for working with AWS services."""
+
 from datetime import datetime
 
 DEFAULT_SECURITY_GROUP_NAME = "dask-default"
@@ -93,11 +94,21 @@ async def get_security_group(client, vpc, create_default=True):
             )
 
 
-async def create_default_security_group(client, group_name, vpc):
+async def create_default_security_group(client, group_name, vpc, tags):
     response = await client.create_security_group(
         Description="A default security group for Dask",
         GroupName=group_name,
         VpcId=vpc,
+        TagSpecifications=[
+            {
+                "ResourceType": "security-group",
+                "Tags": [
+                    {"Key": k, "Value": v}
+                    for k, v in (tags or {}).items()
+                    if k and v  # Filter out empty tags
+                ],
+            }
+        ],
         DryRun=False,
     )
 
