@@ -99,6 +99,8 @@ class SchedulerMixin(object):
                 f"{self.cluster.protocol}://{external_ip}:{self.port}"
             )
 
+        self.contact_address = f"{self.cluster.protocol}://{internal_ip}:{self.port}"
+
         await self.wait_for_scheduler()
         await super().start()
 
