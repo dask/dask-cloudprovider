@@ -66,6 +66,7 @@ class GCPInstance(VMInterface):
         preemptible=False,
         instance_labels=None,
         service_account=None,
+        instance_scopes=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -105,6 +106,7 @@ class GCPInstance(VMInterface):
 
         self.general_zone = "-".join(self.zone.split("-")[:2])  # us-east1-c -> us-east1
         self.service_account = service_account or self.config.get("service_account")
+        self.instance_scopes = instance_scopes or self.config.get("instance_scopes")
 
     def create_gcp_config(self):
         subnetwork = f"projects/{self.network_projectid}/regions/{self.general_zone}/subnetworks/{self.network}"
@@ -144,11 +146,7 @@ class GCPInstance(VMInterface):
             "serviceAccounts": [
                 {
                     "email": self.service_account,
-                    "scopes": [
-                        "https://www.googleapis.com/auth/devstorage.read_write",
-                        "https://www.googleapis.com/auth/logging.write",
-                        "https://www.googleapis.com/auth/monitoring.write",
-                    ],
+                    "scopes": self.instance_scopes,
                 }
             ],
             # Metadata is readable from the instance and allows you to
@@ -516,6 +514,11 @@ class GCPCluster(VMCluster):
     service_account: str
         Service account that all VMs will run under.
         Defaults to the default Compute Engine service account for your GCP project.
+    instance_scopes: list (optional)
+        List of GCP OAuth scopes to assign to the service account on instances.
+        Defaults to ``["https://www.googleapis.com/auth/devstorage.read_write",
+        "https://www.googleapis.com/auth/logging.write",
+        "https://www.googleapis.com/auth/monitoring.write"]``.
     service_account_credentials: Optional[Dict[str, Any]]
         Service account credentials to create the compute engine Vms
 
@@ -617,6 +620,7 @@ class GCPCluster(VMCluster):
         debug=False,
         instance_labels=None,
         service_account=None,
+        instance_scopes=None,
         service_account_credentials: Optional[Dict[str, Any]] = None,
         **kwargs,
     ):
@@ -717,6 +721,7 @@ class GCPCluster(VMCluster):
             ),
             "instance_labels": instance_labels or self.config.get("instance_labels"),
             "service_account": service_account or self.config.get("service_account"),
+            "instance_scopes": instance_scopes or self.config.get("instance_scopes"),
         }
         self.scheduler_options = {**self.options}
         self.scheduler_options["machine_type"] = self.scheduler_machine_type
