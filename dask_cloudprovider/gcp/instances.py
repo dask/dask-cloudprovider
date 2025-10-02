@@ -106,16 +106,7 @@ class GCPInstance(VMInterface):
 
         self.general_zone = "-".join(self.zone.split("-")[:2])  # us-east1-c -> us-east1
         self.service_account = service_account or self.config.get("service_account")
-
-        # Default scopes for instance service account
-        default_scopes = [
-            "https://www.googleapis.com/auth/devstorage.read_write",
-            "https://www.googleapis.com/auth/logging.write",
-            "https://www.googleapis.com/auth/monitoring.write",
-        ]
-        self.instance_scopes = instance_scopes or self.config.get(
-            "instance_scopes", default_scopes
-        )
+        self.instance_scopes = instance_scopes or self.config.get("instance_scopes")
 
     def create_gcp_config(self):
         subnetwork = f"projects/{self.network_projectid}/regions/{self.general_zone}/subnetworks/{self.network}"
