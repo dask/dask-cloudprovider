@@ -67,6 +67,7 @@ class GCPInstance(VMInterface):
         instance_labels=None,
         service_account=None,
         instance_scopes=None,
+        public_ingress=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -107,6 +108,7 @@ class GCPInstance(VMInterface):
         self.general_zone = "-".join(self.zone.split("-")[:2])  # us-east1-c -> us-east1
         self.service_account = service_account or self.config.get("service_account")
         self.instance_scopes = instance_scopes or self.config.get("instance_scopes")
+        self.public_ingress = public_ingress or self.config.get("public_ingress", True)
 
     def create_gcp_config(self):
         subnetwork = f"projects/{self.network_projectid}/regions/{self.general_zone}/subnetworks/{self.network}"
@@ -178,7 +180,7 @@ class GCPInstance(VMInterface):
             "reservationAffinity": {"consumeReservationType": "ANY_RESERVATION"},
         }
 
-        if self.config.get("public_ingress", True):
+        if self.public_ingress:
             config["networkInterfaces"][0]["accessConfigs"] = [
                 {
                     "kind": "compute#accessConfig",
@@ -219,7 +221,7 @@ class GCPInstance(VMInterface):
             await asyncio.sleep(0.5)
 
         self.internal_ip = await self.get_internal_ip()
-        if self.config.get("public_ingress", True):
+        if self.public_ingress:
             self.external_ip = await self.get_external_ip()
         else:
             self.external_ip = None
@@ -307,7 +309,7 @@ class GCPScheduler(SchedulerMixin, GCPInstance):
         self.cluster._log("Creating scheduler instance")
         self.internal_ip, self.external_ip = await self.create_vm()
 
-        if self.config.get("public_ingress", True) and not is_inside_gce():
+        if self.public_ingress and not is_inside_gce():
             # scheduler must be publicly available, and firewall
             # needs to be in place to allow access to 8786 on
             # the external IP
@@ -377,7 +379,7 @@ class GCPWorker(GCPInstance):
         self.cluster._log(f"Worker GPU Count: {self.ngpus}")
         self.cluster._log(f"Worker GPU Type: {self.gpu_type}")
         self.internal_ip, self.external_ip = await self.create_vm()
-        if self.config.get("public_ingress", True):
+        if self.public_ingress:
             # scheduler is publicly available
             self.address = self.external_ip
         else:
@@ -519,6 +521,10 @@ class GCPCluster(VMCluster):
         Defaults to ``["https://www.googleapis.com/auth/devstorage.read_write",
         "https://www.googleapis.com/auth/logging.write",
         "https://www.googleapis.com/auth/monitoring.write"]``.
+    public_ingress: bool (optional)
+        Whether to assign a public IP address to both the scheduler and worker instances,
+        allowing them to be externally accessible, assumes firewall rules for 8786 and 8787 are in place.
+        Defaults to ``True``.
     service_account_credentials: Optional[Dict[str, Any]]
         Service account credentials to create the compute engine Vms
 
@@ -621,6 +627,7 @@ class GCPCluster(VMCluster):
         instance_labels=None,
         service_account=None,
         instance_scopes=None,
+        public_ingress=None,
         service_account_credentials: Optional[Dict[str, Any]] = None,
         **kwargs,
     ):
@@ -722,6 +729,7 @@ class GCPCluster(VMCluster):
             "instance_labels": instance_labels or self.config.get("instance_labels"),
             "service_account": service_account or self.config.get("service_account"),
             "instance_scopes": instance_scopes or self.config.get("instance_scopes"),
+            "public_ingress": public_ingress or self.config.get("public_ingress", True),
         }
         self.scheduler_options = {**self.options}
         self.scheduler_options["machine_type"] = self.scheduler_machine_type
