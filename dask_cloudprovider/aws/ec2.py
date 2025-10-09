@@ -80,6 +80,8 @@ class EC2Instance(VMInterface):
         self.iam_instance_profile = iam_instance_profile
         self.instance_tags = instance_tags
         self.volume_tags = volume_tags
+        # TODO: we have to use self.config.get("public_ingress", True)
+        #       instead for consistency with Azure and AWS providers
         self.use_private_ip = use_private_ip
         self.enable_detailed_monitoring = enable_detailed_monitoring
         self.spot = spot
@@ -223,7 +225,11 @@ class EC2Instance(VMInterface):
             await asyncio.sleep(min(backoff, 10) + backoff % 1)
             # Exponential backoff with a cap of 10 seconds and some jitter
             backoff = backoff * 2
-        return self.instance[ip_address_key], None
+
+        if self.use_private_ip:
+            return self.instance["PrivateIpAddress"], None
+
+        return self.instance["PrivateIpAddress"], self.instance["PublicIpAddress"]
 
     async def destroy_vm(self):
         boto_config = botocore.config.Config(retries=dict(max_attempts=10))
