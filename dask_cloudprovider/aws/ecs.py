@@ -11,7 +11,6 @@ from dask_cloudprovider.utils.timeout import Timeout
 from dask_cloudprovider.aws.helper import (
     dict_to_aws,
     aws_to_dict,
-    get_sleep_duration,
     get_default_vpc,
     get_vpc_subnets,
     create_default_security_group,
@@ -24,6 +23,7 @@ from distributed.core import Status
 
 try:
     from botocore.exceptions import ClientError
+    from aiobotocore.config import AioConfig
     from aiobotocore.session import get_session
 except ImportError as e:
     msg = (
@@ -119,6 +119,7 @@ class Task:
         fargate_use_private_ip=False,
         fargate_capacity_provider=None,
         task_kwargs=None,
+        is_task_long_arn_format_enabled=True,
         **kwargs,
     ):
         self.lock = asyncio.Lock()
@@ -143,6 +144,7 @@ class Task:
         self._fargate_capacity_provider = fargate_capacity_provider
         self.kwargs = kwargs
         self.task_kwargs = task_kwargs
+        self._is_task_long_arn_format_enabled = is_task_long_arn_format_enabled
         self.status = Status.created
 
     def __await__(self):
@@ -159,36 +161,15 @@ class Task:
     def _use_public_ip(self):
         return self.fargate and not self._fargate_use_private_ip
 
-    async def _is_long_arn_format_enabled(self):
-        async with self._client("ecs") as ecs:
-            [response] = (
-                await ecs.list_account_settings(
-                    name="taskLongArnFormat", effectiveSettings=True
-                )
-            )["settings"]
-        return response["value"] == "enabled"
-
     async def _update_task(self):
         async with self._client("ecs") as ecs:
-            wait_duration = 1
-            while True:
-                try:
-                    [self.task] = (
-                        await ecs.describe_tasks(
-                            cluster=self.cluster_arn, tasks=[self.task_arn]
-                        )
-                    )["tasks"]
-                except ClientError as e:
-                    if e.response["Error"]["Code"] == "ThrottlingException":
-                        wait_duration = min(wait_duration * 2, 20)
-                    else:
-                        raise
-                else:
-                    break
-                await asyncio.sleep(wait_duration)
+            [self.task] = (
+                await ecs.describe_tasks(
+                    cluster=self.cluster_arn, tasks=[self.task_arn]
+                )
+            )["tasks"]
 
-    async def _task_is_running(self):
-        await self._update_task()
+    def _task_is_running(self):
         return self.task["lastStatus"] == "RUNNING"
 
     async def start(self):
@@ -198,7 +179,7 @@ class Task:
                 kwargs = self.task_kwargs.copy() if self.task_kwargs is not None else {}
 
                 # Tags are only supported if you opt into long arn format so we need to check for that
-                if await self._is_long_arn_format_enabled():
+                if self._is_task_long_arn_format_enabled:
                     kwargs["tags"] = dict_to_aws(self.tags)
                 if self.platform_version and self.fargate:
                     kwargs["platformVersion"] = self.platform_version
@@ -252,13 +233,19 @@ class Task:
                 [self.task] = response["tasks"]
                 break
             except Exception as e:
+                # Retries due to throttle errors are handled by the aiobotocore client so this should be an uncommon case
                 timeout.set_exception(e)
-                await asyncio.sleep(1)
+                logger.debug(f"Failed to start {self.task_type} task after {timeout.elapsed_time:.1f}s, retrying in 1s: {e}")
+                await asyncio.sleep(2)
 
         self.task_arn = self.task["taskArn"]
+
+        # Wait for the task to come up
         while self.task["lastStatus"] in ["PENDING", "PROVISIONING"]:
+            # Try to avoid hitting throttling rate limits when bring up a large cluster
+            await asyncio.sleep(1)
             await self._update_task()
-        if not await self._task_is_running():
+        if not self._task_is_running():
             raise RuntimeError("%s failed to start" % type(self).__name__)
         [eni] = [
             attachment
@@ -285,7 +272,7 @@ class Task:
             async with self._client("ecs") as ecs:
                 await ecs.stop_task(cluster=self.cluster_arn, task=self.task_arn)
             await self._update_task()
-            while self.task["lastStatus"] in ["RUNNING"]:
+            while self._task_is_running():
                 await asyncio.sleep(1)
                 await self._update_task()
         self.status = Status.closed
@@ -303,48 +290,35 @@ class Task:
         )
 
     async def logs(self, follow=False):
-        current_try = 0
         next_token = None
         read_from = 0
 
         while True:
-            try:
-                async with self._client("logs") as logs:
-                    if next_token:
-                        l = await logs.get_log_events(
-                            logGroupName=self.log_group,
-                            logStreamName=self._log_stream_name,
-                            nextToken=next_token,
-                        )
-                    else:
-                        l = await logs.get_log_events(
-                            logGroupName=self.log_group,
-                            logStreamName=self._log_stream_name,
-                            startTime=read_from,
-                        )
-                if next_token != l["nextForwardToken"]:
-                    next_token = l["nextForwardToken"]
-                else:
-                    next_token = None
-                if not l["events"]:
-                    if follow:
-                        await asyncio.sleep(1)
-                    else:
-                        break
-                for event in l["events"]:
-                    read_from = event["timestamp"]
-                    yield event["message"]
-            except ClientError as e:
-                if e.response["Error"]["Code"] == "ThrottlingException":
-                    warnings.warn(
-                        "get_log_events rate limit exceeded, retrying after delay.",
-                        RuntimeWarning,
+            async with self._client("logs") as logs:
+                if next_token:
+                    l = await logs.get_log_events(
+                        logGroupName=self.log_group,
+                        logStreamName=self._log_stream_name,
+                        nextToken=next_token,
                     )
-                    backoff_duration = get_sleep_duration(current_try)
-                    await asyncio.sleep(backoff_duration)
-                    current_try += 1
                 else:
-                    raise
+                    l = await logs.get_log_events(
+                        logGroupName=self.log_group,
+                        logStreamName=self._log_stream_name,
+                        startTime=read_from,
+                    )
+            if next_token != l["nextForwardToken"]:
+                next_token = l["nextForwardToken"]
+            else:
+                next_token = None
+            if not l["events"]:
+                if follow:
+                    await asyncio.sleep(1)
+                else:
+                    break
+            for event in l["events"]:
+                read_from = event["timestamp"]
+                yield event["message"]
 
     def __repr__(self):
         return "<ECS Task %s: status=%s>" % (type(self).__name__, self.status)
@@ -822,6 +796,7 @@ class ECSCluster(SpecCluster, ConfigMixin):
         self._platform_version = platform_version
         self._lock = asyncio.Lock()
         self.session = get_session()
+        self._is_task_long_arn_format_enabled = None
         super().__init__(**kwargs)
 
     def _client(self, name: str):
@@ -830,6 +805,16 @@ class ECSCluster(SpecCluster, ConfigMixin):
             aws_access_key_id=self._aws_access_key_id,
             aws_secret_access_key=self._aws_secret_access_key,
             region_name=self._region_name,
+            config=AioConfig(
+                retries={
+                    # Use Standard retry mode which provides:
+                    # - Jittered exponential backoff with max of 20s in the event of failures
+                    # - Never delays the first request attempt, only the retries
+                    # - Supports circuit-breaking to prevent the SDK from retrying during outages
+                    "mode": "standard",
+                    "max_attempts": 10,  # Not including the initial request
+                }
+            ),
         )
 
     async def _start(
@@ -962,6 +947,10 @@ class ECSCluster(SpecCluster, ConfigMixin):
             self.worker_task_definition_arn = (
                 await self._create_worker_task_definition_arn()
             )
+        if self._is_task_long_arn_format_enabled is None:
+            self._is_task_long_arn_format_enabled = (
+                await self._get_is_task_long_arn_format_enabled()
+            )
 
         options = {
             "client": self._client,
@@ -974,6 +963,7 @@ class ECSCluster(SpecCluster, ConfigMixin):
             "tags": self.tags,
             "platform_version": self._platform_version,
             "fargate_use_private_ip": self._fargate_use_private_ip,
+            "is_task_long_arn_format_enabled": self._is_task_long_arn_format_enabled,
         }
         scheduler_options = {
             "task_definition_arn": self.scheduler_task_definition_arn,
@@ -1350,6 +1340,15 @@ class ECSCluster(SpecCluster, ConfigMixin):
                 await ecs.deregister_task_definition(
                     taskDefinition=self.worker_task_definition_arn
                 )
+
+    async def _get_is_task_long_arn_format_enabled(self):
+        async with self._client("ecs") as ecs:
+            [response] = (
+                await ecs.list_account_settings(
+                    name="taskLongArnFormat", effectiveSettings=True
+                )
+            )["settings"]
+        return response["value"] == "enabled"
 
     def logs(self):
         async def get_logs(task):
