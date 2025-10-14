@@ -1,14 +1,4 @@
-# We have to set minimal versions to avoid searches over old versions whose metadata is incompatible with the latest pip
-numpydoc<2,>=1.5.0
-docutils<0.17,>=0.16
-sphinx<5,>=4.0.0
-dask-sphinx-theme<4,>=3.0.5
-# FIXME: This workaround is required until we have sphinx>=5, as enabled by
-#        dask-sphinx-theme no longer pinning sphinx-book-theme==0.2.0. This is
-#        tracked in https://github.com/dask/dask-sphinx-theme/issues/68.
-#
-sphinxcontrib-applehelp<1.0.5,>=1.0.0
-sphinxcontrib-devhelp<1.0.6,>=1.0.0
-sphinxcontrib-htmlhelp<2.0.5,>=2.0.0
-sphinxcontrib-serializinghtml<1.1.10,>=1.0.0
-sphinxcontrib-qthelp<1.0.7,>=1.0.0
+numpydoc
+docutils
+sphinx>=8
+dask-sphinx-theme>=4.0.0

@@ -455,7 +455,7 @@ class EC2Cluster(VMCluster):
     ...                      bootstrap=False,
     ...                      filesystem_size=120,
     ...                      env_vars=get_aws_credentials()) # Pass credentials to Cluster see Notes section for info
-=======
+
 
     Enable SSH for debugging
 
