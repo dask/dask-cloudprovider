@@ -1,10 +1,12 @@
+from unittest import mock
+
 import pytest
 
 import dask
 
 nebius = pytest.importorskip("nebius")
 
-from dask_cloudprovider.nebius.instances import NebiusCluster
+from dask_cloudprovider.nebius.instances import NebiusCluster, NebiusInstance
 from dask.distributed import Client
 from distributed.core import Status
 
@@ -50,6 +52,18 @@ async def cluster(config):
 async def test_init():
     cluster = NebiusCluster(asynchronous=True, debug=True)
     assert cluster.status == Status.created
+
+
+def test_sdk_user_agent_prefix():
+    with mock.patch(
+        "dask_cloudprovider.nebius.instances.__version__", "1.2.3"
+    ), mock.patch("dask_cloudprovider.nebius.instances.SDK") as sdk_cls:
+        NebiusInstance(cluster=mock.MagicMock(), config={"token": "token"})
+
+    sdk_cls.assert_called_once_with(
+        credentials="token",
+        user_agent_prefix="dask-cloudprovider/1.2.3",
+    )
 
 
 @pytest.mark.asyncio
