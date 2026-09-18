@@ -1,5 +1,6 @@
 import dask
 
+from dask_cloudprovider import __version__
 from dask_cloudprovider.generic.vmcluster import (
     VMCluster,
     VMInterface,
@@ -66,7 +67,10 @@ class NebiusInstance(VMInterface):
         self.docker_image = docker_image
         self.server_platform = server_platform
         self.server_preset = server_preset
-        self.sdk = SDK(credentials=self.config.get("token"))
+        self.sdk = SDK(
+            credentials=self.config.get("token"),
+            user_agent_prefix=f"dask-cloudprovider/{__version__}",
+        )
         self.disk_size = disk_size
         self.instance_id = None
         self.disk_id = None
