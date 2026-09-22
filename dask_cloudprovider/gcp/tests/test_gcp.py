@@ -54,6 +54,17 @@ async def test_init():
 
 
 @pytest.mark.asyncio
+async def test_init_gpu_config_defaults():
+    """Regression test for https://github.com/dask/dask-cloudprovider/pull/479."""
+    skip_without_credentials()
+
+    cluster = GCPCluster(asynchronous=True)
+    assert cluster.ngpus is None
+    assert cluster.scheduler_ngpus == 0
+    assert cluster.worker_ngpus == 0
+
+
+@pytest.mark.asyncio
 async def test_get_cloud_init():
     skip_without_credentials()
     cloud_init = GCPCluster.get_cloud_init(
