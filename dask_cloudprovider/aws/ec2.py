@@ -90,8 +90,14 @@ class EC2Instance(VMInterface):
         https://botocore.amazonaws.com/v1/documentation/api/latest/reference/services/ec2.html#EC2.Client.run_instances
         """
         boto_config = botocore.config.Config(retries=dict(max_attempts=10))
+        client_kwargs = {
+            "region_name": self.region,
+            "config": boto_config,
+        }
+        if hasattr(self.cluster, 'verify_ssl') and not self.cluster.verify_ssl:
+            client_kwargs["verify"] = False
         async with self.cluster.boto_session.create_client(
-            "ec2", region_name=self.region, config=boto_config
+            "ec2", **client_kwargs
         ) as client:
             self.vpc = self.vpc or await get_default_vpc(client)
             self.subnet_id = (
