@@ -40,7 +40,6 @@ async def config():
 
 
 @pytest.fixture
-@pytest.mark.external
 async def cluster(config):
     await skip_without_credentials(config)
     async with NebiusCluster(asynchronous=True, debug=True) as cluster:

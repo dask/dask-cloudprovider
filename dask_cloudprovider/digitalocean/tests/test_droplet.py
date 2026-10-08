@@ -36,7 +36,6 @@ async def config():
 
 
 @pytest.fixture
-@pytest.mark.external
 async def cluster(config):
     await skip_without_credentials(config)
     async with DropletCluster(asynchronous=True) as cluster:

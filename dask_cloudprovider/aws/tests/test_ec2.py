@@ -24,7 +24,6 @@ async def skip_without_credentials():
 
 
 @pytest.fixture
-@pytest.mark.external
 async def cluster():
     await skip_without_credentials()
     async with EC2Cluster(asynchronous=True) as cluster:
@@ -32,7 +31,6 @@ async def cluster():
 
 
 @pytest.fixture
-@pytest.mark.external
 async def cluster_sync():
     await skip_without_credentials()
     cluster = EC2Cluster()
@@ -40,7 +38,6 @@ async def cluster_sync():
 
 
 @pytest.fixture
-@pytest.mark.external
 async def cluster_rapids():
     await skip_without_credentials()
     async with EC2Cluster(
@@ -57,7 +54,6 @@ async def cluster_rapids():
 
 
 @pytest.fixture
-@pytest.mark.external
 async def cluster_rapids_packer():
     await skip_without_credentials()
     async with EC2Cluster(
@@ -74,7 +70,6 @@ async def cluster_rapids_packer():
 
 
 @pytest.fixture
-@pytest.mark.external
 async def cluster_packer():
     await skip_without_credentials()
     async with EC2Cluster(
@@ -99,6 +94,7 @@ async def test_init():
 
 @pytest.mark.asyncio
 @pytest.mark.timeout(600)
+@pytest.mark.external
 async def test_create_cluster(cluster):
     assert cluster.status == Status.running
 
@@ -113,6 +109,7 @@ async def test_create_cluster(cluster):
 
 @pytest.mark.asyncio
 @pytest.mark.timeout(600)
+@pytest.mark.external
 async def test_create_cluster_sync(cluster_sync):
     assert cluster_sync.status == Status.running
 
@@ -125,6 +122,7 @@ async def test_create_cluster_sync(cluster_sync):
 
 @pytest.mark.asyncio
 @pytest.mark.timeout(600)
+@pytest.mark.external
 async def test_create_cluster_with_packer(cluster_packer):
     assert cluster_packer.status == Status.running
 
@@ -139,6 +137,7 @@ async def test_create_cluster_with_packer(cluster_packer):
 
 @pytest.mark.asyncio
 @pytest.mark.timeout(1200)
+@pytest.mark.external
 async def test_create_rapids_cluster(cluster_rapids):
     assert cluster_rapids.status == Status.running
 
@@ -158,6 +157,7 @@ async def test_create_rapids_cluster(cluster_rapids):
 
 @pytest.mark.asyncio
 @pytest.mark.timeout(1200)
+@pytest.mark.external
 async def test_create_rapids_cluster_with_packer(cluster_rapids_packer):
     assert cluster_rapids_packer.status == Status.running
 
