@@ -100,7 +100,15 @@ async def create_default_security_group(client, group_name, vpc, tags):
         Description="A default security group for Dask",
         GroupName=group_name,
         VpcId=vpc,
-        **({"TagSpecifications": [{"ResourceType": "security-group", "Tags": tag_list}]} if tag_list else {}),
+        **(
+            {
+                "TagSpecifications": [
+                    {"ResourceType": "security-group", "Tags": tag_list}
+                ]
+            }
+            if tag_list
+            else {}
+        ),
         DryRun=False,
     )
 
