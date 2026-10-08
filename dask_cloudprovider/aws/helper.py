@@ -82,7 +82,7 @@ async def get_security_group(client, vpc, create_default=True):
         if create_default:
             try:
                 return await create_default_security_group(
-                    client, DEFAULT_SECURITY_GROUP_NAME, vpc
+                    client, DEFAULT_SECURITY_GROUP_NAME, vpc, tags=None
                 )
             except Exception as e:
                 raise RuntimeError(
@@ -95,20 +95,20 @@ async def get_security_group(client, vpc, create_default=True):
 
 
 async def create_default_security_group(client, group_name, vpc, tags):
+    tag_list = [{"Key": k, "Value": v} for k, v in (tags or {}).items() if k and v]
     response = await client.create_security_group(
         Description="A default security group for Dask",
         GroupName=group_name,
         VpcId=vpc,
-        TagSpecifications=[
+        **(
             {
-                "ResourceType": "security-group",
-                "Tags": [
-                    {"Key": k, "Value": v}
-                    for k, v in (tags or {}).items()
-                    if k and v  # Filter out empty tags
-                ],
+                "TagSpecifications": [
+                    {"ResourceType": "security-group", "Tags": tag_list}
+                ]
             }
-        ],
+            if tag_list
+            else {}
+        ),
         DryRun=False,
     )
 

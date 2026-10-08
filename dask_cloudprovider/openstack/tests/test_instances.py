@@ -34,7 +34,6 @@ async def config():
 
 
 @pytest.fixture
-@pytest.mark.external
 async def cluster(config):
     await skip_without_credentials(config)
 
@@ -50,6 +49,7 @@ async def test_init():
 
 @pytest.mark.asyncio
 @pytest.mark.timeout(600)
+@pytest.mark.external
 async def test_create_cluster(cluster):
     assert cluster.status == Status.running
     cluster.scale(1)
